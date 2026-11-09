@@ -1,0 +1,12 @@
+{
+  "image": "pack_select_blue1st.png",
+  "sha256": "9ff51e0253d9e05a65fdb2fd49a6bd7fd1ad88a908ab1b9d3c2824acdb833520",
+  "screen_type": "pack_list_crop",
+  "allow_uncertain": [
+    "selected_pack"
+  ],
+  "fields": {
+    "selected_pack": "Blue's 1st step"
+  },
+  "annotation": "Known selected Pack, but the crop has no right song list and no unique reliable selection border against the rotating green artwork. Abstention is allowed; a different Pack always fails."
+}

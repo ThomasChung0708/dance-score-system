@@ -146,6 +146,9 @@ class StaticScreenTests(unittest.TestCase):
         if not images:
             self.skipTest('Local screenshots not distributed with this checkout')
         labels = json.loads((base/'fixtures'/'phase4a_ground_truth.json').read_text(encoding='utf-8'))['images']
+        # This immutable manifest covers the original set. Additional local PNGs
+        # may have separate ocr_labels entries, or await manual annotation.
+        images = [path for path in images if path.name in labels]
         self.assertEqual({p.name for p in images}, set(labels))
         for path in images:
             self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), labels[path.name]['sha256'])

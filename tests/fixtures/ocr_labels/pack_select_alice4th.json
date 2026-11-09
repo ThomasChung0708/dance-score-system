@@ -1,0 +1,16 @@
+{
+  "image": "pack_select_alice4th.png",
+  "sha256": "2d987ebf3f21a7fb933d793ee66c50234ea61c2f59333509030107a7cbadc017",
+  "screen_type": "song_select",
+  "fields": {
+    "title": "PROTECTERS",
+    "difficulty": "HARD",
+    "game_level": 31,
+    "duration_seconds": 181,
+    "selected_pack": "Alice 4th complete step",
+    "total_notes": null,
+    "bpm": null,
+    "artist": null
+  },
+  "annotation": "Manually inspected complete SETTING dialog, HARD page 5/7."
+}

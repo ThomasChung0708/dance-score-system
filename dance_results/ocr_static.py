@@ -214,10 +214,12 @@ def main(argv=None):
                     image = im.convert('RGB').resize((1024, 800))
                     if screen_type == 'song_select':
                         selection = parse_selection(tokens, image)
+                        from .pack_selection import infer_selected_pack
+                        infer_selected_pack(selection, catalog)
                         for p in selection['visible_packs']:
                             p['catalog_candidates'] = catalog.visible_pack_candidates(p['text'])
-                        selection['selected_pack_id'] = args.pack_id
                         if args.pack_id is not None:
+                            selection['manual_pack_id'] = args.pack_id
                             selection['pack_reason'] = 'explicit_manual_cli_context'
                         result['selection'] = selection
                         result['matching'] = catalog.match(selection['fields'], args.pack_id)

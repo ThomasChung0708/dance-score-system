@@ -1,0 +1,12 @@
+{
+  "image": "pack_select_osutransfer.png",
+  "sha256": "13d64b76cd6ad4650f7b418b88ced83cc3d0c527d8b5743646a644593ff094f7",
+  "screen_type": "pack_list_crop",
+  "allow_uncertain": [
+    "selected_pack"
+  ],
+  "fields": {
+    "selected_pack": "Osu Transfer"
+  },
+  "annotation": "Manual label from TC. Crop of the scrolled left Pack list; the selected row sits below the disc artwork over the plain pink background. selected_pack may remain UNCERTAIN: masking OCR text leaves less than the required 60% background-column coverage on this row, so the conservative local tint method cannot establish at least two comparable neighbours. Artwork rows cannot substitute for plain-panel references. This left-only crop also has no right-song-list evidence; even a reliable secondary row hint cannot independently select a Pack or authorize submission."
+}

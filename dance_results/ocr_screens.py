@@ -104,6 +104,22 @@ def bpm_field(info):
 
 
 def parse_selection(tokens, image):
+    # A full SETTING dialog may be captured without the surrounding game window.
+    # Locate its tab anchors before applying the established skin coordinates.
+    tabs = [t for t in tokens if compact(t['text']) in DIFFICULTIES and center(t)[0] > 350]
+    groups = [t for t in tokens if compact(t['text']) == 'GROUP']
+    if len(tabs) == 3 and len(groups) == 1 and statistics.mean(center(t)[1] for t in tabs) < 120:
+        ordered = sorted(tabs, key=lambda t: center(t)[0])
+        tab_y = statistics.mean(center(t)[1] for t in tabs)
+        gap = center(groups[0])[1] - tab_y
+        if 8 < gap < 30:
+            sx = (824-457)/(center(ordered[-1])[0]-center(ordered[0])[0])
+            sy = 14/gap
+            dx, dy = 457-sx*center(ordered[0])[0], 160-sy*tab_y
+            tokens = [dict(t, box=[[x*sx+dx, y*sy+dy] for x, y in t['box']]) for t in tokens]
+            from PIL import Image
+            image = image.transform((1024, 800), Image.Transform.AFFINE,
+                                    (1/sx, 0, -dx/sx, 0, 1/sy, -dy/sy))
     fields = {k: value(reason='not_readable') for k in
               ['title', 'difficulty', 'game_level', 'total_notes', 'bpm', 'duration_seconds', 'artist']}
     # Coordinates refer to a normalized full screenshot, including its narrow window title bar.
@@ -156,18 +172,27 @@ def parse_selection(tokens, image):
                 fields['artist'] = value(matches[0]['text'].strip(), [label, matches[0]])
     overlay = any(compact(t['text']) == 'GROUP' for t in in_region(tokens, (30, 130, 350, 220)))
     visible_packs = []
+    hint, edge_evidence = None, []
     if overlay:
-        for t in in_region(tokens, (45, 208, 345, 512)):
-            if re.fullmatch(r'\d+', t['text'].strip()):
-                continue
-            label = re.sub(r'\s+\d{1,4}$', '', t['text']).strip()
-            visible_packs.append({'text': label, 'evidence': t})
+        from .pack_selection import pack_rows, row_hint
+        visible_packs = pack_rows(tokens, (45, 208, 345, 512))
+        hint, edge_evidence = row_hint(image, visible_packs, (52, 208, 327, 512))
         for name in ['total_notes', 'bpm', 'artist']:
             fields[name] = value(reason='pack_list_occludes_metadata')
+    pages = [t for t in in_region(tokens, (700, 510, 950, 650))
+             if re.fullmatch(r'\s*\d+\s*/\s*\d+\s*', t['text'])]
+    page = None
+    if len(pages) == 1:
+        current, total = map(int, re.findall(r'\d+', pages[0]['text']))
+        if 1 <= current <= total:
+            page = dict(current=current, total=total, evidence=pages)
     return dict(fields=fields, visible_rows=[dict(title=r['title']['text'], game_level=int(r['level']['text']),
                 duration_seconds=duration_seconds(r['time']['text']), highlight_score=r['highlight_score']) for r in rows],
-                pack_list_visible=overlay, visible_packs=visible_packs, selected_pack_id=None,
-                pack_reason='visible_list_does_not_prove_selected_pack' if overlay else 'pack_not_visible')
+                song_title_tokens=titles, song_page=page,
+                pack_list_visible=overlay, visible_packs=visible_packs,
+                pack_row_hint=hint, pack_row_evidence=edge_evidence,
+                selected_pack=None, selected_pack_id=None, selected_pack_confidence=0,
+                selected_pack_evidence={}, pack_reason='selected_pack_uncertain')
 
 
 def result_context(tokens, player_name):

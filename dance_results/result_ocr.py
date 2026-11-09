@@ -167,6 +167,27 @@ def recognize_result(image, engine, player_name='TC', tokens=None):
             if valid:
                 tokens = [t for t in tokens if not (left <= center(t)[0] <= right and abs(center(t)[1]-y) <= 16)]
                 tokens.extend(found)
+            elif key == 'player_name' and field.get('evidence'):
+                # The nickname is a known single line, often too small for the
+                # detector in a wide, mostly blank cell. Bound the foreground
+                # inside its original text box before single-line recognition.
+                from PIL import ImageOps
+                points = [p for t in field['evidence'] for p in t['box']]
+                name_box = (int(min(p[0] for p in points))-3, int(min(p[1] for p in points))-3,
+                            int(max(p[0] for p in points))+4, int(max(p[1] for p in points))+4)
+                mask = normalized.crop(name_box).convert('L').point(lambda pixel: 255 if pixel >= 180 else 0)
+                bounds = mask.getbbox()
+                line_reader = getattr(engine, 'recognize_line', None)
+                if bounds and line_reader:
+                    foreground = ImageOps.expand(ImageOps.invert(mask.crop(bounds)), border=3, fill=255).convert('RGB')
+                    origin = (name_box[0]+bounds[0]-3, name_box[1]+bounds[1]-3)
+                    retry = line_reader(foreground.resize((foreground.width*3, foreground.height*3)),
+                                        origin=origin, scale=3)
+                    rereads.append(dict(field=key, tokens=retry, region=name_box,
+                                        preprocessing='bounded_bright_foreground_line'))
+                    if len(retry) == 1 and compact(retry[0]['text']) == compact(player_name) and retry[0]['confidence'] >= .9:
+                        tokens = [t for t in tokens if not (left <= center(t)[0] <= right and abs(center(t)[1]-y) <= 16)]
+                        tokens.extend(retry)
     final = parse_result(tokens, player_name)
     if grade_reading is not None:
         final['fields']['grade'] = grade_reading

@@ -17,6 +17,7 @@ FIXTURES = PROJECT / 'tests' / 'fixtures'
 PRIMARY_FIELDS = (
     'screen_type', 'title', 'difficulty', 'game_level', 'bpm',
     'perfect', 'cool', 'bad', 'miss', 'judgments', 'ex_score',
+    'selected_pack',
 )
 JUDGMENTS = ('perfect', 'cool', 'bad', 'miss')
 
@@ -40,7 +41,10 @@ def merge_label(labels, name, row, source):
     # Windows paths are case-insensitive. Preserve the first spelling for display.
     name = next((old for old in labels if old.casefold() == name.casefold()), name)
     merged = labels.setdefault(name, {'fields': {}, 'sources': []})
-    for key in ('sha256', 'screen_type', 'local_player_status'):
+    allowed = row.get('allow_uncertain', [])
+    if not isinstance(allowed, list) or any(key != 'selected_pack' for key in allowed):
+        raise ValueError(f'{source}: allow_uncertain supports only selected_pack for {name}')
+    for key in ('sha256', 'screen_type', 'local_player_status', 'allow_uncertain'):
         if key not in row:
             continue
         value = row[key].lower() if key == 'sha256' else row[key]
@@ -99,14 +103,25 @@ def score_sample(name, label, actual, *, error=None):
         }
         for key, wanted in expected.items()
     ]
-    failures = [item for item in comparisons if item['correct'] is False]
+    uncertainties = []
+    for item in comparisons:
+        if item['field'] == 'selected_pack' and item['evaluated']:
+            uncertain = item['got'] is None or item['got'] == 'uncertain'
+            item['outcome'] = 'UNCERTAIN' if uncertain else 'PASS' if item['correct'] else 'FAIL'
+            item['allowed_uncertain'] = uncertain and 'selected_pack' in label.get('allow_uncertain', [])
+            if uncertain:
+                uncertainties.append(item)
+    failures = [item for item in comparisons if item['correct'] is False and not item.get('allowed_uncertain')]
     return {
         'image': name,
         'sha256': label['sha256'],
-        'status': 'FAIL' if failures or error else 'PASS',
+        'status': 'FAIL' if failures or error else 'UNCERTAIN' if uncertainties else 'PASS',
         'error': error,
         'comparisons': comparisons,
         'mismatches': failures,
+        'uncertainties': uncertainties,
+        'pack_diagnostics': {key: actual[key] for key in (
+            'selected_pack_id', 'selected_pack_confidence', 'selected_pack_evidence', 'pack_reason') if key in actual},
     }
 
 
@@ -121,6 +136,8 @@ def summarize(samples):
                 continue
             metric['correct'] += int(item['correct'])
             metric['total'] += 1
+            if item['field'] == 'selected_pack':
+                metric['uncertain'] = metric.get('uncertain', 0) + int(item.get('outcome') == 'UNCERTAIN')
             if item['field'] in JUDGMENTS:
                 fields['judgments']['correct'] += int(item['correct'])
                 fields['judgments']['total'] += 1
@@ -180,15 +197,18 @@ def compare_baseline(samples, fields, baseline):
             })
     for name, old in baseline.get('samples', {}).items():
         sample = current.get(name)
-        if old['status'] == 'PASS' and (sample is None or sample['status'] == 'FAIL'):
+        if old['status'] == 'PASS' and (sample is None or sample['status'] in ('FAIL', 'UNCERTAIN')):
             regressions.append({'image': name, 'reason': 'previously_passing_sample_now_fails_or_label_removed'})
+        elif old['status'] == 'UNCERTAIN' and (sample is None or sample['status'] == 'FAIL'):
+            regressions.append({'image': name, 'reason': 'previously_allowed_uncertainty_now_fails_or_label_removed'})
     return regressions
 
 
-def recognize_sample(path, digest, engine, catalog, *, no_cache=False, player_name='TC'):
+def recognize_sample(path, digest, engine, catalog, *, no_cache=False, player_name='TC', sample_kind=None):
     """Compose existing static OCR helpers and the existing result recognizer.
 
-    No answers, filenames-as-evidence, new parsing or monitor state are involved.
+    No answers, filenames-as-evidence or monitor state are involved. sample_kind
+    selects only the explicit ROI route, never the expected Pack name.
     The page engine/profile, normalization, badge crop and cache are those of
     ocr_static; result cells use result_ocr.recognize_result, as in the monitor.
     """
@@ -197,14 +217,25 @@ def recognize_sample(path, digest, engine, catalog, *, no_cache=False, player_na
     with Image.open(path) as image:
         native = (engine.recognize(image) if no_cache else
                   ocr_static.cached_page(engine, image, digest, PROJECT / 'reports' / 'phase4a' / 'cache'))
+        if sample_kind == 'pack_list_crop':
+            from dance_results.pack_selection import analyze_pack_crop
+            selection = analyze_pack_crop(native, image, catalog)
+            return {'screen_type': 'pack_list_crop', **{key: selection[key] for key in (
+                'selected_pack', 'selected_pack_id', 'selected_pack_confidence',
+                'selected_pack_evidence', 'pack_reason')}}
         tokens = ocr_static.normalize_tokens(native, *image.size)
         screen, _ = ocr_static.classify(tokens)
         actual = {'screen_type': screen}
         if screen == 'song_select':
             selection = ocr_static.parse_selection(tokens, image.convert('RGB').resize((1024, 800)))
+            from dance_results.pack_selection import infer_selected_pack
+            infer_selected_pack(selection, catalog)
             # Same read-only matching as static OCR; no catalog fill is scored.
             catalog.match(selection['fields'], None)
             actual.update({key: field['value'] for key, field in selection['fields'].items()})
+            actual.update({key: selection[key] for key in (
+                'selected_pack', 'selected_pack_id', 'selected_pack_confidence',
+                'selected_pack_evidence', 'pack_reason')})
         elif screen == 'results':
             crop = image.crop((0, int(image.height * .27), int(image.width * .062), int(image.height * .79)))
             extra = engine.recognize(crop.resize((crop.width * 3, crop.height * 3)),
@@ -232,6 +263,8 @@ def print_sample(sample):
         print('  ' + sample['error'], flush=True)
     for item in sample.get('mismatches', []):
         print(f"  {item['field']}: expected={item['expected']!r}, got={item['got']!r}", flush=True)
+    for item in sample.get('uncertainties', []):
+        print(f"  UNCERTAIN {item['field']}: allowed={item['allowed_uncertain']}", flush=True)
 
 
 def main(argv=None):
@@ -297,8 +330,9 @@ def main(argv=None):
                     sample['mismatches'] = []
                 else:
                     try:
+                        options = {'sample_kind': 'pack_list_crop'} if label['screen_type'] == 'pack_list_crop' else {}
                         actual = recognize_sample(path, digest, engine, catalog,
-                                                  no_cache=args.no_cache, player_name=args.player_name)
+                                                  no_cache=args.no_cache, player_name=args.player_name, **options)
                         sample = score_sample(name, label, actual)
                     except Exception as error:
                         sample = score_sample(name, label, {}, error=f'{type(error).__name__}: {error}')
@@ -309,6 +343,8 @@ def main(argv=None):
             status: sum(sample['status'] == status for sample in report['samples'])
             for status in ('PASS', 'FAIL', 'SKIPPED')
         }
+        if any(sample.get('uncertainties') for sample in report['samples']):
+            report['counts']['UNCERTAIN'] = sum(sample['status'] == 'UNCERTAIN' for sample in report['samples'])
         report['safety'] = {
             'database_mode': 'mode=ro + query_only=ON',
             'database_unchanged': before == ocr_static.audit(catalog.db),
@@ -320,6 +356,8 @@ def main(argv=None):
         for key, metric in report['fields'].items():
             rate = f"{metric['accuracy']:.2%}" if metric['accuracy'] is not None else 'N/A'
             print(f"  {key}: {metric['correct']}/{metric['total']} ({rate})")
+            if key == 'selected_pack':
+                print(f"    UNCERTAIN: {metric.get('uncertain', 0)}")
         if invalid_hash or not all(report['safety'][key] for key in ('database_unchanged', 'original_images_unchanged')):
             raise ValueError('Image hash or read-only safety check failed; baseline was not updated')
         if args.update_baseline:

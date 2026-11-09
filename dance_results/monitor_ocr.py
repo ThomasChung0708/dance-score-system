@@ -28,24 +28,20 @@ def change_amount(before, after):
 
 
 def active_pack(selection, image, catalog):
-    rows = []
-    for item in selection['visible_packs']:
-        _, y = center(item['evidence'])
-        # A clear purple fill across most of a row; CD artwork/white text alone must not select a Pack.
-        pixels = list(image.crop((52, int(y)-8, 327, int(y)+8)).getdata())
-        score = sum(b-r > 16 and b-g > 30 for r, g, b in pixels)/max(1, len(pixels))
-        candidates = catalog.visible_pack_candidates(item['text'])
-        rows.append(dict(raw_text=item['text'], purple_fraction=score, candidates=candidates,
-                         confidence=item['evidence']['confidence']))
-    ordered = sorted(rows, key=lambda r: r['purple_fraction'], reverse=True)
+    from .pack_selection import row_hint
+    if 'pack_row_evidence' in selection:
+        hint, edges = selection.get('pack_row_hint'), selection['pack_row_evidence']
+    else:
+        hint, edges = row_hint(image, selection['visible_packs'], (52, 208, 327, 512))
+    rows = [dict(raw_text=row['text'], candidates=catalog.visible_pack_candidates(row['text']),
+                 confidence=row['evidence']['confidence'], **edge)
+            for row, edge in zip(selection['visible_packs'], edges)]
     chosen = None
-    if ordered and ordered[0]['purple_fraction'] >= .45 and (
-            len(ordered) == 1 or ordered[0]['purple_fraction']-ordered[1]['purple_fraction'] >= .25):
-        best = ordered[0]
-        if len(best['candidates']) == 1 and best['confidence'] >= .9:
-            chosen = dict(**best['candidates'][0], status='candidate', confidence_state='CANDIDATE',
-                          source='purple_row_unverified_hover_or_selection', raw_text=best['raw_text'],
-                          reason='hover_selection_reference_images_missing')
+    for row in rows:
+        if row['raw_text'] == hint and len(row['candidates']) == 1 and row['confidence'] >= .9:
+            chosen = dict(**row['candidates'][0], status='candidate', confidence_state='CANDIDATE',
+                          source='local_paired_row_edges', raw_text=row['raw_text'],
+                          reason='visual_hint_not_selection_authority')
     return chosen, rows
 
 
@@ -132,9 +128,8 @@ class Analyzer:
         if roi_mode and state == 'PLAYING':
             tokens = self.regions(normalized,[(0,150,1024,225),(0,640,1024,800)])
         elif roi_mode and self.selected_row(normalized) is not None:
-            y=self.selected_row(normalized)
             tokens = self.regions(normalized,[(25,60,980,115),(350,130,960,195),
-                                              (380,y-14,945,y+15),(40,130,345,512)])
+                                              (380,220,945,650),(40,130,345,512)])
         else:
             tokens = self.engine.recognize(normalized)
             self.calls += 1
@@ -222,10 +217,13 @@ def apply_selection(observation, image, tracker, catalog, references=None, sourc
     if observation['state'] != 'SONG_SELECT':
         return observation
     selection = observation['selection']
+    from .pack_selection import infer_selected_pack
+    infer_selected_pack(selection, catalog)
     tracker.pack_list_visible = selection['pack_list_visible']
     if selection['pack_list_visible']:
-        pack, evidence = active_pack(selection, image.resize((1024, 800)).convert('RGB'), catalog)
-        tracker.pack_observation(pack)
+        _, evidence = active_pack(selection, image.resize((1024, 800)).convert('RGB'), catalog)
+        # Diagnostic inference never confirms a Pack or reuses stale manual context.
+        tracker.pack_observation(None)
         tracker.pack_candidates = evidence
         observation['pack_diagnostics'] = evidence
     source = source_mode if source_mode in ('custom', 'official') else tracker.current_source

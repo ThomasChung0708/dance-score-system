@@ -20,6 +20,13 @@ def failure_details(observation=None, error=None):
         reasons.append('recognition_exception: ' + type(error).__name__)
     if observation.get('screen_type') in ('unknown', 'error'):
         reasons.append('screen_unrecognized')
+    selection = observation.get('selection') or {}
+    if (observation.get('screen_type') == 'song_select' and 'pack_reason' in selection
+            and selection.get('pack_list_visible')):
+        if selection.get('pack_reason') == 'selected_pack_disagreement':
+            reasons.append('selected_pack_disagreement')
+        elif selection.get('selected_pack') is None:
+            reasons.append('selected_pack_uncertain')
     # These are the existing automatic-review confidence requirements. This
     # diagnostic check does not gate or change the monitor's handling of a frame.
     for name, field in fields.items():
@@ -33,12 +40,17 @@ def failure_details(observation=None, error=None):
     temporal = result.get('temporal_validation') or {}
     if temporal.get('status') == 'pending_review':
         reasons.extend(temporal.get('reasons') or ['temporal_ocr_uncertainty'])
-    return {
+    details = {
         'reason': sorted(set(reasons)),
         'screen_type_guess': observation.get('screen_type'),
         'confidence': {name: field.get('confidence') for name, field in fields.items()},
         'fields': {name: field.get('value') for name, field in fields.items()},
     }
+    if selection:
+        details['selected_pack'] = selection.get('selected_pack')
+        details['pack_reason'] = selection.get('pack_reason')
+        details['selected_pack_confidence'] = selection.get('selected_pack_confidence', 0)
+    return details
 
 
 class FailureCapture:

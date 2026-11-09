@@ -115,6 +115,8 @@ Get-FileHash 'tests/專案測試圖片/round2/failed-result.png' -Algorithm SHA2
 
 選歌欄位沿用 Phase4A：`title`、`difficulty`（EASY／NORMAL／HARD）、
 `game_level`、`total_notes`、`bpm`、`duration_seconds`、`artist`。
+另可選填 `selected_pack`，值為畫面上的 Pack 完整名稱；此欄是診斷證據，
+不會授權自動綁定或提交成績。
 結算沿用 Phase4C：`title`、`game_level`、四種判定、`max_combo`、`game_score`、
 `grade`、`completion_status`、`player_name`。多人結算底部歌曲 LV 是 HOST
 顯示值；不能把它標成自己的另一個難度。不能從結算猜出沒有顯示的 E/N/H。
@@ -147,3 +149,87 @@ JSON 包括 UTC timestamp、reason 列表、screen_type_guess、各欄原始 con
 包含重啟前與不完整檔案，滿了停止新增，絕不刪除或覆蓋既有證據。
 所有擷取處理與掛鉤均包住例外；權限、磁碟滿、PNG 或 JSON 寫入錯誤不影響
 原本監控的成功／錯誤處理。
+
+## Pack 選取證據與裁切樣本
+
+完整「房主設置 SETTING」目前分類為 `song_select`。除了完整遊戲視窗，
+選歌解析亦用 EASY／NORMAL／HARD 與 Group 錨點對齊單獨擷取的完整對話框。
+只有左側清單的 ROI 樣本需明確標為 `screen_type: "pack_list_crop"`；
+考卷在此模式只執行 Pack 清單分析，使用原圖座標，不執行全畫面分類。
+這個模式是辨識路由，不把標籤中的 Pack 答案送進解析器。
+
+`fields.selected_pack` 是選填的完全相同比對欄位：
+
+- 名稱完全相同：PASS。
+- 沒有值（None）或明確 uncertain：欄位為 UNCERTAIN，另計 uncertain 數量；
+  預設整張樣本 FAIL。
+- 標籤頂層可填 `"allow_uncertain": ["selected_pack"]`。只有此欄的不確定性
+  被允許時，樣本狀態為 UNCERTAIN；其他任何欄失敗仍是 FAIL。
+- 輸出不同 Pack 一律 FAIL，即使設定 allow_uncertain。allow_uncertain 目前僅接受
+  selected_pack，合併標籤時仍檢查衝突。null 答案仍不評分。
+- 欄位 correct／total 保留所有非 null 答案，UNCERTAIN 不算 correct；另外輸出
+  uncertain 數量。既有 PASS 退為 UNCERTAIN、或允許的 UNCERTAIN 退為 FAIL
+  仍視為回歸，不能因兩者 correct 都是 0 而掩蓋錯誤 Pack。
+
+例如只有左列、目視無法證明選取狀態的圖片：
+
+```json
+{
+  "image": "pack-list-crop.png",
+  "sha256": "填入原圖的64位十六進位SHA256",
+  "screen_type": "pack_list_crop",
+  "allow_uncertain": [
+    "selected_pack"
+  ],
+  "fields": {
+    "selected_pack": "人工確認的完整 Pack 名稱"
+  }
+}
+```
+
+主要證據為右側可見歌名的精確正規化曲庫匹配：至少兩個不同歌名、兩首不同歌曲
+同屬一個 Pack；若左側清單可見，還必須與其名稱候選一致。重複 OCR、同曲別名
+或同名歌曲多筆資料不能單獨湊足兩首。多 Pack 符合時預設不確定，只有唯一且
+一致的左列提示可作平手裁決。page n/m 保留原始 token、信心與頁碼作證據，
+不以頁碼推測歌曲或曲庫缺項。未知歌名、截斷歌名不做模糊補字。
+
+曲庫仍透過既有 ReadOnlyCatalog 的 `mode=ro`、`query_only=ON` 開啟；
+重用 songs、來源原始歌名與已確認別名索引。缺少 Pack／歌曲映射時輸出
+selected_pack_uncertain 與匹配診斷，絕不從標籤或檔名補答案。
+
+左列提示保留相鄰掃描線的成對邊緣法：要求上下方向相反、橫跨大部分列寬，
+而且強度顯著高於其他列。另加入保守的局部背景正規化色差法：
+
+- 在列中心上下 0.38 倍列距內取樣，排除 OCR 文字框及其外擴 2 像素，
+  並略去左右各 5% 的面板邊界。至少 24 個橫向位置且覆蓋 60% 列寬才有效。
+- 以 RGB 中位數去除整列偏色後比較空間紋理；90% 像素的最大通道偏差
+  必須不超過 12，且色度 MAD 換算的標準差不超過 6。只涵蓋平滑背景，
+  不試圖從高變異唱片圖案猜選取狀態。
+- 只比較三個列距以內的列（另容許 0.1 列距的 OCR 基線誤差），平均 RGB 亮度差
+  須不超過 24；相同橫向位置的
+  去色偏背景輪廓，其 90% 差異須不超過 12，且仍須有 60%／24 個共同位置。
+- 色度採 `(R-G, B-G)`，消除共同亮度變化。候選列的色度強度必須比**所有**
+  可比較鄰列至少多 8，色度向量距離至少多 12；至少需要兩個可比較鄰列。
+  兩項門檻都再取與 `3 * hypot(自身雜訊, 鄰列雜訊)` 的較大值，且須嚴格超過。
+  使用完整空間雜訊，不因像素數增加而縮小誤差。兩列同樣偏色不產生提示，
+  不會把剩下的未偏色列反選為候選。色差法只接受唯一且 OCR 信心至少 0.9 的候選。
+
+8／12 是 8-bit 通道範圍約 3%／5% 的最低可辨對比預算，遠大於單一量化階；
+6 的雜訊上限及 12 的紋理容忍度將方法限制在平滑面板，24 的亮度容忍度約為
+全範圍 10%，避免跨越明暗背景。這些是保守的工程門檻，並非選取正確率保證；
+選用於合成測試與平滑背景假設，沒有依 Osu Transfer 圖片的測量值降低門檻。
+三個列距保留局部性，兩個以上參照列避免單一鄰列充當基準；任何可比較鄰列
+未達對比門檻都棄權，不能只挑最有利的兩列。
+
+兩種方法提供不同候選時回傳 None。相同邊框、相似偏色或繁雜背景通常沒有唯一提示。
+圖案自身若形成矩形仍可能造成視覺候選，因此提示不能獨立確認選取或區分 hover。
+Blue 與 Osu Transfer 裁切圖沒有右側歌單，最終 selected_pack 仍只能 UNCERTAIN，
+其標籤明確允許這個欄位棄權；正確的人工標籤保留不變。
+
+selection 輸出 `selected_pack`、`selected_pack_id`、`selected_pack_confidence`、
+`selected_pack_evidence`、`pack_reason`。confidence 是支持歌名 OCR 的最低信心，
+不是選取正確率。主要與次要訊號衝突時清空名稱／ID，理由為
+selected_pack_disagreement；不足時為 selected_pack_uncertain。
+即時監控的既有 ocr_failures 旁路擷取會記錄這兩種理由。
+推論只作診斷，不會確認 tracker 的 Pack；開啟清單仍清除舊的人工 Pack 上下文，
+保留既有成績綁定與提交門檻。
