@@ -8,8 +8,15 @@ from pathlib import Path
 import time
 from uuid import uuid4
 
+from .ocr_policy import (
+    AUTO_CONFIDENCE, SELECTION_REQUIRED, CUSTOM_SELECTION_REQUIRED,
+    RESULT_NONFATAL_ERRORS, result_required,
+)
 
-def failure_details(observation=None, error=None):
+UNRECOGNIZED_SECONDS = 60
+
+
+def failure_details(observation=None, error=None, *, unrecognized_age=float('inf')):
     """Read existing diagnostics without altering fields, confidence or decisions."""
     observation = observation or {}
     result = observation.get('result_ocr') or {}
@@ -18,7 +25,7 @@ def failure_details(observation=None, error=None):
     reasons = []
     if error is not None:
         reasons.append('recognition_exception: ' + type(error).__name__)
-    if observation.get('screen_type') in ('unknown', 'error'):
+    if observation.get('screen_type') in ('unknown', 'error') and unrecognized_age >= UNRECOGNIZED_SECONDS:
         reasons.append('screen_unrecognized')
     selection = observation.get('selection') or {}
     if (observation.get('screen_type') == 'song_select' and 'pack_reason' in selection
@@ -27,16 +34,25 @@ def failure_details(observation=None, error=None):
             reasons.append('selected_pack_disagreement')
         elif selection.get('selected_pack') is None:
             reasons.append('selected_pack_uncertain')
-    # These are the existing automatic-review confidence requirements. This
-    # diagnostic check does not gate or change the monitor's handling of a frame.
+    required = ()
+    if observation.get('screen_type') == 'results':
+        required = result_required(result)
+    elif observation.get('screen_type') == 'song_select':
+        required = SELECTION_REQUIRED
+        if observation.get('source_type') == 'custom':
+            required += CUSTOM_SELECTION_REQUIRED
+    # Diagnose only the active gate's fields. Occluded metadata is expected while
+    # the Pack list is open, including custom metadata that gates a later play.
     for name, field in fields.items():
+        if name not in required or field.get('reason') == 'pack_list_occludes_metadata':
+            continue
         if field.get('value') is None:
             reasons.append(name + ': missing')
-        elif field.get('confidence', 0) < .95:
+        elif field.get('confidence', 0) < AUTO_CONFIDENCE:
             reasons.append(name + ': low_confidence')
         if field.get('reason'):
             reasons.append(name + ': ' + str(field['reason']))
-    reasons.extend(result.get('errors') or [])
+    reasons.extend(e for e in result.get('errors') or [] if e not in RESULT_NONFATAL_ERRORS)
     temporal = result.get('temporal_validation') or {}
     if temporal.get('status') == 'pending_review':
         reasons.extend(temporal.get('reasons') or ['temporal_ocr_uncertainty'])
@@ -64,14 +80,15 @@ class FailureCapture:
         self.last_attempt = float('-inf')
         self.last_saved = float('-inf')
         self.last_reason = None
+        self.last_unrecognized = float('-inf')
 
     def capture(self, image, observation=None, error=None):
         """At most one PNG/JSON pair per interval; all failures stay local here."""
         try:
-            details = failure_details(observation, error)
+            now = self.clock()
+            details = failure_details(observation, error, unrecognized_age=now - self.last_unrecognized)
             if not details['reason'] or image is None:
                 return False
-            now = self.clock()
             reason = tuple(details['reason'])
             if now - self.last_attempt < self.interval:
                 return False
@@ -97,6 +114,8 @@ class FailureCapture:
                 stream.write(metadata + '\n')
             self.last_reason = reason
             self.last_saved = now
+            if 'screen_unrecognized' in reason:
+                self.last_unrecognized = now
             return True
         except Exception:
             return False

@@ -1,0 +1,18 @@
+{
+  "image": "realplay2_friends_app.png",
+  "sha256": "8337242de9be62f68dd0686b91bf15f307f6b456de5f3f208cdbec54fe353056",
+  "screen_type": "results",
+  "fields": {
+    "title": "Friends No More - AstraNova",
+    "game_level": 4,
+    "max_combo": 22,
+    "perfect": 22,
+    "cool": 0,
+    "bad": 0,
+    "miss": 0,
+    "game_score": 503,
+    "grade": "A++",
+    "completion_status": "COMPLETED",
+    "player_name": "TC"
+  }
+}

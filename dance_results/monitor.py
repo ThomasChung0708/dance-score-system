@@ -154,6 +154,27 @@ class Monitor:
         except Exception:
             pass
 
+    def _consume_observation(self, observation, now, image, sample_id):
+        from .result_ocr import incomplete_result
+        from .ocr_screens import compact, in_region
+
+        ocr = observation.get('result_ocr') or {}
+        if observation.get('state') in ('RESULT', 'GAME_OVER') and incomplete_result(ocr):
+            context = observation.get('context') or {}
+            player = ocr.get('requested_player_name') or context.get('player_name')
+            own_name = ocr.get('fields', {}).get('player_name', {})
+            own_row = (ocr.get('row') is not None or context.get('local_row_evidence') or
+                       (ocr.get('local_player_status') == 'CONFIRMED' and own_name.get('value')))
+            # Combo can still be drawing, so the name may precede a parsed row.
+            own_name_visible = player and any(
+                compact(t['text']) == compact(player) and t['confidence'] >= .9
+                for t in in_region(ocr.get('tokens', []), (110, 225, 300, 605)))
+            if own_row or own_name_visible:
+                return
+        # Missing local players also occur on settled spectator/not-listed
+        # results. Those retain the original tracker transitions and capture.
+        self.tracker.consume(observation, now=now, image=image, sample_id=sample_id)
+
     def _run(self):
         capture = None
         current = None
@@ -300,7 +321,7 @@ class Monitor:
                     result_consistency.observe(observation,(self.tracker.session or {}).get('session_id'),sampled,image)
                     self._capture_ocr_failure(image, observation)
                     self.latest_image = image
-                    self.tracker.consume(observation, now=last_ocr, image=image, sample_id=sampled)
+                    self._consume_observation(observation, last_ocr, image, sampled)
                     if self.downloads:self.downloads.observe(observation,self.tracker,image)
                     pending = self.tracker.last_session
                     if observation.get('result_ocr') and pending and pending.get('status') == 'pending_result' and (

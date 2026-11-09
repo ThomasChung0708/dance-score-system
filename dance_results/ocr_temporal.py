@@ -3,13 +3,14 @@ import copy
 import hashlib
 import math
 from pathlib import Path
-from .result_ocr import NUMERIC
+from .result_ocr import incomplete_result
+from .ocr_policy import AUTO_CONFIDENCE, result_required
 
 POLICY='phase5f1-two-fresh-results-v1'
 
 
 def keys(ocr):
-    return (*NUMERIC,'title','grade','player_name','completion_status',*(('game_level',) if not ocr.get('multiplayer') else ()))
+    return result_required(ocr)
 
 
 class ResultConsistency:
@@ -24,6 +25,12 @@ class ResultConsistency:
             self.samples=[];self.images=[]
         ocr=observation.get('result_ocr')
         if not ocr:return
+        if incomplete_result(ocr):
+            ocr['temporal_validation'] = dict(
+                policy=POLICY, session_id=session_id, status='pending_review',
+                incomplete=True, reasons=['incomplete_result_frame'], samples=copy.deepcopy(self.samples),
+            )
+            return
         if not any(s['capture_id']==capture_id or s['frame_hash']==observation['frame_hash'] for s in self.samples):
             self.samples.append(dict(capture_id=capture_id,frame_hash=observation['frame_hash'],
                                      fields=copy.deepcopy(ocr['fields']),raw_fields=copy.deepcopy(ocr.get('raw_fields',ocr['fields']))))
@@ -33,7 +40,7 @@ class ResultConsistency:
         for sample in samples:
             for k in keys(ocr):
                 f=sample['fields'].get(k,{})
-                if f.get('value') is None or f.get('confidence',0)<.95 or f.get('reason'):reasons.append('unreliable_'+k)
+                if f.get('value') is None or f.get('confidence',0)<AUTO_CONFIDENCE or f.get('reason'):reasons.append('unreliable_'+k)
                 if f.get('value')!=ocr['fields'].get(k,{}).get('value'):reasons.append('conflicting_'+k)
         if reasons:status='pending_review'
         ocr['temporal_validation']=dict(policy=POLICY,session_id=session_id,status=status,reasons=sorted(set(reasons)),samples=samples,
@@ -64,7 +71,7 @@ def issues(ocr,session,directory):
         if not isinstance(s.get('capture_id'),(float,int)) or not math.isfinite(s['capture_id']):errors.append('automatic_temporal_capture_invalid')
         for k in keys(ocr):
             f=s.get('fields',{}).get(k,{})
-            if f.get('value') is None or f.get('confidence',0)<.95 or f.get('reason') or f.get('value')!=ocr['fields'].get(k,{}).get('value'):errors.append('automatic_temporal_field_conflict')
+            if f.get('value') is None or f.get('confidence',0)<AUTO_CONFIDENCE or f.get('reason') or f.get('value')!=ocr['fields'].get(k,{}).get('value'):errors.append('automatic_temporal_field_conflict')
         try:
             expected=f'result-observations/frame-{i}.png'
             if s.get('path')!=expected:raise ValueError('path')

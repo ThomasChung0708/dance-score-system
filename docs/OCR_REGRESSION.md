@@ -1,6 +1,7 @@
 # 固定 OCR 回歸考卷與失敗擷取
 
-本輪只增加評估與蒐證，不修改 OCR 分類、解析、信心門檻或監控決策。
+Round 2.5 增加失敗診斷去噪、未完成結算幀處理、評級字形 ROI 與資訊性計時。
+自動提交的信心門檻仍為 0.95，歌曲匹配與多人選歌流程維持原樣。
 這是開發樣本的完全相同比率，不代表未知圖片的泛化準確率。
 
 ## 執行
@@ -46,6 +47,13 @@ SQLite 使用靜態入口同一個 `ReadOnlyCatalog`：`mode=ro` 加
 
 `reports/ocr_regression/latest.json` 保存時間、引擎、逐圖比對、缺失、欄位統計、
 回歸差異及唯讀稽核結果。`reports/` 已被 Git 忽略。
+
+每張實際執行 OCR 的樣本另印 `OCR … ms`，JSON 樣本保存 `ocr_ms`；摘要
+`timing` 保存 `median_ms` 與最近秩法的 `p90_ms`。計時涵蓋辨識入口（包括
+必要 ROI／解析），不包括模型初始化、圖片 hash、評分與資料庫稽核。
+**有意義的推論耗時必須用 `--no-cache`**；預設頁面快取會跳過頁面推論，
+因此預設數字只表示這次含快取的入口耗時。計時僅供參考，完全不參與
+PASS／FAIL、欄位準確率或基準寫入／比較。缺圖／hash 不符沒有 OCR 耗時。
 
 評分規則：
 
@@ -128,6 +136,25 @@ Get-FileHash 'tests/專案測試圖片/round2/failed-result.png' -Algorithm SHA2
 兩份舊 ground truth 維持原樣；若新標籤對同一圖片提供衝突答案／hash，
 工具報錯而非依檔案順序覆蓋。
 
+動畫中的結算可在頂層加 `"expect_incomplete": true`，`screen_type` 必須是
+`results`，`fields` 可為空物件；不要替半畫出的數字猜答案。工具要求仍分類為
+results，且解析器明確回報本人列／必要數字不完整，或無法產生整列高信心的
+數字、評級、暱稱與完成狀態，才會 PASS。完整高信心列、未知分類、辨識例外
+都不能冒充未完成而通過。這個斷言獨立計分，不改動 null 欄位的分母規則。
+`result_diagnostics` 另外保留欄位信心、原因與 `incomplete_result`。
+
+四張 realplay 標籤中，`realplay_result_anim_frame0` 使用上述斷言；frame1
+標註完成的 Crisscrosser 結算。`realplay_grade_app` 標註 A++ 上標評級；
+`realplay_multi_lv23` 只評 TC 本人列，footer 的 HOST LV 以 null 排除。
+標籤答案／檔名均不參與辨識。評級低信心時，額外對橘色字形做兩個不同留白
+的裁切，保留上標 ++；兩個模型讀值都須達原門檻、彼此與原有非空讀值一致，
+信心取實際模型最小值，不透過重複讀取加分。缺字形、低信心或矛盾都不修猜。
+
+即時雙幀檢查忽略缺本人列或必要數字為 null 的幀，也不讓它消耗 tracker 的
+結果確認次數或提前保存不可覆寫的結算。仍要求兩張不同 capture／hash、間隔
+不超過原有 15 的完整高信心相同讀值；非 null 的真實衝突與低信心照常待審核。
+靜態考卷只檢查單圖；雙幀與監控流程由合成測試另外驗證。
+
 只提交標籤與程式。**永遠不要提交 `tests/專案測試圖片/`、`data/`、`reports/`。**
 
 ## 即時監控失敗擷取
@@ -135,20 +162,35 @@ Get-FileHash 'tests/專案測試圖片/round2/failed-result.png' -Algorithm SHA2
 正式監控使用 `data/ocr_failures/`；另一份資料庫的隔離監控使用該監控目錄下
 的 `ocr_failures/`。第一次需要擷取才建立目錄，不啟動另一個監控程序。
 
-當辨識器拋例外、分類 unknown／error、原始欄位缺值／低信心（<0.95）／
+當辨識器拋例外、分類 unknown／error、實際送出必要欄位缺值／低信心／
 帶解析原因，或既有結算錯誤／雙幀診斷指出 Pending 不確定性時，另存
 同名 PNG 和 JSON。這是旁路診斷條件，不修改正式門檻或 Pending／提交決策。
 一般 MANUAL 等待審核而沒有 OCR 不確定性不會只因 Pending 就擷取。
+
+欄位列表與 0.95 門檻由 `ocr_policy` 與 `verified_auto`／雙幀檢查共用。
+選歌檢查 title／difficulty／game_level；已知 custom 來源才另檢查 total_notes／
+duration_seconds。artist／bpm 不是必要欄位，不因它們缺值／低信心而擷取。
+`pack_list_occludes_metadata`（連同該欄預期缺值）不擷取；保留 Pack 訊號衝突
+及原有清單可見時的 Pack 不確定診斷。多人結算的 HOST level 警告與欄位不是
+自動送出阻擋條件，不擷取；其他結算 gate 原因仍保留。
 
 JSON 包括 UTC timestamp、reason 列表、screen_type_guess、各欄原始 confidence
 及 key parsed fields；不保存整份 tokens／資料庫資料。辨識例外時無法取得的
 類型／信心保留 null／空物件，不捏造分類信心。
 
 每個監控實例最短五秒一次，不同原因也受此限制；連續相同原因三十秒內
-不再保存。失敗寫入也限制重試頻率。目錄最多 **500 個檔案（通常250組）**，
+不再保存。unknown／error 的 `screen_unrecognized` 另有六十秒去重，不受中間
+其他原因打斷；同幀例外仍保留。失敗寫入也限制重試頻率。目錄最多 **500 個檔案（通常250組）**，
 包含重啟前與不完整檔案，滿了停止新增，絕不刪除或覆蓋既有證據。
 所有擷取處理與掛鉤均包住例外；權限、磁碟滿、PNG 或 JSON 寫入錯誤不影響
 原本監控的成功／錯誤處理。
+
+可用 `python -X utf8 -m tools.replay_ocr_failures` 回放唯讀的
+`data/ocr_failures_snapshot/*.json`，不執行 OCR、不讀寫曲庫。測試在快照目錄
+缺失時跳過。121 份 Round 1 JSON 原本全部帶原因；以新規則重建為 31 份，
+套用同一個六十秒 unknown 去重後為 **30 份**。輸出同時保留這兩個數字，
+以免把去重誤認為解析改善。快照缺少 tokens／來源／完整模式資訊，不能據此
+重建所有即時 gate 狀態；工具不猜 custom 來源，只有 HOST 警告可證明多人模式。
 
 ## Pack 選取證據與裁切樣本
 

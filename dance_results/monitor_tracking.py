@@ -10,6 +10,7 @@ import time
 from uuid import uuid4
 
 from .ocr_matching import normalize
+from .ocr_policy import SELECTION_REQUIRED
 
 
 def utc():
@@ -121,6 +122,23 @@ class Tracker:
             self.log('pack_observed', pack=self.current_pack)
 
     def update_selection(self, observation, now):
+        # A transition can retain the song-select anchors while its identity is
+        # unreadable. It neither changes the song nor refreshes its freshness.
+        fields = observation['fields']
+
+        def unreadable(key):
+            field = fields.get(key) or {}
+            return field.get('value') in (None, '') or bool(field.get('reason'))
+
+        if unreadable('title'):
+            return
+        if any(unreadable(key) for key in SELECTION_REQUIRED):
+            # Partially readable frame: keep the current selection only when it
+            # shows the same title. A readable different title still replaces or
+            # invalidates the old selection, so a stale song is never kept.
+            current = ((self.selection or {}).get('fields') or {}).get('title') or {}
+            if normalize(current.get('value')) == normalize(fields['title']['value']):
+                return
         payload = dict(fields=observation['fields'], pack=copy.deepcopy(self.current_pack),
                        source_type=observation.get('source_type', self.current_source),
                        matching=copy.deepcopy(observation['matching']), frame_hash=observation['frame_hash'])
@@ -158,7 +176,7 @@ class Tracker:
         self.last_sample = sample_id
         wanted = observation['state']
         if wanted == 'SONG_SELECT':
-            # A newly observed selection invalidates the prior one immediately, even before state confirmation.
+            # A readable new identity invalidates the prior one before debounce.
             self.update_selection(observation, now)
         if wanted != self.proposed:
             self.proposed = wanted

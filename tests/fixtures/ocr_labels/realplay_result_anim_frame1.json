@@ -1,0 +1,18 @@
+{
+  "image": "realplay_result_anim_frame1.png",
+  "sha256": "d5933f5802d0d5ba3f383d166e80aae983ad8663c8fe23b907f7e4ea99238bbc",
+  "screen_type": "results",
+  "fields": {
+    "title": "Crisscrosser",
+    "game_level": 39,
+    "max_combo": 691,
+    "perfect": 1402,
+    "cool": 42,
+    "bad": 2,
+    "miss": 7,
+    "game_score": 86333,
+    "grade": "A+",
+    "completion_status": "COMPLETED",
+    "player_name": "TC"
+  }
+}

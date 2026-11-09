@@ -1,0 +1,8 @@
+{
+  "image": "realplay_result_anim_frame0.png",
+  "sha256": "987c65ac5dcd452f6e0357dc229d7b5c5119605451a5c77b7df0ba8923c240d6",
+  "screen_type": "results",
+  "fields": {},
+  "expect_incomplete": true,
+  "annotation": "Mid-animation result: columns shifted and numbers half drawn; no complete confident local row is expected."
+}

@@ -9,10 +9,117 @@ from __future__ import annotations
 import re
 import copy
 from .ocr_screens import center, compact, in_region, value
+from .ocr_policy import AUTO_CONFIDENCE, RESULT_NUMERIC
 
-NUMERIC = ('perfect', 'cool', 'bad', 'miss', 'max_combo', 'game_score')
+NUMERIC = RESULT_NUMERIC
 COLUMNS = {'max_combo': (325, 425), 'perfect': (425, 523), 'cool': (523, 595),
            'bad': (595, 671), 'miss': (671, 746), 'game_score': (837, 940), 'grade': (940, 1024)}
+
+
+def incomplete_result(ocr):
+    """Missing local row/digits cannot supply complete local score evidence.
+
+    Absence alone does not distinguish animation from a spectator result. Low
+    confidence and differing non-null numbers remain consistency evidence.
+    """
+    return (ocr.get('row') is None or
+            any(ocr.get('fields', {}).get(key, {}).get('value') is None for key in NUMERIC))
+
+
+def superscript_plus_count(mask):
+    """Count separate raised crosses to the right of the grade's main letter.
+
+    This only corroborates an OCR suffix; pixels never supply a grade value.
+    Requiring every cross prevents treating a clearly drawn A+ as partial A++.
+    """
+    remaining = {(x, y) for y in range(mask.height) for x in range(mask.width) if mask.getpixel((x, y))}
+    components = []
+    while remaining:
+        start = remaining.pop()
+        points = {start}
+        pending = [start]
+        while pending:
+            x, y = pending.pop()
+            for neighbor in ((x-1, y), (x+1, y), (x, y-1), (x, y+1)):
+                if neighbor in remaining:
+                    remaining.remove(neighbor)
+                    points.add(neighbor)
+                    pending.append(neighbor)
+        if len(points) >= 5:
+            components.append(points)
+    if not components:
+        return 0
+
+    def bounds(points):
+        return (min(x for x, y in points), min(y for x, y in points),
+                max(x for x, y in points)+1, max(y for x, y in points)+1)
+
+    boxes = [(points, bounds(points)) for points in components]
+    _, (left, top, right, bottom) = max(boxes, key=lambda item: item[1][3]-item[1][1])
+    count = 0
+    for points, (x0, y0, x1, y1) in boxes:
+        width, height = x1-x0, y1-y0
+        if not (x0 >= right and .5 <= width/height <= 1.8 and
+                height <= (bottom-top)*.75 and y0+y1 < top+bottom):
+            continue
+        middle_x, middle_y = (x0+x1-1)//2, (y0+y1-1)//2
+        horizontal = sum((x, middle_y) in points for x in range(x0, x1))
+        vertical = sum((middle_x, y) in points for y in range(y0, y1))
+        if horizontal >= width*.8 and vertical >= height*.8:
+            count += 1
+    return count
+
+
+def refine_grade(crop, engine, original, page, origin):
+    """Bound the skin's orange grade ink, preserving its superscript plus signs.
+
+    Both padded views must agree at the unchanged automatic threshold. Confidence
+    is their actual model minimum. Same-letter prefixes are fragments only when
+    the pixels corroborate the complete raised plus suffix read by both views.
+    """
+    from PIL import Image, ImageOps
+
+    reader = getattr(engine, 'recognize_line', None)
+    if reader is None or (original['confidence'] >= AUTO_CONFIDENCE and not original.get('reason') and
+                          page['value'] in (None, original['value'])):
+        return original, []
+    mask = Image.new('L', crop.size)
+    pixels = crop.convert('RGB').load()
+    mask.putdata([
+        255 if r > 180 and r > g * 1.3 and g > 65 and b < 100 else 0
+        for y in range(crop.height) for x in range(crop.width)
+        for r, g, b in (pixels[x, y],)
+    ])
+    bounds = mask.getbbox()
+    if not bounds:
+        return original, []
+    foreground = ImageOps.invert(mask.crop(bounds)).convert('RGB')
+    views = []
+    readings = []
+    for border in (3, 8):
+        view = ImageOps.expand(foreground, border=border, fill='white')
+        offset = (origin[0] + bounds[0] - border, origin[1] + bounds[1] - border)
+        tokens = reader(view.resize((view.width * 3, view.height * 3)), origin=offset, scale=3)
+        views.append(dict(field='grade', tokens=tokens, region=(*origin, origin[0]+crop.width, origin[1]+crop.height),
+                          preprocessing='bounded_orange_grade_ink', border=border))
+        readings.append(cell(tokens, numeric=False))
+    if any(f['value'] is None or f['confidence'] < AUTO_CONFIDENCE or f.get('reason') for f in readings):
+        return original, views
+    candidates = [f['value'] for f in readings]
+    observed = [f['value'] for f in (original, page) if f['value'] is not None]
+    candidate = candidates[0]
+    plus_count = superscript_plus_count(mask)
+    suffix_supported = candidate.endswith('+') and plus_count == candidate.count('+')
+    fragments = suffix_supported and all(
+        text == candidate or (candidate.startswith(text) and
+                              text.rstrip('+') == candidate.rstrip('+'))
+        for text in observed)
+    if len(set(candidates)) != 1 or (len(set(candidates + observed)) != 1 and not fragments):
+        return dict(original, reason='page_and_grade_roi_disagree_requires_review'), views
+    return dict(value=readings[0]['value'], confidence=min(f['confidence'] for f in readings),
+                evidence=[t for f in readings for t in f['evidence']], reason=None,
+                method='two_bounded_orange_grade_views', original_reading=copy.deepcopy(original),
+                page_reading=copy.deepcopy(page), superscript_plus_count=plus_count), views
 
 
 def cell(tokens, numeric=True):
@@ -157,6 +264,8 @@ def recognize_result(image, engine, player_name='TC', tokens=None):
                 grade_reading['method'] = 'full_height_grade_cell_recognition'
                 if field['value'] is not None and grade_reading['value'] != field['value']:
                     grade_reading['reason'] = 'page_and_grade_roi_disagree_requires_review'
+                grade_reading, grade_views = refine_grade(crop, engine, grade_reading, field, box[:2])
+                rereads.extend(grade_views)
             # Preserve contradictions, rather than selecting the most convenient reading.
             if key == 'player_name':
                 valid = len(found) == 1 and compact(found[0]['text']) == compact(player_name) and found[0]['confidence'] >= .9
@@ -191,6 +300,9 @@ def recognize_result(image, engine, player_name='TC', tokens=None):
     final = parse_result(tokens, player_name)
     if grade_reading is not None:
         final['fields']['grade'] = grade_reading
+        for own in final.get('player_rows', []):
+            if final['row'] and abs(own['y'] - final['row']['y']) < 1 and compact(own['name']) == compact(player_name):
+                own['fields']['grade'] = copy.deepcopy(grade_reading)
     from .ocr_numeric import refine_number,footer_level_box
     numeric_views={}
     if final['row'] and final['local_player_status']=='CONFIRMED':
@@ -207,5 +319,6 @@ def recognize_result(image, engine, player_name='TC', tokens=None):
         final['fields']['game_level'],views=refine_number(normalized,engine,box,final['fields']['game_level'])
         if views:numeric_views['game_level']=views
     final.update(tokens=tokens,roi_rereads=rereads,raw_tokens=raw_tokens,raw_fields=raw_fields,
-                 numeric_roi_evidence=numeric_views,parser_version='phase5f1-v1')
+                 numeric_roi_evidence=numeric_views,parser_version='phase5f1-v1',
+                 incomplete=incomplete_result(final))
     return final

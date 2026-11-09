@@ -1,0 +1,18 @@
+{
+  "image": "realplay2_click_app.png",
+  "sha256": "4690325d095967e6a7d113df32aa34adb373f3d18ad9916fb34b0e7a3ac89d6f",
+  "screen_type": "results",
+  "fields": {
+    "title": "Click",
+    "game_level": 15,
+    "max_combo": 728,
+    "perfect": 726,
+    "cool": 2,
+    "bad": 0,
+    "miss": 0,
+    "game_score": 51463,
+    "grade": "A++",
+    "completion_status": "COMPLETED",
+    "player_name": "TC"
+  }
+}

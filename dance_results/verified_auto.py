@@ -10,10 +10,14 @@ from .monitor_tracking import atomic_json,utc,ManualReferences
 from .ocr_matching import ReadOnlyCatalog,normalize
 from .note_review import result_time
 from .result_ocr import NUMERIC
+from .ocr_policy import (
+    AUTO_CONFIDENCE, RESULT_REQUIRED, SELECTION_REQUIRED,
+    CUSTOM_SELECTION_REQUIRED, RESULT_NONFATAL_ERRORS,
+)
 
 
 def reliable(field):
-    return isinstance(field,dict) and field.get('value') is not None and field.get('confidence',0)>=.95 and not field.get('reason')
+    return isinstance(field,dict) and field.get('value') is not None and field.get('confidence',0)>=AUTO_CONFIDENCE and not field.get('reason')
 
 
 def automatic_request(reviews,row):
@@ -35,14 +39,13 @@ def automatic_request(reviews,row):
     if s.get('status')!='pending_result' or not result_time(s)[0]:issues.append('automatic_complete_session_required')
     # A multiplayer footer belongs to the HOST. This warning requires using
     # the independently verified local chart below, not rejecting every own row.
-    fatal_ocr=[e for e in ocr.get('errors',[]) if e!='footer_level_is_host_not_local']
+    fatal_ocr=[e for e in ocr.get('errors',[]) if e not in RESULT_NONFATAL_ERRORS]
     if fatal_ocr:issues.append('automatic_ocr_errors')
     if ocr.get('local_player_status')!='CONFIRMED':issues.append('automatic_local_player_uncertain')
     result_state=(s.get('result') or {}).get('state')
     if result_state not in ('RESULT','GAME_OVER') or (result_state=='GAME_OVER' and raw.get('completion_status',{}).get('value')!='FAILED'):
         issues.append('automatic_completion_session_conflict')
-    required=(*NUMERIC,'grade','completion_status','player_name','title')
-    for key in required:
+    for key in RESULT_REQUIRED:
         if not reliable(raw.get(key)):issues.append('automatic_unreliable_'+key)
     if ocr.get('multiplayer') is None:issues.append('automatic_play_mode_unknown')
     own=[r for r in reviews.player_rows(row) if normalize(r.get('name'))==normalize(ocr.get('requested_player_name'))]
@@ -50,7 +53,7 @@ def automatic_request(reviews,row):
     elif any(not reliable(own[0]['fields'].get(k)) or own[0]['fields'][k]['value']!=raw.get(k,{}).get('value') for k in (*NUMERIC,'grade','completion_status')):
         issues.append('automatic_player_row_conflict')
     fields=copy.deepcopy(selection.get('ocr_fields',selection.get('fields') or {}))
-    for key in ('title','difficulty','game_level'):
+    for key in SELECTION_REQUIRED:
         if not reliable(fields.get(key)):issues.append('automatic_selection_'+key+'_required')
     if normalize(raw.get('title',{}).get('value'))!=normalize(fields.get('title',{}).get('value')):issues.append('automatic_result_title_conflict')
     if not ocr.get('multiplayer') and (not reliable(raw.get('game_level')) or raw['game_level']['value']!=fields.get('game_level',{}).get('value')):
@@ -64,7 +67,7 @@ def automatic_request(reviews,row):
         elif source=='custom':
             pack=selection.get('pack') or {}
             if pack.get('status')!='confirmed':issues.append('automatic_pack_unconfirmed')
-            for key in ('total_notes','duration_seconds'):
+            for key in CUSTOM_SELECTION_REQUIRED:
                 if not reliable(fields.get(key)):issues.append('automatic_selection_'+key+'_required')
             match=catalog.match(fields,pack.get('pack_id'),'custom')
             ref=ManualReferences(reviews.directory,reviews.database).safe_lookup(fields,pack.get('pack_id'),'custom',catalog,match)

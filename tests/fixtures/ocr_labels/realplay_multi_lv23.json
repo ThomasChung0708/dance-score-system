@@ -1,0 +1,19 @@
+{
+  "image": "realplay_multi_lv23.png",
+  "sha256": "04ce952ae47c9cd1ce40462b7d2486690b095153394a060d1f9941602f3cecbd",
+  "screen_type": "results",
+  "fields": {
+    "title": "Interstellar Travel",
+    "game_level": null,
+    "max_combo": 1476,
+    "perfect": 1488,
+    "cool": 17,
+    "bad": 1,
+    "miss": 0,
+    "game_score": 105665,
+    "grade": "A+",
+    "completion_status": "COMPLETED",
+    "player_name": "TC"
+  },
+  "annotation": "Multiplayer TC row. Footer LV belongs to host and is not evaluated."
+}

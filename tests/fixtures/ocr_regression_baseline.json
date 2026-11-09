@@ -2,13 +2,13 @@
   "schema_version": 1,
   "fields": {
     "screen_type": {
-      "correct": 32,
-      "total": 32,
+      "correct": 38,
+      "total": 38,
       "accuracy": 1.0
     },
     "title": {
-      "correct": 13,
-      "total": 13,
+      "correct": 18,
+      "total": 18,
       "accuracy": 1.0
     },
     "difficulty": {
@@ -17,8 +17,8 @@
       "accuracy": 1.0
     },
     "game_level": {
-      "correct": 13,
-      "total": 13,
+      "correct": 17,
+      "total": 17,
       "accuracy": 1.0
     },
     "bpm": {
@@ -27,33 +27,33 @@
       "accuracy": 1.0
     },
     "perfect": {
-      "correct": 4,
-      "total": 4,
+      "correct": 9,
+      "total": 9,
       "accuracy": 1.0
     },
     "cool": {
-      "correct": 4,
-      "total": 4,
+      "correct": 9,
+      "total": 9,
       "accuracy": 1.0
     },
     "bad": {
-      "correct": 4,
-      "total": 4,
+      "correct": 9,
+      "total": 9,
       "accuracy": 1.0
     },
     "miss": {
-      "correct": 4,
-      "total": 4,
+      "correct": 9,
+      "total": 9,
       "accuracy": 1.0
     },
     "judgments": {
-      "correct": 16,
-      "total": 16,
+      "correct": 36,
+      "total": 36,
       "accuracy": 1.0
     },
     "ex_score": {
-      "correct": 4,
-      "total": 4,
+      "correct": 9,
+      "total": 9,
       "accuracy": 1.0
     },
     "selected_pack": {
@@ -78,33 +78,38 @@
       "accuracy": 1.0
     },
     "max_combo": {
-      "correct": 4,
-      "total": 4,
+      "correct": 9,
+      "total": 9,
       "accuracy": 1.0
     },
     "game_score": {
-      "correct": 4,
-      "total": 4,
+      "correct": 9,
+      "total": 9,
       "accuracy": 1.0
     },
     "grade": {
-      "correct": 4,
-      "total": 4,
+      "correct": 9,
+      "total": 9,
       "accuracy": 1.0
     },
     "completion_status": {
-      "correct": 4,
-      "total": 4,
+      "correct": 9,
+      "total": 9,
       "accuracy": 1.0
     },
     "player_name": {
-      "correct": 4,
-      "total": 4,
+      "correct": 9,
+      "total": 9,
       "accuracy": 1.0
     },
     "local_player_status": {
       "correct": 5,
       "total": 5,
+      "accuracy": 1.0
+    },
+    "expect_incomplete": {
+      "correct": 1,
+      "total": 1,
       "accuracy": 1.0
     }
   },
@@ -1405,6 +1410,511 @@
           "field": "screen_type",
           "expected": "song_select",
           "got": "song_select",
+          "evaluated": true,
+          "correct": true
+        }
+      ]
+    },
+    "realplay2_click_app.png": {
+      "status": "PASS",
+      "sha256": "4690325d095967e6a7d113df32aa34adb373f3d18ad9916fb34b0e7a3ac89d6f",
+      "comparisons": [
+        {
+          "field": "title",
+          "expected": "Click",
+          "got": "Click",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "game_level",
+          "expected": 15,
+          "got": 15,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "max_combo",
+          "expected": 728,
+          "got": 728,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "perfect",
+          "expected": 726,
+          "got": 726,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "cool",
+          "expected": 2,
+          "got": 2,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "bad",
+          "expected": 0,
+          "got": 0,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "miss",
+          "expected": 0,
+          "got": 0,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "game_score",
+          "expected": 51463,
+          "got": 51463,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "grade",
+          "expected": "A++",
+          "got": "A++",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "completion_status",
+          "expected": "COMPLETED",
+          "got": "COMPLETED",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "player_name",
+          "expected": "TC",
+          "got": "TC",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "screen_type",
+          "expected": "results",
+          "got": "results",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "ex_score",
+          "expected": 1454,
+          "got": 1454,
+          "evaluated": true,
+          "correct": true
+        }
+      ]
+    },
+    "realplay2_friends_app.png": {
+      "status": "PASS",
+      "sha256": "8337242de9be62f68dd0686b91bf15f307f6b456de5f3f208cdbec54fe353056",
+      "comparisons": [
+        {
+          "field": "title",
+          "expected": "Friends No More - AstraNova",
+          "got": "Friends No More - AstraNova",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "game_level",
+          "expected": 4,
+          "got": 4,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "max_combo",
+          "expected": 22,
+          "got": 22,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "perfect",
+          "expected": 22,
+          "got": 22,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "cool",
+          "expected": 0,
+          "got": 0,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "bad",
+          "expected": 0,
+          "got": 0,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "miss",
+          "expected": 0,
+          "got": 0,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "game_score",
+          "expected": 503,
+          "got": 503,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "grade",
+          "expected": "A++",
+          "got": "A++",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "completion_status",
+          "expected": "COMPLETED",
+          "got": "COMPLETED",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "player_name",
+          "expected": "TC",
+          "got": "TC",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "screen_type",
+          "expected": "results",
+          "got": "results",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "ex_score",
+          "expected": 44,
+          "got": 44,
+          "evaluated": true,
+          "correct": true
+        }
+      ]
+    },
+    "realplay_grade_app.png": {
+      "status": "PASS",
+      "sha256": "fba55113210bc28333cb50cd54799e8aece6b0c850ee6b524e81d43f298acebb",
+      "comparisons": [
+        {
+          "field": "title",
+          "expected": "fantastic dreamer",
+          "got": "fantastic dreamer",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "game_level",
+          "expected": 18,
+          "got": 18,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "max_combo",
+          "expected": 792,
+          "got": 792,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "perfect",
+          "expected": 787,
+          "got": 787,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "cool",
+          "expected": 5,
+          "got": 5,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "bad",
+          "expected": 0,
+          "got": 0,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "miss",
+          "expected": 0,
+          "got": 0,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "game_score",
+          "expected": 55958,
+          "got": 55958,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "grade",
+          "expected": "A++",
+          "got": "A++",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "completion_status",
+          "expected": "COMPLETED",
+          "got": "COMPLETED",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "player_name",
+          "expected": "TC",
+          "got": "TC",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "screen_type",
+          "expected": "results",
+          "got": "results",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "ex_score",
+          "expected": 1579,
+          "got": 1579,
+          "evaluated": true,
+          "correct": true
+        }
+      ]
+    },
+    "realplay_multi_lv23.png": {
+      "status": "PASS",
+      "sha256": "04ce952ae47c9cd1ce40462b7d2486690b095153394a060d1f9941602f3cecbd",
+      "comparisons": [
+        {
+          "field": "title",
+          "expected": "Interstellar Travel",
+          "got": "Interstellar Travel",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "game_level",
+          "expected": null,
+          "got": 23,
+          "evaluated": false,
+          "correct": null
+        },
+        {
+          "field": "max_combo",
+          "expected": 1476,
+          "got": 1476,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "perfect",
+          "expected": 1488,
+          "got": 1488,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "cool",
+          "expected": 17,
+          "got": 17,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "bad",
+          "expected": 1,
+          "got": 1,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "miss",
+          "expected": 0,
+          "got": 0,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "game_score",
+          "expected": 105665,
+          "got": 105665,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "grade",
+          "expected": "A+",
+          "got": "A+",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "completion_status",
+          "expected": "COMPLETED",
+          "got": "COMPLETED",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "player_name",
+          "expected": "TC",
+          "got": "TC",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "screen_type",
+          "expected": "results",
+          "got": "results",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "ex_score",
+          "expected": 2993,
+          "got": 2993,
+          "evaluated": true,
+          "correct": true
+        }
+      ]
+    },
+    "realplay_result_anim_frame0.png": {
+      "status": "PASS",
+      "sha256": "987c65ac5dcd452f6e0357dc229d7b5c5119605451a5c77b7df0ba8923c240d6",
+      "comparisons": [
+        {
+          "field": "screen_type",
+          "expected": "results",
+          "got": "results",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "expect_incomplete",
+          "expected": true,
+          "got": true,
+          "evaluated": true,
+          "correct": true
+        }
+      ]
+    },
+    "realplay_result_anim_frame1.png": {
+      "status": "PASS",
+      "sha256": "d5933f5802d0d5ba3f383d166e80aae983ad8663c8fe23b907f7e4ea99238bbc",
+      "comparisons": [
+        {
+          "field": "title",
+          "expected": "Crisscrosser",
+          "got": "Crisscrosser",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "game_level",
+          "expected": 39,
+          "got": 39,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "max_combo",
+          "expected": 691,
+          "got": 691,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "perfect",
+          "expected": 1402,
+          "got": 1402,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "cool",
+          "expected": 42,
+          "got": 42,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "bad",
+          "expected": 2,
+          "got": 2,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "miss",
+          "expected": 7,
+          "got": 7,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "game_score",
+          "expected": 86333,
+          "got": 86333,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "grade",
+          "expected": "A+",
+          "got": "A+",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "completion_status",
+          "expected": "COMPLETED",
+          "got": "COMPLETED",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "player_name",
+          "expected": "TC",
+          "got": "TC",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "screen_type",
+          "expected": "results",
+          "got": "results",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "ex_score",
+          "expected": 2846,
+          "got": 2846,
           "evaluated": true,
           "correct": true
         }

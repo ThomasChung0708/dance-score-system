@@ -1,0 +1,18 @@
+{
+  "image": "realplay_grade_app.png",
+  "sha256": "fba55113210bc28333cb50cd54799e8aece6b0c850ee6b524e81d43f298acebb",
+  "screen_type": "results",
+  "fields": {
+    "title": "fantastic dreamer",
+    "game_level": 18,
+    "max_combo": 792,
+    "perfect": 787,
+    "cool": 5,
+    "bad": 0,
+    "miss": 0,
+    "game_score": 55958,
+    "grade": "A++",
+    "completion_status": "COMPLETED",
+    "player_name": "TC"
+  }
+}

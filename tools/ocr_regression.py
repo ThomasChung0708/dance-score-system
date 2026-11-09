@@ -7,10 +7,16 @@ import hashlib
 import json
 from pathlib import Path, PurePosixPath
 import re
+import math
+import statistics
 import sys
+import time
 
 from dance_results import ocr_static
 from dance_results.result_ocr import recognize_result
+from dance_results.ocr_policy import RESULT_REQUIRED
+from dance_results.verified_auto import reliable
+from dance_results.result_ocr import incomplete_result
 
 PROJECT = Path(__file__).resolve().parents[1]
 FIXTURES = PROJECT / 'tests' / 'fixtures'
@@ -38,13 +44,15 @@ def merge_label(labels, name, row, source):
         raise ValueError(f'{source}: missing or invalid sha256 for {name}')
     if not isinstance(row.get('fields', {}), dict):
         raise ValueError(f'{source}: fields must be an object for {name}')
+    if 'expect_incomplete' in row and (type(row['expect_incomplete']) is not bool or row.get('screen_type') != 'results'):
+        raise ValueError(f'{source}: expect_incomplete must be a boolean on results for {name}')
     # Windows paths are case-insensitive. Preserve the first spelling for display.
     name = next((old for old in labels if old.casefold() == name.casefold()), name)
     merged = labels.setdefault(name, {'fields': {}, 'sources': []})
     allowed = row.get('allow_uncertain', [])
     if not isinstance(allowed, list) or any(key != 'selected_pack' for key in allowed):
         raise ValueError(f'{source}: allow_uncertain supports only selected_pack for {name}')
-    for key in ('sha256', 'screen_type', 'local_player_status', 'allow_uncertain'):
+    for key in ('sha256', 'screen_type', 'local_player_status', 'allow_uncertain', 'expect_incomplete'):
         if key not in row:
             continue
         value = row[key].lower() if key == 'sha256' else row[key]
@@ -93,6 +101,9 @@ def score_sample(name, label, actual, *, error=None):
         expected['ex_score'] = derived_ex(expected)
     got = dict(actual)
     got['ex_score'] = derived_ex(got)
+    if 'expect_incomplete' in label:
+        expected['expect_incomplete'] = label['expect_incomplete']
+        got['expect_incomplete'] = actual.get('incomplete_result')
     comparisons = [
         {
             'field': key,
@@ -120,6 +131,8 @@ def score_sample(name, label, actual, *, error=None):
         'comparisons': comparisons,
         'mismatches': failures,
         'uncertainties': uncertainties,
+        'result_diagnostics': {key: actual[key] for key in (
+            'incomplete_result', 'confidence', 'field_reasons') if key in actual},
         'pack_diagnostics': {key: actual[key] for key in (
             'selected_pack_id', 'selected_pack_confidence', 'selected_pack_evidence', 'pack_reason') if key in actual},
     }
@@ -245,6 +258,10 @@ def recognize_sample(path, digest, engine, catalog, *, no_cache=False, player_na
             actual['local_player_status'] = context['local_player_status']
             result = recognize_result(image, engine, player_name, tokens=tokens)
             actual.update({key: field['value'] for key, field in result['fields'].items()})
+            actual['incomplete_result'] = incomplete_result(result) or not all(
+                reliable(result['fields'].get(key)) for key in RESULT_REQUIRED if key != 'title')
+            actual['confidence'] = {key: field['confidence'] for key, field in result['fields'].items()}
+            actual['field_reasons'] = {key: field.get('reason') for key, field in result['fields'].items()}
         elif screen == 'waiting_room':
             actual.update(ocr_static.room_context(tokens, player_name))
         elif screen == 'gameplay':
@@ -258,7 +275,8 @@ def write_json(path, data):
 
 
 def print_sample(sample):
-    print(f"{sample['status']} {sample['image']}", flush=True)
+    timing = f"; OCR {sample['ocr_ms']:.2f} ms" if sample.get('ocr_ms') is not None else ''
+    print(f"{sample['status']} {sample['image']}{timing}", flush=True)
     if sample.get('error'):
         print('  ' + sample['error'], flush=True)
     for item in sample.get('mismatches', []):
@@ -267,10 +285,20 @@ def print_sample(sample):
         print(f"  UNCERTAIN {item['field']}: allowed={item['allowed_uncertain']}", flush=True)
 
 
+def timing_summary(samples):
+    timings = sorted(s['ocr_ms'] for s in samples if s.get('ocr_ms') is not None)
+    return {
+        'sample_count': len(timings),
+        'median_ms': statistics.median(timings) if timings else None,
+        'p90_ms': timings[math.ceil(len(timings) * .9) - 1] if timings else None,
+        'note': 'Informational only; use --no-cache for meaningful OCR timing (cached page tokens bypass page inference).',
+    }
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--update-baseline', action='store_true')
-    parser.add_argument('--no-cache', action='store_true', help='Pass through to the static OCR page reader')
+    parser.add_argument('--no-cache', action='store_true', help='Re-run page inference; required for meaningful OCR timing')
     parser.add_argument('--player-name', default='TC')
     args = parser.parse_args(argv)
     report_path = PROJECT / 'reports' / 'ocr_regression' / 'latest.json'
@@ -284,6 +312,8 @@ def main(argv=None):
         'regressions': [],
     }
     catalog = None
+    print('OCR timing is informational only; use --no-cache for meaningful timing. '
+          'Default runs may reuse page tokens.', flush=True)
     try:
         labels = load_labels()
         baseline = None if args.update_baseline else json.loads(baseline_path.read_text(encoding='utf-8'))
@@ -329,16 +359,25 @@ def main(argv=None):
                     sample['comparisons'] = []
                     sample['mismatches'] = []
                 else:
+                    started = time.perf_counter()
                     try:
                         options = {'sample_kind': 'pack_list_crop'} if label['screen_type'] == 'pack_list_crop' else {}
                         actual = recognize_sample(path, digest, engine, catalog,
                                                   no_cache=args.no_cache, player_name=args.player_name, **options)
-                        sample = score_sample(name, label, actual)
+                        ocr_ms = (time.perf_counter() - started) * 1000
                     except Exception as error:
+                        ocr_ms = (time.perf_counter() - started) * 1000
                         sample = score_sample(name, label, {}, error=f'{type(error).__name__}: {error}')
+                    else:
+                        sample = score_sample(name, label, actual)
+                    sample['ocr_ms'] = round(ocr_ms, 2)
             report['samples'].append(sample)
             print_sample(sample)
         report['fields'] = summarize(report['samples'])
+        report['timing'] = timing_summary(report['samples'])
+        if report['timing']['sample_count']:
+            print(f"OCR timing: median {report['timing']['median_ms']:.2f} ms; "
+                  f"p90 {report['timing']['p90_ms']:.2f} ms (informational; use --no-cache).")
         report['counts'] = {
             status: sum(sample['status'] == status for sample in report['samples'])
             for status in ('PASS', 'FAIL', 'SKIPPED')
