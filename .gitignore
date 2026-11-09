@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+reports/
+.venv/
+.venv-ocr/
+.ocr-models/
+.pytest_cache/
+data/
+
+# local test screenshots (not uploaded)
+tests/專案測試圖片/

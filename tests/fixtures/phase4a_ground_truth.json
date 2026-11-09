@@ -1,0 +1,168 @@
+{
+  "annotation_method": "Manual visual inspection of all 22 original PNGs, including enlarged metadata views. Evaluation only; never an extraction input.",
+  "dataset_scope": "Development samples, not held-out generalization test. All five selected titles are English; Japanese artist and Chinese UI/Pack are visible.",
+  "images": {
+    "1.PNG": {
+      "sha256": "0d1c154074c066ddd84624255771a29e55f72c066d7250590596bcd0c17e5a1e",
+      "screen_type": "song_select",
+      "fields": {
+        "title": "Rose",
+        "difficulty": "HARD",
+        "game_level": 26,
+        "total_notes": null,
+        "bpm": null,
+        "duration_seconds": 126,
+        "artist": null
+      }
+    },
+    "2.PNG": {
+      "sha256": "bb64556ac793ae8d8ede86174241282d600a42f308ed328b477adfd19499283e",
+      "screen_type": "song_select",
+      "fields": {
+        "title": "Rose",
+        "difficulty": "HARD",
+        "game_level": 26,
+        "total_notes": 1057,
+        "bpm": 175,
+        "duration_seconds": 126,
+        "artist": "cornandbeans"
+      }
+    },
+    "GAMEOVER1.PNG": {
+      "sha256": "f438bd6cbd4d911f2eb354fcf426f322a895e48147830f9cbb7b7df22d6c8e1c",
+      "screen_type": "results",
+      "local_player_status": "failed"
+    },
+    "個人資料2.PNG": {
+      "sha256": "ace2e85a12884120aa5a1f596a5675c0b2658f7a1bc6040d3301de0c1c60492e",
+      "screen_type": "profile"
+    },
+    "剛進入遊戲的畫面.PNG": {
+      "sha256": "1bfb2f3c37b110201ff14e82cf75280c89e34deafc9723a0857465fa73d0ee27",
+      "screen_type": "login"
+    },
+    "多人遊戲1.PNG": {
+      "sha256": "c37150b4230135ac2d26f0b62bf8c025a3043afab2dd5cc450dfa3657ba419f9",
+      "screen_type": "waiting_room"
+    },
+    "多人遊戲2.PNG": {
+      "sha256": "abdd84d01c14cfc74d69e25d554ed1e9be5a530b3ed5bf6a66afbcf7372ed462",
+      "screen_type": "waiting_room"
+    },
+    "多人遊戲GAMEOVER結算畫面.PNG": {
+      "sha256": "86f5edba387c79fd3d4b684b48084ab8937fe9c5c6d310c35ea00d175ae09025",
+      "screen_type": "results",
+      "local_player_status": "failed"
+    },
+    "多人遊戲結算畫面.PNG": {
+      "sha256": "c522b16a68cc5f5dc265dac7d54e82deeb7ffded0afad67b766048a945b22090",
+      "screen_type": "results",
+      "local_player_status": "completed_observed"
+    },
+    "多人遊戲途中掛掉的情況.PNG": {
+      "sha256": "38a8654602dd07d568afdf5352a76873172ed9d51be8fcd20eaaeb9b5fcd2c0a",
+      "screen_type": "gameplay"
+    },
+    "大廳1.PNG": {
+      "sha256": "cd81bf2670fc7d8b886b27925b9c1a19b63b55e16c77f5f79dfc42ba8b661903",
+      "screen_type": "lobby"
+    },
+    "大廳2.PNG": {
+      "sha256": "663f8e34fc5e68b7a7c3b4aa8f6c493df0ffcf6466fea37fe3c6c4956075fa2b",
+      "screen_type": "lobby"
+    },
+    "大廳個人資料.PNG": {
+      "sha256": "189f070f33db6bcc83293c4294a17bf7cf0bfd4e3a9177fec80bc1a1c390e9a6",
+      "screen_type": "profile"
+    },
+    "旁觀.PNG": {
+      "sha256": "bc0032a6463094f215c317046f78688fea02b8f0c36b5ea5975a2310bd762bea",
+      "screen_type": "waiting_room"
+    },
+    "相同歌名1.PNG": {
+      "sha256": "0b8db863fd143acce7f742db431fdb795d0b506299f41446d8e835c1c0cb044c",
+      "screen_type": "song_select",
+      "fields": {
+        "title": "JOINT",
+        "difficulty": "HARD",
+        "game_level": 17,
+        "total_notes": null,
+        "bpm": null,
+        "duration_seconds": 96,
+        "artist": null
+      }
+    },
+    "相同歌名2.PNG": {
+      "sha256": "a415c0a7f04ee0cf7f8fbe1cf5d2de6f336da295fe08e478c2c2d631f4537e7d",
+      "screen_type": "song_select",
+      "fields": {
+        "title": "JOINT",
+        "difficulty": "HARD",
+        "game_level": 17,
+        "total_notes": 821,
+        "bpm": 180,
+        "duration_seconds": 96,
+        "artist": "川田まみ"
+      }
+    },
+    "相同歌名3.PNG": {
+      "sha256": "f0a85b408fe4385d67286a6719d98aa4a4416f7d81dddb7bd69fb8289ec9c4ee",
+      "screen_type": "song_select",
+      "fields": {
+        "title": "JOINT",
+        "difficulty": "HARD",
+        "game_level": 20,
+        "total_notes": 929,
+        "bpm": 180,
+        "duration_seconds": 95,
+        "artist": "Kawada Mami"
+      }
+    },
+    "等待室.PNG": {
+      "sha256": "36977c767d37ff423e2f8851ea9add3a363caacd58c7fd39289db3ca55ca9e4a",
+      "screen_type": "waiting_room"
+    },
+    "結算畫面.PNG": {
+      "sha256": "6a52043c2d330318e08080528258f4a611832a6b0c7361011032040bcc58e30f",
+      "screen_type": "results",
+      "local_player_status": "completed_observed"
+    },
+    "遊戲等待室個人資料.PNG": {
+      "sha256": "cd715a5de619170f491970b3ee83a15f5578fe9a7133e542bafed134db9fa293",
+      "screen_type": "profile"
+    },
+    "遊玩畫面1.PNG": {
+      "sha256": "fbf641b92817e0c3ddba79862a3d870fefdf3d49790b07b1308e5370575622eb",
+      "screen_type": "gameplay"
+    },
+    "遊玩畫面開始.PNG": {
+      "sha256": "d76be16dd4a982d5c95df246a67f8d5822982a2270c43cd5d013b6027859d0a4",
+      "screen_type": "gameplay"
+    },
+    "旁觀視角 遊戲進行時 還是會跳出遊戲結算 但是我不在上面.PNG": {
+      "screen_type": "results",
+      "local_player_status": "unknown",
+      "sha256": "2d337b2b35132bded8e86ac01a225c28e2850ebf02472885525bdc4384a0762b"
+    },
+    "遊戲進行中旁觀視角(音樂會播放).PNG": {
+      "screen_type": "spectating",
+      "sha256": "cc469613db60f453844d3d61eafe0cb7694a0435a504fd60fa8127ef3eb6443c"
+    },
+    "更衣間.PNG": {
+      "sha256": "8610856229c5a1f413d2877bcc7ab46c7203dc55240689933f728e68d02dfb3e",
+      "screen_type": "inventory"
+    },
+    "多人遊戲時 沒有譜的話會出現NOMAP字樣.PNG": {
+      "sha256": "f4ded5032c631a6cae8c1f75e2339e95a17a8102a79181778770bb88afaadd77",
+      "screen_type": "waiting_room",
+      "fields": {},
+      "annotation": "TC third slot NO MAP; READY belongs to another player. Green download percentage not readable."
+    },
+    "下載條.PNG": {
+      "sha256": "3b4f27ee545491f63c3a9609d79da77b57a97e22a70976a5942596a49640f672",
+      "screen_type": "waiting_room",
+      "fields": {},
+      "annotation": "TC third slot NO MAP; READY belongs to another player. Green download percentage not readable."
+    }
+  }
+}

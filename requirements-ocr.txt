@@ -1,0 +1,7 @@
+# Optional static OCR only; the GUI, scanner and official importer do not need these.
+# Verified on CPython 3.11.5 x64 / Windows 10, CPUExecutionProvider.
+rapidocr==3.10.0
+onnxruntime==1.24.1
+numpy==2.4.6
+opencv-python-headless==5.0.0.93
+Pillow==13.0.0

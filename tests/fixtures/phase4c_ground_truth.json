@@ -1,0 +1,86 @@
+{
+  "annotation_method": "Manual visual inspection of the four original full-size result PNGs. Evaluation only, never OCR extraction input.",
+  "images": {
+    "結算畫面.PNG": {
+      "sha256": "6a52043c2d330318e08080528258f4a611832a6b0c7361011032040bcc58e30f",
+      "fields": {
+        "title": "Secret",
+        "game_level": 21,
+        "perfect": 706,
+        "cool": 17,
+        "bad": 2,
+        "miss": 0,
+        "max_combo": 655,
+        "game_score": 49567,
+        "grade": "A+",
+        "completion_status": "COMPLETED",
+        "player_name": "TC"
+      }
+    },
+    "GAMEOVER1.PNG": {
+      "sha256": "f438bd6cbd4d911f2eb354fcf426f322a895e48147830f9cbb7b7df22d6c8e1c",
+      "fields": {
+        "title": "Secret",
+        "game_level": 21,
+        "perfect": 0,
+        "cool": 0,
+        "bad": 0,
+        "miss": 39,
+        "max_combo": 0,
+        "game_score": 0,
+        "grade": "F",
+        "completion_status": "FAILED",
+        "player_name": "TC"
+      }
+    },
+    "多人遊戲結算畫面.PNG": {
+      "sha256": "c522b16a68cc5f5dc265dac7d54e82deeb7ffded0afad67b766048a945b22090",
+      "fields": {
+        "title": "Love Letter",
+        "game_level": 18,
+        "perfect": 2081,
+        "cool": 51,
+        "bad": 8,
+        "miss": 2,
+        "max_combo": 874,
+        "game_score": 124601,
+        "grade": "A+",
+        "completion_status": "COMPLETED",
+        "player_name": "TC"
+      }
+    },
+    "多人遊戲GAMEOVER結算畫面.PNG": {
+      "sha256": "86f5edba387c79fd3d4b684b48084ab8937fe9c5c6d310c35ea00d175ae09025",
+      "fields": {
+        "title": "Love Is Beautiful Pain",
+        "game_level": 9,
+        "perfect": 584,
+        "cool": 1,
+        "bad": 0,
+        "miss": 43,
+        "max_combo": 567,
+        "game_score": 40993,
+        "grade": "F",
+        "completion_status": "FAILED",
+        "player_name": "TC"
+      }
+    },
+    "旁觀視角 遊戲進行時 還是會跳出遊戲結算 但是我不在上面.PNG": {
+      "sha256": "2d337b2b35132bded8e86ac01a225c28e2850ebf02472885525bdc4384a0762b",
+      "fields": {
+        "perfect": null,
+        "cool": null,
+        "bad": null,
+        "miss": null,
+        "max_combo": null,
+        "game_score": null,
+        "grade": null,
+        "completion_status": null,
+        "player_name": null,
+        "title": "Pokemon",
+        "game_level": 15
+      },
+      "annotation_note": "New user-supplied spectator result: TC is not a result participant. NULL expectations assert safe non-extraction, not digit recognition accuracy."
+    }
+  }
+}

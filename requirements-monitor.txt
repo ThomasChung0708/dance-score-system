@@ -1,0 +1,6 @@
+-r requirements-ocr.txt
+# Windows Graphics Capture; CPython 3.11 x64 / Windows 10 19045 verified locally.
+windows-capture==2.0.1
+psutil==7.2.2
+# Match the tested OpenCV version already used by the optional OCR environment.
+opencv-python==5.0.0.93

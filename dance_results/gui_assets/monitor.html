@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="dance-token" content="SESSION_TOKEN"><title>熱舞 Online · 即時監控</title>
+<link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/lamps.css"><script src="/lamps.js" defer></script><script src="/monitor.js" defer></script></head>
+<body><header class="topbar"><div class="brand"><span class="brand-mark" aria-hidden="true">◎</span><div><span class="eyebrow">DANCE ONLINE / LIVE</span><h1>即時畫面監控</h1></div></div><nav class="header-actions"><a class="page-link" href="/reviews">待確認成績</a><a class="page-link" href="/history">歷史成績</a><a class="page-link" href="/">返回歌曲庫</a></nav></header>
+<div id="monitor-message" class="message" role="status" hidden></div>
+<main class="monitor-workspace">
+<section class="monitor-controls"><h2>連接遊戲</h2><p class="monitor-note">擷取所選視窗，不操作遊戲。結算先存為待處理資料。</p>
+<label>遊戲視窗<select id="monitor-window"><option value="">自動搜尋 dance 視窗</option></select></label>
+<div class="monitor-inline"><button id="refresh-windows">重新搜尋</button><label><input id="all-windows" type="checkbox"> 顯示其他視窗供手動選擇</label></div>
+<label>本人暱稱<input id="monitor-player" value="TC" maxlength="64"></label>
+<label>來源範圍<select id="monitor-source"><option value="auto">自動／未知時保留待確認</option><option value="official">人工指定：官方 K 歌單</option><option value="custom">人工指定：自製／connect</option></select></label>
+<div class="monitor-inline"><label>擷取頻率（Hz）<input id="capture-hz" type="number" min="0.2" max="10" step="0.1" value="2"></label><label>OCR 間隔（秒）<input id="ocr-interval" type="number" min="0.5" max="30" step="0.5" value="2"></label></div>
+<label>連續確認次數<input id="confirmations" type="number" min="2" max="5" step="1" value="2"></label>
+<div class="monitor-inline"><button id="start-monitor" class="primary">開始監控</button><button id="stop-monitor" disabled>停止監控</button></div>
+<dl id="monitor-connection" class="metadata"></dl>
+<details><summary>效能與診斷資料</summary><pre id="monitor-metrics"></pre><pre id="monitor-diagnostics"></pre></details></section>
+<section class="monitor-current"><span class="eyebrow">CURRENT OBSERVATION</span><h2 id="monitor-state">尚未開始</h2><p id="download-state" class="monitor-note download-summary" aria-live="polite">下載追蹤尚未開始</p><p id="monitor-pending" class="monitor-note">等待遊戲畫面</p><dl id="monitor-song" class="metadata"></dl>
+<div class="monitor-session"><h3>當次 Session</h3><pre id="monitor-session">尚無 Session</pre></div>
+<section class="manual-monitor"><h3>人工確認自製 Pack</h3><p id="pack-confidence" class="monitor-note">UNKNOWN：尚無可信來源。紫色變化只列候選，不能排除 Hover。</p><form id="pack-confirm-form"><label>目前實際選取的 Pack<select id="confirm-pack"><option value="">請選擇 Pack</option></select></label><label class="monitor-ack"><input id="pack-ack" type="checkbox" required> 已核對 Pack，並關閉遊戲中的 Pack 清單</label><button id="confirm-pack-button" type="submit" disabled>確認 Pack</button></form></section>
+<section class="manual-monitor"><h3>人工確認當前歌曲</h3><p class="monitor-note">請核對 Song ID 與完整資料夾。只保存本機對應證據，不修改歌曲庫。</p>
+<form id="monitor-confirm-form"><label>歌曲候選<select id="monitor-candidate"><option value="">尚無候選</option></select></label><p id="candidate-path" class="monitor-note"></p>
+<div class="monitor-inline"><label>難度<select id="confirm-difficulty"><option>EASY</option><option>NORMAL</option><option>HARD</option></select></label><label>歌曲 LV<input id="confirm-level" type="number" min="1" max="10000" required></label></div>
+<div class="monitor-inline"><label>完整音符數<input id="confirm-notes" type="number" min="1" max="10000000" required></label><label>完整時間（秒）<input id="confirm-duration" type="number" min="1" max="36000" required></label></div>
+<label class="monitor-ack"><input id="monitor-ack" type="checkbox" required> 已確認歌曲、Pack／SongFolder、難度、LV、完整音符與時間</label><button id="confirm-monitor" type="submit" disabled>確認對應（不寫入正式庫）</button></form></section></section>
+<section class="monitor-result"><span class="eyebrow">PENDING RESULT</span><h2>最後一次結算</h2><p id="monitor-result-info" class="monitor-note">尚未擷取結算</p><img id="monitor-result-image" alt="最後一次結算原始截圖" hidden><p class="monitor-note">結算先保存原圖與 OCR。MANUAL 由人工確認提交；VERIFIED_AUTO 僅在全部安全條件通過後正式儲存。來源不明或仍有衝突時保留待確認。</p><a class="page-link" href="/reviews">開啟待確認成績</a></section>
+</main></body></html>
