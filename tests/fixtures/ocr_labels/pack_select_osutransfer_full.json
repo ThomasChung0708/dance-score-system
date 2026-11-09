@@ -1,0 +1,16 @@
+{
+  "image": "pack_select_osutransfer_full.png",
+  "sha256": "7749f25501e9d94f9ca8c1a8cce02b30730e6f6bdc20a36d991acf2577da5b1d",
+  "screen_type": "song_select",
+  "fields": {
+    "title": "Astral Paradox",
+    "difficulty": "HARD",
+    "game_level": 38,
+    "duration_seconds": 142,
+    "selected_pack": "Osu Transfer",
+    "total_notes": null,
+    "bpm": null,
+    "artist": null
+  },
+  "annotation": "Manual label from TC. Full game window (Windows title bar plus a little surrounding desktop) around the SETTING dialog, HARD page 1/2."
+}

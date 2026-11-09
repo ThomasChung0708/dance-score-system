@@ -1,0 +1,16 @@
+{
+  "image": "pack_select_blue6th_full.png",
+  "sha256": "d0f75d93dabf0f01ae33471e0760326b73b0dd4b78c7bb08295d8059e11612a6",
+  "screen_type": "song_select",
+  "fields": {
+    "title": "AMAZING MIGHTYYYY!!!!",
+    "difficulty": "HARD",
+    "game_level": 36,
+    "duration_seconds": 136,
+    "selected_pack": "Blue's 6th step",
+    "total_notes": null,
+    "bpm": null,
+    "artist": null
+  },
+  "annotation": "Manual label from TC. Full game window (Windows title bar 'dance v2.0.1-dev-r2191-dfd09' plus a little surrounding desktop) around the SETTING dialog, HARD page 1/5."
+}

@@ -2,23 +2,23 @@
   "schema_version": 1,
   "fields": {
     "screen_type": {
-      "correct": 30,
-      "total": 30,
+      "correct": 32,
+      "total": 32,
       "accuracy": 1.0
     },
     "title": {
-      "correct": 11,
-      "total": 11,
+      "correct": 13,
+      "total": 13,
       "accuracy": 1.0
     },
     "difficulty": {
-      "correct": 6,
-      "total": 6,
+      "correct": 8,
+      "total": 8,
       "accuracy": 1.0
     },
     "game_level": {
-      "correct": 11,
-      "total": 11,
+      "correct": 13,
+      "total": 13,
       "accuracy": 1.0
     },
     "bpm": {
@@ -57,10 +57,10 @@
       "accuracy": 1.0
     },
     "selected_pack": {
-      "correct": 1,
-      "total": 3,
+      "correct": 3,
+      "total": 5,
       "uncertain": 2,
-      "accuracy": 0.3333333333333333
+      "accuracy": 0.6
     },
     "total_notes": {
       "correct": 3,
@@ -68,8 +68,8 @@
       "accuracy": 1.0
     },
     "duration_seconds": {
-      "correct": 6,
-      "total": 6,
+      "correct": 8,
+      "total": 8,
       "accuracy": 1.0
     },
     "artist": {
@@ -1246,6 +1246,77 @@
         }
       ]
     },
+    "pack_select_blue6th_full.png": {
+      "status": "PASS",
+      "sha256": "d0f75d93dabf0f01ae33471e0760326b73b0dd4b78c7bb08295d8059e11612a6",
+      "comparisons": [
+        {
+          "field": "title",
+          "expected": "AMAZING MIGHTYYYY!!!!",
+          "got": "AMAZING MIGHTYYYY!!!!",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "difficulty",
+          "expected": "HARD",
+          "got": "HARD",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "game_level",
+          "expected": 36,
+          "got": 36,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "duration_seconds",
+          "expected": 136,
+          "got": 136,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "selected_pack",
+          "expected": "Blue's 6th step",
+          "got": "Blue's 6th step",
+          "evaluated": true,
+          "correct": true,
+          "outcome": "PASS",
+          "allowed_uncertain": false
+        },
+        {
+          "field": "total_notes",
+          "expected": null,
+          "got": null,
+          "evaluated": false,
+          "correct": null
+        },
+        {
+          "field": "bpm",
+          "expected": null,
+          "got": null,
+          "evaluated": false,
+          "correct": null
+        },
+        {
+          "field": "artist",
+          "expected": null,
+          "got": null,
+          "evaluated": false,
+          "correct": null
+        },
+        {
+          "field": "screen_type",
+          "expected": "song_select",
+          "got": "song_select",
+          "evaluated": true,
+          "correct": true
+        }
+      ]
+    },
     "pack_select_osutransfer.png": {
       "status": "UNCERTAIN",
       "sha256": "13d64b76cd6ad4650f7b418b88ced83cc3d0c527d8b5743646a644593ff094f7",
@@ -1263,6 +1334,77 @@
           "field": "screen_type",
           "expected": "pack_list_crop",
           "got": "pack_list_crop",
+          "evaluated": true,
+          "correct": true
+        }
+      ]
+    },
+    "pack_select_osutransfer_full.png": {
+      "status": "PASS",
+      "sha256": "7749f25501e9d94f9ca8c1a8cce02b30730e6f6bdc20a36d991acf2577da5b1d",
+      "comparisons": [
+        {
+          "field": "title",
+          "expected": "Astral Paradox",
+          "got": "Astral Paradox",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "difficulty",
+          "expected": "HARD",
+          "got": "HARD",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "game_level",
+          "expected": 38,
+          "got": 38,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "duration_seconds",
+          "expected": 142,
+          "got": 142,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "selected_pack",
+          "expected": "Osu Transfer",
+          "got": "Osu Transfer",
+          "evaluated": true,
+          "correct": true,
+          "outcome": "PASS",
+          "allowed_uncertain": false
+        },
+        {
+          "field": "total_notes",
+          "expected": null,
+          "got": null,
+          "evaluated": false,
+          "correct": null
+        },
+        {
+          "field": "bpm",
+          "expected": null,
+          "got": null,
+          "evaluated": false,
+          "correct": null
+        },
+        {
+          "field": "artist",
+          "expected": null,
+          "got": null,
+          "evaluated": false,
+          "correct": null
+        },
+        {
+          "field": "screen_type",
+          "expected": "song_select",
+          "got": "song_select",
           "evaluated": true,
           "correct": true
         }
