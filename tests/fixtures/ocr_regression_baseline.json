@@ -1,0 +1,1151 @@
+{
+  "schema_version": 1,
+  "fields": {
+    "screen_type": {
+      "correct": 27,
+      "total": 27,
+      "accuracy": 1.0
+    },
+    "title": {
+      "correct": 10,
+      "total": 10,
+      "accuracy": 1.0
+    },
+    "difficulty": {
+      "correct": 5,
+      "total": 5,
+      "accuracy": 1.0
+    },
+    "game_level": {
+      "correct": 10,
+      "total": 10,
+      "accuracy": 1.0
+    },
+    "bpm": {
+      "correct": 3,
+      "total": 3,
+      "accuracy": 1.0
+    },
+    "perfect": {
+      "correct": 4,
+      "total": 4,
+      "accuracy": 1.0
+    },
+    "cool": {
+      "correct": 4,
+      "total": 4,
+      "accuracy": 1.0
+    },
+    "bad": {
+      "correct": 4,
+      "total": 4,
+      "accuracy": 1.0
+    },
+    "miss": {
+      "correct": 4,
+      "total": 4,
+      "accuracy": 1.0
+    },
+    "judgments": {
+      "correct": 16,
+      "total": 16,
+      "accuracy": 1.0
+    },
+    "ex_score": {
+      "correct": 4,
+      "total": 4,
+      "accuracy": 1.0
+    },
+    "total_notes": {
+      "correct": 3,
+      "total": 3,
+      "accuracy": 1.0
+    },
+    "duration_seconds": {
+      "correct": 5,
+      "total": 5,
+      "accuracy": 1.0
+    },
+    "artist": {
+      "correct": 3,
+      "total": 3,
+      "accuracy": 1.0
+    },
+    "max_combo": {
+      "correct": 4,
+      "total": 4,
+      "accuracy": 1.0
+    },
+    "game_score": {
+      "correct": 4,
+      "total": 4,
+      "accuracy": 1.0
+    },
+    "grade": {
+      "correct": 4,
+      "total": 4,
+      "accuracy": 1.0
+    },
+    "completion_status": {
+      "correct": 3,
+      "total": 4,
+      "accuracy": 0.75
+    },
+    "player_name": {
+      "correct": 4,
+      "total": 4,
+      "accuracy": 1.0
+    },
+    "local_player_status": {
+      "correct": 5,
+      "total": 5,
+      "accuracy": 1.0
+    }
+  },
+  "samples": {
+    "1.PNG": {
+      "status": "PASS",
+      "sha256": "0d1c154074c066ddd84624255771a29e55f72c066d7250590596bcd0c17e5a1e",
+      "comparisons": [
+        {
+          "field": "title",
+          "expected": "Rose",
+          "got": "Rose",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "difficulty",
+          "expected": "HARD",
+          "got": "HARD",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "game_level",
+          "expected": 26,
+          "got": 26,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "total_notes",
+          "expected": null,
+          "got": null,
+          "evaluated": false,
+          "correct": null
+        },
+        {
+          "field": "bpm",
+          "expected": null,
+          "got": null,
+          "evaluated": false,
+          "correct": null
+        },
+        {
+          "field": "duration_seconds",
+          "expected": 126,
+          "got": 126,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "artist",
+          "expected": null,
+          "got": null,
+          "evaluated": false,
+          "correct": null
+        },
+        {
+          "field": "screen_type",
+          "expected": "song_select",
+          "got": "song_select",
+          "evaluated": true,
+          "correct": true
+        }
+      ]
+    },
+    "2.PNG": {
+      "status": "PASS",
+      "sha256": "bb64556ac793ae8d8ede86174241282d600a42f308ed328b477adfd19499283e",
+      "comparisons": [
+        {
+          "field": "title",
+          "expected": "Rose",
+          "got": "Rose",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "difficulty",
+          "expected": "HARD",
+          "got": "HARD",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "game_level",
+          "expected": 26,
+          "got": 26,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "total_notes",
+          "expected": 1057,
+          "got": 1057,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "bpm",
+          "expected": 175,
+          "got": 175.0,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "duration_seconds",
+          "expected": 126,
+          "got": 126,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "artist",
+          "expected": "cornandbeans",
+          "got": "cornandbeans",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "screen_type",
+          "expected": "song_select",
+          "got": "song_select",
+          "evaluated": true,
+          "correct": true
+        }
+      ]
+    },
+    "GAMEOVER1.PNG": {
+      "status": "FAIL",
+      "sha256": "f438bd6cbd4d911f2eb354fcf426f322a895e48147830f9cbb7b7df22d6c8e1c",
+      "comparisons": [
+        {
+          "field": "title",
+          "expected": "Secret",
+          "got": "Secret",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "game_level",
+          "expected": 21,
+          "got": 21,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "perfect",
+          "expected": 0,
+          "got": 0,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "cool",
+          "expected": 0,
+          "got": 0,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "bad",
+          "expected": 0,
+          "got": 0,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "miss",
+          "expected": 39,
+          "got": 39,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "max_combo",
+          "expected": 0,
+          "got": 0,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "game_score",
+          "expected": 0,
+          "got": 0,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "grade",
+          "expected": "F",
+          "got": "F",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "completion_status",
+          "expected": "FAILED",
+          "got": null,
+          "evaluated": true,
+          "correct": false
+        },
+        {
+          "field": "player_name",
+          "expected": "TC",
+          "got": "TC",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "screen_type",
+          "expected": "results",
+          "got": "results",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "local_player_status",
+          "expected": "failed",
+          "got": "failed",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "ex_score",
+          "expected": 0,
+          "got": 0,
+          "evaluated": true,
+          "correct": true
+        }
+      ]
+    },
+    "個人資料2.PNG": {
+      "status": "PASS",
+      "sha256": "ace2e85a12884120aa5a1f596a5675c0b2658f7a1bc6040d3301de0c1c60492e",
+      "comparisons": [
+        {
+          "field": "screen_type",
+          "expected": "profile",
+          "got": "profile",
+          "evaluated": true,
+          "correct": true
+        }
+      ]
+    },
+    "剛進入遊戲的畫面.PNG": {
+      "status": "PASS",
+      "sha256": "1bfb2f3c37b110201ff14e82cf75280c89e34deafc9723a0857465fa73d0ee27",
+      "comparisons": [
+        {
+          "field": "screen_type",
+          "expected": "login",
+          "got": "login",
+          "evaluated": true,
+          "correct": true
+        }
+      ]
+    },
+    "多人遊戲1.PNG": {
+      "status": "PASS",
+      "sha256": "c37150b4230135ac2d26f0b62bf8c025a3043afab2dd5cc450dfa3657ba419f9",
+      "comparisons": [
+        {
+          "field": "screen_type",
+          "expected": "waiting_room",
+          "got": "waiting_room",
+          "evaluated": true,
+          "correct": true
+        }
+      ]
+    },
+    "多人遊戲2.PNG": {
+      "status": "PASS",
+      "sha256": "abdd84d01c14cfc74d69e25d554ed1e9be5a530b3ed5bf6a66afbcf7372ed462",
+      "comparisons": [
+        {
+          "field": "screen_type",
+          "expected": "waiting_room",
+          "got": "waiting_room",
+          "evaluated": true,
+          "correct": true
+        }
+      ]
+    },
+    "多人遊戲GAMEOVER結算畫面.PNG": {
+      "status": "PASS",
+      "sha256": "86f5edba387c79fd3d4b684b48084ab8937fe9c5c6d310c35ea00d175ae09025",
+      "comparisons": [
+        {
+          "field": "title",
+          "expected": "Love Is Beautiful Pain",
+          "got": "Love Is Beautiful Pain",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "game_level",
+          "expected": 9,
+          "got": 9,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "perfect",
+          "expected": 584,
+          "got": 584,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "cool",
+          "expected": 1,
+          "got": 1,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "bad",
+          "expected": 0,
+          "got": 0,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "miss",
+          "expected": 43,
+          "got": 43,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "max_combo",
+          "expected": 567,
+          "got": 567,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "game_score",
+          "expected": 40993,
+          "got": 40993,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "grade",
+          "expected": "F",
+          "got": "F",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "completion_status",
+          "expected": "FAILED",
+          "got": "FAILED",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "player_name",
+          "expected": "TC",
+          "got": "TC",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "screen_type",
+          "expected": "results",
+          "got": "results",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "local_player_status",
+          "expected": "failed",
+          "got": "failed",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "ex_score",
+          "expected": 1169,
+          "got": 1169,
+          "evaluated": true,
+          "correct": true
+        }
+      ]
+    },
+    "多人遊戲結算畫面.PNG": {
+      "status": "PASS",
+      "sha256": "c522b16a68cc5f5dc265dac7d54e82deeb7ffded0afad67b766048a945b22090",
+      "comparisons": [
+        {
+          "field": "title",
+          "expected": "Love Letter",
+          "got": "Love Letter",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "game_level",
+          "expected": 18,
+          "got": 18,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "perfect",
+          "expected": 2081,
+          "got": 2081,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "cool",
+          "expected": 51,
+          "got": 51,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "bad",
+          "expected": 8,
+          "got": 8,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "miss",
+          "expected": 2,
+          "got": 2,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "max_combo",
+          "expected": 874,
+          "got": 874,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "game_score",
+          "expected": 124601,
+          "got": 124601,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "grade",
+          "expected": "A+",
+          "got": "A+",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "completion_status",
+          "expected": "COMPLETED",
+          "got": "COMPLETED",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "player_name",
+          "expected": "TC",
+          "got": "TC",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "screen_type",
+          "expected": "results",
+          "got": "results",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "local_player_status",
+          "expected": "completed_observed",
+          "got": "completed_observed",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "ex_score",
+          "expected": 4213,
+          "got": 4213,
+          "evaluated": true,
+          "correct": true
+        }
+      ]
+    },
+    "多人遊戲途中掛掉的情況.PNG": {
+      "status": "PASS",
+      "sha256": "38a8654602dd07d568afdf5352a76873172ed9d51be8fcd20eaaeb9b5fcd2c0a",
+      "comparisons": [
+        {
+          "field": "screen_type",
+          "expected": "gameplay",
+          "got": "gameplay",
+          "evaluated": true,
+          "correct": true
+        }
+      ]
+    },
+    "大廳1.PNG": {
+      "status": "PASS",
+      "sha256": "cd81bf2670fc7d8b886b27925b9c1a19b63b55e16c77f5f79dfc42ba8b661903",
+      "comparisons": [
+        {
+          "field": "screen_type",
+          "expected": "lobby",
+          "got": "lobby",
+          "evaluated": true,
+          "correct": true
+        }
+      ]
+    },
+    "大廳2.PNG": {
+      "status": "PASS",
+      "sha256": "663f8e34fc5e68b7a7c3b4aa8f6c493df0ffcf6466fea37fe3c6c4956075fa2b",
+      "comparisons": [
+        {
+          "field": "screen_type",
+          "expected": "lobby",
+          "got": "lobby",
+          "evaluated": true,
+          "correct": true
+        }
+      ]
+    },
+    "大廳個人資料.PNG": {
+      "status": "PASS",
+      "sha256": "189f070f33db6bcc83293c4294a17bf7cf0bfd4e3a9177fec80bc1a1c390e9a6",
+      "comparisons": [
+        {
+          "field": "screen_type",
+          "expected": "profile",
+          "got": "profile",
+          "evaluated": true,
+          "correct": true
+        }
+      ]
+    },
+    "旁觀.PNG": {
+      "status": "PASS",
+      "sha256": "bc0032a6463094f215c317046f78688fea02b8f0c36b5ea5975a2310bd762bea",
+      "comparisons": [
+        {
+          "field": "screen_type",
+          "expected": "waiting_room",
+          "got": "waiting_room",
+          "evaluated": true,
+          "correct": true
+        }
+      ]
+    },
+    "相同歌名1.PNG": {
+      "status": "PASS",
+      "sha256": "0b8db863fd143acce7f742db431fdb795d0b506299f41446d8e835c1c0cb044c",
+      "comparisons": [
+        {
+          "field": "title",
+          "expected": "JOINT",
+          "got": "JOINT",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "difficulty",
+          "expected": "HARD",
+          "got": "HARD",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "game_level",
+          "expected": 17,
+          "got": 17,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "total_notes",
+          "expected": null,
+          "got": null,
+          "evaluated": false,
+          "correct": null
+        },
+        {
+          "field": "bpm",
+          "expected": null,
+          "got": null,
+          "evaluated": false,
+          "correct": null
+        },
+        {
+          "field": "duration_seconds",
+          "expected": 96,
+          "got": 96,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "artist",
+          "expected": null,
+          "got": null,
+          "evaluated": false,
+          "correct": null
+        },
+        {
+          "field": "screen_type",
+          "expected": "song_select",
+          "got": "song_select",
+          "evaluated": true,
+          "correct": true
+        }
+      ]
+    },
+    "相同歌名2.PNG": {
+      "status": "PASS",
+      "sha256": "a415c0a7f04ee0cf7f8fbe1cf5d2de6f336da295fe08e478c2c2d631f4537e7d",
+      "comparisons": [
+        {
+          "field": "title",
+          "expected": "JOINT",
+          "got": "JOINT",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "difficulty",
+          "expected": "HARD",
+          "got": "HARD",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "game_level",
+          "expected": 17,
+          "got": 17,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "total_notes",
+          "expected": 821,
+          "got": 821,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "bpm",
+          "expected": 180,
+          "got": 180.0,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "duration_seconds",
+          "expected": 96,
+          "got": 96,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "artist",
+          "expected": "川田まみ",
+          "got": "川田まみ",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "screen_type",
+          "expected": "song_select",
+          "got": "song_select",
+          "evaluated": true,
+          "correct": true
+        }
+      ]
+    },
+    "相同歌名3.PNG": {
+      "status": "PASS",
+      "sha256": "f0a85b408fe4385d67286a6719d98aa4a4416f7d81dddb7bd69fb8289ec9c4ee",
+      "comparisons": [
+        {
+          "field": "title",
+          "expected": "JOINT",
+          "got": "JOINT",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "difficulty",
+          "expected": "HARD",
+          "got": "HARD",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "game_level",
+          "expected": 20,
+          "got": 20,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "total_notes",
+          "expected": 929,
+          "got": 929,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "bpm",
+          "expected": 180,
+          "got": 180.0,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "duration_seconds",
+          "expected": 95,
+          "got": 95,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "artist",
+          "expected": "Kawada Mami",
+          "got": "Kawada Mami",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "screen_type",
+          "expected": "song_select",
+          "got": "song_select",
+          "evaluated": true,
+          "correct": true
+        }
+      ]
+    },
+    "等待室.PNG": {
+      "status": "PASS",
+      "sha256": "36977c767d37ff423e2f8851ea9add3a363caacd58c7fd39289db3ca55ca9e4a",
+      "comparisons": [
+        {
+          "field": "screen_type",
+          "expected": "waiting_room",
+          "got": "waiting_room",
+          "evaluated": true,
+          "correct": true
+        }
+      ]
+    },
+    "結算畫面.PNG": {
+      "status": "PASS",
+      "sha256": "6a52043c2d330318e08080528258f4a611832a6b0c7361011032040bcc58e30f",
+      "comparisons": [
+        {
+          "field": "title",
+          "expected": "Secret",
+          "got": "Secret",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "game_level",
+          "expected": 21,
+          "got": 21,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "perfect",
+          "expected": 706,
+          "got": 706,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "cool",
+          "expected": 17,
+          "got": 17,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "bad",
+          "expected": 2,
+          "got": 2,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "miss",
+          "expected": 0,
+          "got": 0,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "max_combo",
+          "expected": 655,
+          "got": 655,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "game_score",
+          "expected": 49567,
+          "got": 49567,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "grade",
+          "expected": "A+",
+          "got": "A+",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "completion_status",
+          "expected": "COMPLETED",
+          "got": "COMPLETED",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "player_name",
+          "expected": "TC",
+          "got": "TC",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "screen_type",
+          "expected": "results",
+          "got": "results",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "local_player_status",
+          "expected": "completed_observed",
+          "got": "completed_observed",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "ex_score",
+          "expected": 1429,
+          "got": 1429,
+          "evaluated": true,
+          "correct": true
+        }
+      ]
+    },
+    "遊戲等待室個人資料.PNG": {
+      "status": "PASS",
+      "sha256": "cd715a5de619170f491970b3ee83a15f5578fe9a7133e542bafed134db9fa293",
+      "comparisons": [
+        {
+          "field": "screen_type",
+          "expected": "profile",
+          "got": "profile",
+          "evaluated": true,
+          "correct": true
+        }
+      ]
+    },
+    "遊玩畫面1.PNG": {
+      "status": "PASS",
+      "sha256": "fbf641b92817e0c3ddba79862a3d870fefdf3d49790b07b1308e5370575622eb",
+      "comparisons": [
+        {
+          "field": "screen_type",
+          "expected": "gameplay",
+          "got": "gameplay",
+          "evaluated": true,
+          "correct": true
+        }
+      ]
+    },
+    "遊玩畫面開始.PNG": {
+      "status": "PASS",
+      "sha256": "d76be16dd4a982d5c95df246a67f8d5822982a2270c43cd5d013b6027859d0a4",
+      "comparisons": [
+        {
+          "field": "screen_type",
+          "expected": "gameplay",
+          "got": "gameplay",
+          "evaluated": true,
+          "correct": true
+        }
+      ]
+    },
+    "旁觀視角 遊戲進行時 還是會跳出遊戲結算 但是我不在上面.PNG": {
+      "status": "PASS",
+      "sha256": "2d337b2b35132bded8e86ac01a225c28e2850ebf02472885525bdc4384a0762b",
+      "comparisons": [
+        {
+          "field": "perfect",
+          "expected": null,
+          "got": null,
+          "evaluated": false,
+          "correct": null
+        },
+        {
+          "field": "cool",
+          "expected": null,
+          "got": null,
+          "evaluated": false,
+          "correct": null
+        },
+        {
+          "field": "bad",
+          "expected": null,
+          "got": null,
+          "evaluated": false,
+          "correct": null
+        },
+        {
+          "field": "miss",
+          "expected": null,
+          "got": null,
+          "evaluated": false,
+          "correct": null
+        },
+        {
+          "field": "max_combo",
+          "expected": null,
+          "got": null,
+          "evaluated": false,
+          "correct": null
+        },
+        {
+          "field": "game_score",
+          "expected": null,
+          "got": null,
+          "evaluated": false,
+          "correct": null
+        },
+        {
+          "field": "grade",
+          "expected": null,
+          "got": null,
+          "evaluated": false,
+          "correct": null
+        },
+        {
+          "field": "completion_status",
+          "expected": null,
+          "got": null,
+          "evaluated": false,
+          "correct": null
+        },
+        {
+          "field": "player_name",
+          "expected": null,
+          "got": null,
+          "evaluated": false,
+          "correct": null
+        },
+        {
+          "field": "title",
+          "expected": "Pokemon",
+          "got": "Pokemon",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "game_level",
+          "expected": 15,
+          "got": 15,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "screen_type",
+          "expected": "results",
+          "got": "results",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "local_player_status",
+          "expected": "unknown",
+          "got": "unknown",
+          "evaluated": true,
+          "correct": true
+        }
+      ]
+    },
+    "遊戲進行中旁觀視角(音樂會播放).PNG": {
+      "status": "PASS",
+      "sha256": "cc469613db60f453844d3d61eafe0cb7694a0435a504fd60fa8127ef3eb6443c",
+      "comparisons": [
+        {
+          "field": "screen_type",
+          "expected": "spectating",
+          "got": "spectating",
+          "evaluated": true,
+          "correct": true
+        }
+      ]
+    },
+    "更衣間.PNG": {
+      "status": "PASS",
+      "sha256": "8610856229c5a1f413d2877bcc7ab46c7203dc55240689933f728e68d02dfb3e",
+      "comparisons": [
+        {
+          "field": "screen_type",
+          "expected": "inventory",
+          "got": "inventory",
+          "evaluated": true,
+          "correct": true
+        }
+      ]
+    },
+    "多人遊戲時 沒有譜的話會出現NOMAP字樣.PNG": {
+      "status": "PASS",
+      "sha256": "f4ded5032c631a6cae8c1f75e2339e95a17a8102a79181778770bb88afaadd77",
+      "comparisons": [
+        {
+          "field": "screen_type",
+          "expected": "waiting_room",
+          "got": "waiting_room",
+          "evaluated": true,
+          "correct": true
+        }
+      ]
+    },
+    "下載條.PNG": {
+      "status": "PASS",
+      "sha256": "3b4f27ee545491f63c3a9609d79da77b57a97e22a70976a5942596a49640f672",
+      "comparisons": [
+        {
+          "field": "screen_type",
+          "expected": "waiting_room",
+          "got": "waiting_room",
+          "evaluated": true,
+          "correct": true
+        }
+      ]
+    }
+  }
+}

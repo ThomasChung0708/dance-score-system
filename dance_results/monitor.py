@@ -14,6 +14,7 @@ from .monitor_tracking import Tracker, ManualReferences, utc
 from .monitor_ocr import Analyzer, apply_selection, change_signature, change_amount
 from .ocr_matching import ReadOnlyCatalog
 from .window_capture import Windows, WGCCapture, CaptureError
+from .ocr_failures import FailureCapture
 
 PROJECT = Path(__file__).resolve().parent.parent
 
@@ -24,6 +25,10 @@ class Monitor:
         default=(PROJECT/'data'/'monitor' if self.database.resolve()==(PROJECT/'data'/'library.sqlite3').resolve()
                  else self.database.parent/(self.database.stem+'-monitor'))
         self.directory = Path(directory or default)
+        failure_directory = (PROJECT / 'data' / 'ocr_failures'
+                             if self.database.resolve() == (PROJECT / 'data' / 'library.sqlite3').resolve()
+                             else self.directory / 'ocr_failures')
+        self.failure_capture = FailureCapture(failure_directory)
         self.windows_factory = windows_factory
         self.capture_factory = capture_factory
         self.engine_factory = engine_factory
@@ -142,6 +147,12 @@ class Monitor:
                 self.tracker.log('connection', status=status, error=error)
             self.connection = status
             self.error = error
+
+    def _capture_ocr_failure(self, image, observation=None, error=None):
+        try:
+            self.failure_capture.capture(image, observation, error)
+        except Exception:
+            pass
 
     def _run(self):
         capture = None
@@ -268,7 +279,11 @@ class Monitor:
                     continue
                 started = time.perf_counter()
                 full = current_state not in ('PLAYING','SONG_SELECT') or now-last_full > 20
-                observation = analyzer.analyze(image, current_state, full)
+                try:
+                    observation = analyzer.analyze(image, current_state, full)
+                except Exception as error:
+                    self._capture_ocr_failure(image, error=error)
+                    raise
                 elapsed = (time.perf_counter()-started)*1000
                 if self.stop_event.is_set():
                     break
@@ -283,6 +298,7 @@ class Monitor:
                     observation = apply_selection(observation, image, self.tracker, catalog, self.references,
                                                   self.config['source_mode'])
                     result_consistency.observe(observation,(self.tracker.session or {}).get('session_id'),sampled,image)
+                    self._capture_ocr_failure(image, observation)
                     self.latest_image = image
                     self.tracker.consume(observation, now=last_ocr, image=image, sample_id=sampled)
                     if self.downloads:self.downloads.observe(observation,self.tracker,image)
