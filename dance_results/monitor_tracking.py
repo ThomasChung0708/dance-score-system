@@ -46,6 +46,8 @@ class Tracker:
         self.session = None
         self.last_session = None
         self.last_result = None
+        self.best_result = None
+        self.last_result_observation = None
         self.events = []
         self.epoch = 0
         self.room_preview = None
@@ -66,6 +68,9 @@ class Tracker:
             stream.write(json.dumps(event, ensure_ascii=False)+'\n')
 
     def invalidate_selection(self, reason, clear_pack=True):
+        # Loading fades contain no new identity evidence and do not refresh TTL.
+        if reason == 'black_capture':
+            return
         self.selection = None
         self.selection_key = None
         self.selection_count = 0
@@ -80,12 +85,31 @@ class Tracker:
 
     def interrupt(self, reason):
         if self.session and self.session['status'] == 'playing':
-            self.session.update(status='interrupted', ended_at=utc(), interruption_reason=reason)
-            self._save_session()
-            self.last_session = copy.deepcopy(self.session)
-            self.session = None
-            self.state = 'INTERRUPTED'
-            self.log('session_interrupted', reason=reason)
+            if self.best_result:
+                observation, image = self.best_result
+                observation = copy.deepcopy(observation)
+                temporal = observation['result_ocr'].get('temporal_validation') or {}
+                samples = temporal.get('samples') or []
+                from .ocr_temporal import POLICY
+                observation['result_ocr']['temporal_validation'] = dict(
+                    policy=POLICY, session_id=self.session['session_id'], status='pending_review',
+                    reasons=['result_left_before_confirmation'], samples=samples[-1:],
+                )
+                self._finish_result(observation, image, recovery_reason=reason)
+                # Only the retained frame is available here. It is review evidence,
+                # never a replacement for two fresh identical result frames.
+                from .ocr_temporal import ResultConsistency
+                retained = ResultConsistency()
+                retained.images = [image]
+                retained.save(self.directory/'sessions'/self.last_session['session_id'],
+                              self.last_result_observation['result_ocr'])
+            else:
+                self.session.update(status='interrupted', ended_at=utc(), interruption_reason=reason)
+                self._save_session()
+                self.last_session = copy.deepcopy(self.session)
+                self.session = None
+                self.state = 'INTERRUPTED'
+                self.log('session_interrupted', reason=reason)
         self.invalidate_selection(reason)
         self.count = 0
         self.proposed = None
@@ -98,14 +122,16 @@ class Tracker:
         self.state = 'UNKNOWN'
         self.log('window_connected', identity=identity, epoch=self.epoch)
 
-    def pack_observation(self, pack):
+    def pack_observation(self, pack, *, inferred=False):
         """Called whenever the list is visible, BEFORE debounce or matching."""
         before = ((self.current_pack or {}).get('root_id'),(self.current_pack or {}).get('pack_id'))
         if pack and pack.get('status') == 'confirmed':
             proposed=(pack.get('root_id'),pack['pack_id'])
             if proposed==self.proposed_pack:self.pack_count+=1
             else:self.proposed_pack=proposed;self.pack_count=1
-            if self.pack_count>=self.confirmations:
+            # Successful library inference already requires two distinct songs.
+            # Persist that evidence without pretending to observe another frame.
+            if inferred or self.pack_count>=self.confirmations:
                 self.current_pack = copy.deepcopy(pack)
                 self.current_source = 'custom'
             else:
@@ -175,6 +201,17 @@ class Tracker:
             return
         self.last_sample = sample_id
         wanted = observation['state']
+        if self.session and wanted in ('RESULT', 'GAME_OVER') and image is not None:
+            from .result_ocr import complete_reliable_result
+            ocr = observation.get('result_ocr') or {}
+            if complete_reliable_result(ocr):
+                from .ocr_policy import result_required
+                quality = min(ocr['fields'][k].get('confidence', 0) for k in result_required(ocr))
+                previous = self.best_result
+                if previous is None or quality >= previous[0].get('retention_quality', 0):
+                    saved = copy.deepcopy(observation)
+                    saved['retention_quality'] = quality
+                    self.best_result = (saved, image.copy())
         if wanted == 'SONG_SELECT':
             # A readable new identity invalidates the prior one before debounce.
             self.update_selection(observation, now)
@@ -225,37 +262,52 @@ class Tracker:
                 matching_status=binding.get('status', 'pending_manual_review'),
                 pending_reason=reason or ('no_fresh_selection' if not selected else None),
                 generates_play_record=False, result=None)
+            self.best_result = None
             self._save_session()
             self.log('session_started', session_id=self.session['session_id'], song_id=self.session['song_id'])
             # Consume selection: next play cannot reuse this round's identity.
             self.invalidate_selection('selection_consumed_for_play', clear_pack=False)
         elif wanted in ('RESULT', 'GAME_OVER'):
             if self.session and self.session['status'] == 'playing':
-                filename = None
-                if image is not None:
-                    filename = 'result.png'
-                    image.save(self._session_directory()/filename)
-                self.session.update(status='pending_result', ended_at=utc(),
-                    result=dict(state=wanted, completion_observation=observation.get('context'),
-                                frame_hash=observation['frame_hash'], screenshot=filename,
-                                processing_status='pending_score_ocr'))
-                self._save_session()
-                self.last_session = copy.deepcopy(self.session)
-                self.last_result = dict(session_id=self.session['session_id'], screenshot=filename,
-                                        state=wanted, captured_at=utc())
-                self.log('result_saved', **self.last_result)
-                self.session = None
+                temporal = (observation.get('result_ocr') or {}).get('temporal_validation') or {}
+                if (self.best_result and self.best_result[0]['frame_hash'] != observation['frame_hash']
+                        and temporal.get('status') != 'confirmed'):
+                    self.interrupt('result_became_unreliable')
+                else:
+                    self._finish_result(observation, image)
                 self.invalidate_selection('result_finished',clear_pack=False)
             else:
                 self.log('unassociated_result', reason='no_active_play_session', frame_hash=observation['frame_hash'])
         elif wanted == 'SPECTATING':
             self.interrupt('spectating_is_not_local_play')
             self.state = 'SPECTATING'
-        elif old == 'PLAYING' and self.session and wanted in ('LOBBY', 'WAITING_ROOM', 'LOGIN', 'SONG_SELECT'):
+        elif (self.session and (old == 'PLAYING' or self.best_result)
+              and wanted in ('LOBBY', 'WAITING_ROOM', 'LOGIN', 'SONG_SELECT')):
             # Quit/disconnect/room return without a result must not become a game failure.
             self.interrupt('left_gameplay_without_result')
         if wanted in ('LOGIN', 'LOBBY'):
             self.invalidate_selection('left_song_context')
+
+    def _finish_result(self, observation, image, recovery_reason=None):
+        filename = None
+        if image is not None:
+            filename = 'result.png'
+            image.save(self._session_directory()/filename)
+        self.session.update(status='pending_result', ended_at=utc(), result=dict(
+            state=observation['state'], completion_observation=observation.get('context'),
+            frame_hash=observation['frame_hash'], screenshot=filename,
+            processing_status='pending_score_ocr',
+        ))
+        if recovery_reason:
+            self.session['result']['recovery_reason'] = recovery_reason
+        self._save_session()
+        self.last_session = copy.deepcopy(self.session)
+        self.last_result_observation = copy.deepcopy(observation)
+        self.last_result = dict(session_id=self.session['session_id'], screenshot=filename,
+                                state=observation['state'], captured_at=utc())
+        self.log('result_saved', **self.last_result)
+        self.session = None
+        self.best_result = None
 
     def _session_directory(self):
         directory = self.directory/'sessions'/self.session['session_id']

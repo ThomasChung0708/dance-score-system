@@ -13,6 +13,17 @@ def image_hash(image):
     return hashlib.sha256(image.tobytes()+str(image.size).encode()).hexdigest()
 
 
+def black_or_loading_frame(image):
+    """Ignore uniformly near-black game content, excluding window chrome.
+
+    The brightest downsampled content pixel must stay below 6% luminance; a
+    normal dark scene with visible HUD/text remains eligible for classification.
+    This is an abstention, never evidence of song identity or a result.
+    """
+    body = image.crop((0, int(image.height*.06), image.width, int(image.height*.94)))
+    return body.convert('L').resize((32, 24)).getextrema()[1] < 16
+
+
 def change_signature(image):
     # Limit expensive OCR trigger comparison to meaningful UI regions, not the animated centre background.
     normalized = image.resize((1024, 800)).convert('L')
@@ -220,22 +231,34 @@ def apply_selection(observation, image, tracker, catalog, references=None, sourc
     from .pack_selection import infer_selected_pack
     infer_selected_pack(selection, catalog)
     tracker.pack_list_visible = selection['pack_list_visible']
+    inferred = None
+    if selection.get('pack_reason') in ('right_song_list_unique_pack', 'right_song_list_and_row_hint'):
+        pack = next((p for p in catalog.packs if p['pack_id'] == selection['selected_pack_id']), None)
+        if pack:
+            inferred = dict(pack, status='confirmed', source=selection['pack_reason'],
+                            evidence=copy.deepcopy(selection['selected_pack_evidence']))
+    if inferred or selection['pack_list_visible']:
+        tracker.pack_observation(inferred, inferred=bool(inferred))
     if selection['pack_list_visible']:
         _, evidence = active_pack(selection, image.resize((1024, 800)).convert('RGB'), catalog)
-        # Diagnostic inference never confirms a Pack or reuses stale manual context.
-        tracker.pack_observation(None)
         tracker.pack_candidates = evidence
         observation['pack_diagnostics'] = evidence
     source = source_mode if source_mode in ('custom', 'official') else tracker.current_source
+    pack_id = (tracker.current_pack or {}).get('pack_id')
     if source == 'official':
         tracker.current_pack = None
-    pack_id = (tracker.current_pack or {}).get('pack_id')
+        pack_id = inferred['pack_id'] if inferred else None
     fields = copy.deepcopy(selection['fields'])
     ocr_fields = copy.deepcopy(fields)
-    matching = catalog.match(fields, pack_id, source)
+    matching = catalog.match_identity(fields, pack_id, source)
+    sid = matching.get('confirmed_song_id')
+    if source not in ('custom', 'official') and sid is not None:
+        source = catalog.songs[sid]['source_type']
     if source == 'official':
-        matching = catalog.match_official(fields, source_confirmed=True)
-        sid = matching.get('confirmed_song_id')
+        official = catalog.match_official(fields, source_confirmed=True)
+        if official.get('confirmed_song_id') is not None and (pack_id is None or sid is not None):
+            matching = official
+        sid = matching.get('confirmed_song_id') if official.get('confirmed_song_id') is not None else None
         if sid is not None:
             gd = catalog.difficulties[(sid, fields['difficulty']['value'])]
             for key in ('game_level', 'total_notes'):

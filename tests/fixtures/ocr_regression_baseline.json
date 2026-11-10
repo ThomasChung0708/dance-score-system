@@ -2,23 +2,23 @@
   "schema_version": 1,
   "fields": {
     "screen_type": {
-      "correct": 38,
-      "total": 38,
+      "correct": 42,
+      "total": 42,
       "accuracy": 1.0
     },
     "title": {
-      "correct": 18,
-      "total": 18,
+      "correct": 22,
+      "total": 22,
       "accuracy": 1.0
     },
     "difficulty": {
-      "correct": 8,
-      "total": 8,
+      "correct": 9,
+      "total": 9,
       "accuracy": 1.0
     },
     "game_level": {
-      "correct": 17,
-      "total": 17,
+      "correct": 21,
+      "total": 21,
       "accuracy": 1.0
     },
     "bpm": {
@@ -27,40 +27,40 @@
       "accuracy": 1.0
     },
     "perfect": {
-      "correct": 9,
-      "total": 9,
+      "correct": 12,
+      "total": 12,
       "accuracy": 1.0
     },
     "cool": {
-      "correct": 9,
-      "total": 9,
+      "correct": 12,
+      "total": 12,
       "accuracy": 1.0
     },
     "bad": {
-      "correct": 9,
-      "total": 9,
+      "correct": 12,
+      "total": 12,
       "accuracy": 1.0
     },
     "miss": {
-      "correct": 9,
-      "total": 9,
+      "correct": 12,
+      "total": 12,
       "accuracy": 1.0
     },
     "judgments": {
-      "correct": 36,
-      "total": 36,
+      "correct": 48,
+      "total": 48,
       "accuracy": 1.0
     },
     "ex_score": {
-      "correct": 9,
-      "total": 9,
+      "correct": 12,
+      "total": 12,
       "accuracy": 1.0
     },
     "selected_pack": {
-      "correct": 3,
-      "total": 5,
+      "correct": 4,
+      "total": 6,
       "uncertain": 2,
-      "accuracy": 0.6
+      "accuracy": 0.6666666666666666
     },
     "total_notes": {
       "correct": 3,
@@ -68,8 +68,8 @@
       "accuracy": 1.0
     },
     "duration_seconds": {
-      "correct": 8,
-      "total": 8,
+      "correct": 9,
+      "total": 9,
       "accuracy": 1.0
     },
     "artist": {
@@ -78,28 +78,28 @@
       "accuracy": 1.0
     },
     "max_combo": {
-      "correct": 9,
-      "total": 9,
+      "correct": 12,
+      "total": 12,
       "accuracy": 1.0
     },
     "game_score": {
-      "correct": 9,
-      "total": 9,
+      "correct": 12,
+      "total": 12,
       "accuracy": 1.0
     },
     "grade": {
-      "correct": 9,
-      "total": 9,
+      "correct": 12,
+      "total": 12,
       "accuracy": 1.0
     },
     "completion_status": {
-      "correct": 9,
-      "total": 9,
+      "correct": 12,
+      "total": 12,
       "accuracy": 1.0
     },
     "player_name": {
-      "correct": 9,
-      "total": 9,
+      "correct": 12,
+      "total": 12,
       "accuracy": 1.0
     },
     "local_player_status": {
@@ -1604,6 +1604,368 @@
           "field": "ex_score",
           "expected": 44,
           "got": 44,
+          "evaluated": true,
+          "correct": true
+        }
+      ]
+    },
+    "realplay3_burst_result.png": {
+      "status": "PASS",
+      "sha256": "69a7d9e8e18ae24b802dd4edbb23ab3d970bc1973a45c962af534d838aa4f3be",
+      "comparisons": [
+        {
+          "field": "title",
+          "expected": "Burst The Gravity",
+          "got": "Burst The Gravity",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "game_level",
+          "expected": 16,
+          "got": 16,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "max_combo",
+          "expected": 476,
+          "got": 476,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "perfect",
+          "expected": 864,
+          "got": 864,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "cool",
+          "expected": 55,
+          "got": 55,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "bad",
+          "expected": 0,
+          "got": 0,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "miss",
+          "expected": 1,
+          "got": 1,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "game_score",
+          "expected": 55389,
+          "got": 55389,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "grade",
+          "expected": "A+",
+          "got": "A+",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "completion_status",
+          "expected": "COMPLETED",
+          "got": "COMPLETED",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "player_name",
+          "expected": "TC",
+          "got": "TC",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "screen_type",
+          "expected": "results",
+          "got": "results",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "ex_score",
+          "expected": 1783,
+          "got": 1783,
+          "evaluated": true,
+          "correct": true
+        }
+      ]
+    },
+    "realplay3_dearest_result.png": {
+      "status": "PASS",
+      "sha256": "d484d157074d3a64880071fed91c1422b4763886de4db56e1cae4890aadbba85",
+      "comparisons": [
+        {
+          "field": "title",
+          "expected": "DEAREST DROP",
+          "got": "DEAREST DROP",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "game_level",
+          "expected": 22,
+          "got": 22,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "max_combo",
+          "expected": 512,
+          "got": 512,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "perfect",
+          "expected": 819,
+          "got": 819,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "cool",
+          "expected": 21,
+          "got": 21,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "bad",
+          "expected": 2,
+          "got": 2,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "miss",
+          "expected": 1,
+          "got": 1,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "game_score",
+          "expected": 52500,
+          "got": 52500,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "grade",
+          "expected": "A+",
+          "got": "A+",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "completion_status",
+          "expected": "COMPLETED",
+          "got": "COMPLETED",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "player_name",
+          "expected": "TC",
+          "got": "TC",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "screen_type",
+          "expected": "results",
+          "got": "results",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "ex_score",
+          "expected": 1659,
+          "got": 1659,
+          "evaluated": true,
+          "correct": true
+        }
+      ]
+    },
+    "realplay3_dearest_select.png": {
+      "status": "PASS",
+      "sha256": "44bc5813392115c745b8b4cb76a2eebada73e0346d69febcd2c474b6c76894ab",
+      "comparisons": [
+        {
+          "field": "title",
+          "expected": "DEAREST DROP",
+          "got": "DEAREST DROP",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "difficulty",
+          "expected": "HARD",
+          "got": "HARD",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "game_level",
+          "expected": 22,
+          "got": 22,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "duration_seconds",
+          "expected": 88,
+          "got": 88,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "selected_pack",
+          "expected": "Blue's 6th step",
+          "got": "Blue's 6th step",
+          "evaluated": true,
+          "correct": true,
+          "outcome": "PASS",
+          "allowed_uncertain": false
+        },
+        {
+          "field": "total_notes",
+          "expected": null,
+          "got": null,
+          "evaluated": false,
+          "correct": null
+        },
+        {
+          "field": "bpm",
+          "expected": null,
+          "got": null,
+          "evaluated": false,
+          "correct": null
+        },
+        {
+          "field": "artist",
+          "expected": null,
+          "got": null,
+          "evaluated": false,
+          "correct": null
+        },
+        {
+          "field": "screen_type",
+          "expected": "song_select",
+          "got": "song_select",
+          "evaluated": true,
+          "correct": true
+        }
+      ]
+    },
+    "realplay3_title_a_result.png": {
+      "status": "PASS",
+      "sha256": "5d87304916e4a7cb3fcfa3062b229968526c02692ed34fae898708ef25e3d1f5",
+      "comparisons": [
+        {
+          "field": "title",
+          "expected": "A",
+          "got": "A",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "game_level",
+          "expected": 6,
+          "got": 6,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "max_combo",
+          "expected": 5,
+          "got": 5,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "perfect",
+          "expected": 5,
+          "got": 5,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "cool",
+          "expected": 0,
+          "got": 0,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "bad",
+          "expected": 0,
+          "got": 0,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "miss",
+          "expected": 0,
+          "got": 0,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "game_score",
+          "expected": 52,
+          "got": 52,
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "grade",
+          "expected": "A++",
+          "got": "A++",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "completion_status",
+          "expected": "COMPLETED",
+          "got": "COMPLETED",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "player_name",
+          "expected": "TC",
+          "got": "TC",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "screen_type",
+          "expected": "results",
+          "got": "results",
+          "evaluated": true,
+          "correct": true
+        },
+        {
+          "field": "ex_score",
+          "expected": 10,
+          "got": 10,
           "evaluated": true,
           "correct": true
         }

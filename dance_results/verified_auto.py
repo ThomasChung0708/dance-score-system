@@ -66,21 +66,23 @@ def automatic_request(reviews,row):
             if sid:gd=catalog.difficulties.get((sid,fields.get('difficulty',{}).get('value')))
         elif source=='custom':
             pack=selection.get('pack') or {}
-            if pack.get('status')!='confirmed':issues.append('automatic_pack_unconfirmed')
             for key in CUSTOM_SELECTION_REQUIRED:
                 if not reliable(fields.get(key)):issues.append('automatic_selection_'+key+'_required')
-            match=catalog.match(fields,pack.get('pack_id'),'custom')
-            ref=ManualReferences(reviews.directory,reviews.database).safe_lookup(fields,pack.get('pack_id'),'custom',catalog,match)
-            if pack.get('status')=='confirmed':
-                if ref:sid=ref['song_id']
-                elif match.get('status')=='unique_verified_candidate' and len(match.get('candidates',[]))==1:
-                    sid=match['candidates'][0]['song_id']
+            confirmed_pack = pack.get('pack_id') if pack.get('status') == 'confirmed' else None
+            match = catalog.match_identity(fields, confirmed_pack, 'custom')
+            reference_match = catalog.match(fields, confirmed_pack, 'custom')
+            ref=ManualReferences(reviews.directory,reviews.database).safe_lookup(fields,confirmed_pack,'custom',catalog,reference_match)
+            sid = ref['song_id'] if ref else match.get('confirmed_song_id')
+            if pack.get('status') != 'confirmed' and sid is None:
+                issues.append('automatic_pack_unconfirmed')
+            if sid is not None and not ref and match.get('status') != 'unique_verified_candidate':
+                issues.append('automatic_chart_evidence_unverified')
             if sid:
                 song=reviews._song(catalog,sid)
                 gd=next((d for d in song['difficulties'] if d['difficulty']==fields.get('difficulty',{}).get('value')),None)
         else:issues.append('automatic_source_unconfirmed')
         if sid is None:issues.append('automatic_unique_verified_identity_required')
-        if s.get('song_id') is not None and s['song_id']!=sid:issues.append('automatic_locked_identity_conflict')
+        if sid is not None and s.get('song_id') is not None and s['song_id']!=sid:issues.append('automatic_locked_identity_conflict')
         if gd is None or not gd.get('notes_verified') or gd.get('total_notes') is None:issues.append('automatic_full_notes_unverified')
         if issues:return None,sorted(set(issues))
         song=catalog.songs[sid]

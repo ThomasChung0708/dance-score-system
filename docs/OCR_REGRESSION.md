@@ -1,7 +1,8 @@
 # 固定 OCR 回歸考卷與失敗擷取
 
 Round 2.5 增加失敗診斷去噪、未完成結算幀處理、評級字形 ROI 與資訊性計時。
-自動提交的信心門檻仍為 0.95，歌曲匹配與多人選歌流程維持原樣。
+Round 2.6 增加完整結算保留、唯一一致候選綁定、Pack 推論持久化與單字元 footer 重讀。
+自動提交的信心門檻仍為 0.95，仍要求兩張新鮮且欄位相同的結算幀。
 這是開發樣本的完全相同比率，不代表未知圖片的泛化準確率。
 
 ## 執行
@@ -170,8 +171,9 @@ results，且解析器明確回報本人列／必要數字不完整，或無法�
 欄位列表與 0.95 門檻由 `ocr_policy` 與 `verified_auto`／雙幀檢查共用。
 選歌檢查 title／difficulty／game_level；已知 custom 來源才另檢查 total_notes／
 duration_seconds。artist／bpm 不是必要欄位，不因它們缺值／低信心而擷取。
-`pack_list_occludes_metadata`（連同該欄預期缺值）不擷取；保留 Pack 訊號衝突
-及原有清單可見時的 Pack 不確定診斷。多人結算的 HOST level 警告與欄位不是
+`pack_list_occludes_metadata`（連同該欄預期缺值）不擷取；Pack 訊號衝突仍擷取，
+但 `selected_pack_uncertain` 與選歌 title／difficulty／game_level 缺值且理由僅為
+`not_readable` 的過場訊號不擷取。多人結算的 HOST level 警告與欄位不是
 自動送出阻擋條件，不擷取；其他結算 gate 原因仍保留。
 
 JSON 包括 UTC timestamp、reason 列表、screen_type_guess、各欄原始 confidence
@@ -272,6 +274,41 @@ selection 輸出 `selected_pack`、`selected_pack_id`、`selected_pack_confidenc
 `selected_pack_evidence`、`pack_reason`。confidence 是支持歌名 OCR 的最低信心，
 不是選取正確率。主要與次要訊號衝突時清空名稱／ID，理由為
 selected_pack_disagreement；不足時為 selected_pack_uncertain。
-即時監控的既有 ocr_failures 旁路擷取會記錄這兩種理由。
-推論只作診斷，不會確認 tracker 的 Pack；開啟清單仍清除舊的人工 Pack 上下文，
-保留既有成績綁定與提交門檻。
+即時監控的 ocr_failures 旁路只因 disagreement 擷取，不再因 uncertain 擷取。
+成功的右側歌單推論會保留到 tracker 的 Pack 與開局消耗的 selection，包含來源和證據；
+推論演算法維持原樣。開啟清單而沒有成功推論仍清除舊 Pack 上下文。
+
+## Round 2.6 結算保留與 Session 3 回放
+
+本人列、必要數字、評級、歌名等必要欄位至少有一張完整且信心達 0.95 時，
+tracker 保留最佳完整樣本。若在雙幀結算防抖完成前離場、關窗或停止監控，
+該 Session 保存為 `pending_result`，以保留的原圖／OCR 寫入 `pending_review`。
+這條保留路徑強制 temporal pending，不能自動提交。沒有完整高信心樣本仍沿用
+interrupted 行為。黑色／近黑載入幀不進行辨識，也不清除或延長 selection 的 TTL。
+
+唯一一致的歌名／難度／LV 候選可以綁定身份，已知 notes／duration 必須與畫面一致；
+未知譜面資料不能排除同名候選。Pack 可以消除歧義，但矛盾的 Pack 不能強行綁定。
+官方歌曲的唯一一致身份不要求 Pack。身份綁定與已驗證譜面資料分開：自動提交仍要求
+原有的完整音符／譜面證據，不能把身份唯一性當成已驗證譜面。
+
+```powershell
+python -X utf8 -m tools.replay_realplay3
+```
+
+工具唯讀載入 `data/realplay3_snapshot/` 的 diagnostics 順序、Session／review JSON
+與失敗 PNG／JSON，使用目前的解析、tracker、review 與 automatic_request。輸出
+`reports/round26-replay.json`。所有重建 Session 寫入暫存目錄，不寫曲庫或來源快照。
+缺少快照時回報 skipped。未保存的 OCR payload 不計入雙幀，不能從狀態日誌猜數字。
+
+本機回放：DEAREST DROP 綁定 649、Pack 18，雙幀 confirmed；但快照曲庫缺少
+649 的 HARD 譜面，仍因 `automatic_chart_evidence_unverified` 與
+`automatic_full_notes_unverified` 無法自動提交。Burst The Gravity、Yasashisa no Riyuu、
+地獄之門Remix 均保留結算並寫入待審核，最後一首綁定官方 2873，沒有 Pack。
+「A」的 footer 在相同原圖重讀後雙幀 confirmed。快照沒有它在黑屏前的 selection
+payload，所以只用 playing_preview 作保留性探針（信心為 0、無自動權限）；
+black_capture 保留探針成立，不宣稱還原了遺失的完整選歌證據。
+
+四張 realplay3 標籤使用原圖 SHA-256 與使用者提供的真值；既有真值與 baseline 不變。
+舊測試只有三處配合規則調整：Pack uncertain 不再擷取、成功推論可進 tracker、
+JOINT 原圖的唯一右側歌單 Pack 現在保留。另有一處假 catalog 更新為新匹配介面，
+其 unreadable-selection 保留斷言不變。

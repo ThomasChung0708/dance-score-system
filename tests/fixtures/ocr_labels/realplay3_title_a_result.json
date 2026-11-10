@@ -1,0 +1,19 @@
+{
+  "image": "realplay3_title_a_result.png",
+  "sha256": "5d87304916e4a7cb3fcfa3062b229968526c02692ed34fae898708ef25e3d1f5",
+  "screen_type": "results",
+  "fields": {
+    "title": "A",
+    "game_level": 6,
+    "max_combo": 5,
+    "perfect": 5,
+    "cool": 0,
+    "bad": 0,
+    "miss": 0,
+    "game_score": 52,
+    "grade": "A++",
+    "completion_status": "COMPLETED",
+    "player_name": "TC"
+  },
+  "annotation": "Session 3 ground truth supplied by user (Nov 10); original PNG unchanged."
+}

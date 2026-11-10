@@ -1,0 +1,19 @@
+{
+  "image": "realplay3_burst_result.png",
+  "sha256": "69a7d9e8e18ae24b802dd4edbb23ab3d970bc1973a45c962af534d838aa4f3be",
+  "screen_type": "results",
+  "fields": {
+    "title": "Burst The Gravity",
+    "game_level": 16,
+    "max_combo": 476,
+    "perfect": 864,
+    "cool": 55,
+    "bad": 0,
+    "miss": 1,
+    "game_score": 55389,
+    "grade": "A+",
+    "completion_status": "COMPLETED",
+    "player_name": "TC"
+  },
+  "annotation": "Session 3 ground truth supplied by user (Nov 10); original PNG unchanged."
+}

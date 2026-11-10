@@ -32,8 +32,6 @@ def failure_details(observation=None, error=None, *, unrecognized_age=float('inf
             and selection.get('pack_list_visible')):
         if selection.get('pack_reason') == 'selected_pack_disagreement':
             reasons.append('selected_pack_disagreement')
-        elif selection.get('selected_pack') is None:
-            reasons.append('selected_pack_uncertain')
     required = ()
     if observation.get('screen_type') == 'results':
         required = result_required(result)
@@ -45,6 +43,9 @@ def failure_details(observation=None, error=None, *, unrecognized_age=float('inf
     # the Pack list is open, including custom metadata that gates a later play.
     for name, field in fields.items():
         if name not in required or field.get('reason') == 'pack_list_occludes_metadata':
+            continue
+        if (observation.get('screen_type') == 'song_select' and name in SELECTION_REQUIRED
+                and field.get('value') in (None, '') and field.get('reason') == 'not_readable'):
             continue
         if field.get('value') is None:
             reasons.append(name + ': missing')

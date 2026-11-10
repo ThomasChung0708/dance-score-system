@@ -11,7 +11,7 @@ import time
 
 from .library_service import LibraryError
 from .monitor_tracking import Tracker, ManualReferences, utc
-from .monitor_ocr import Analyzer, apply_selection, change_signature, change_amount
+from .monitor_ocr import Analyzer, apply_selection, change_signature, change_amount, black_or_loading_frame
 from .ocr_matching import ReadOnlyCatalog
 from .window_capture import Windows, WGCCapture, CaptureError
 from .ocr_failures import FailureCapture
@@ -154,7 +154,7 @@ class Monitor:
         except Exception:
             pass
 
-    def _consume_observation(self, observation, now, image, sample_id):
+    def _consume_observation(self, observation, now, image, sample_id, result_consistency=None):
         from .result_ocr import incomplete_result
         from .ocr_screens import compact, in_region
 
@@ -174,6 +174,21 @@ class Monitor:
         # Missing local players also occur on settled spectator/not-listed
         # results. Those retain the original tracker transitions and capture.
         self.tracker.consume(observation, now=now, image=image, sample_id=sample_id)
+        self._ingest_pending_result(result_consistency)
+
+    def _ingest_pending_result(self, result_consistency=None):
+        pending = self.tracker.last_session
+        observed = self.tracker.last_result_observation
+        if (not getattr(self, 'reviews', None) or not isinstance(pending, dict)
+                or pending.get('status') != 'pending_result' or not isinstance(observed, dict)
+                or not observed.get('result_ocr')):
+            return
+        folder = self.directory/'sessions'/pending['session_id']
+        if (folder/'result-review.json').exists():
+            return
+        if result_consistency and not pending['result'].get('recovery_reason'):
+            result_consistency.save(folder, observed['result_ocr'])
+        self.reviews.ingest(pending, observed['result_ocr'])
 
     def _run(self):
         capture = None
@@ -208,6 +223,7 @@ class Monitor:
                     if not live or live['pid'] != current['pid']:
                         with self.lock:
                             self.tracker.interrupt('game_window_closed')
+                            self._ingest_pending_result()
                             self.window = None
                         try:capture.stop()
                         except Exception:pass
@@ -277,10 +293,8 @@ class Monitor:
                     continue
                 sampled, image = frame
                 last_native = now
-                body=image.crop((0,int(image.height*.06),image.width,int(image.height*.94))).convert('L').resize((32,24))
-                if body.getextrema()[1]<4:
-                    self._connection('capture_error','擷取到全黑畫面；不使用此畫面判定遊戲結果。')
-                    with self.lock:self.tracker.invalidate_selection('black_capture')
+                if black_or_loading_frame(image):
+                    self._connection('capture_error','擷取到黑色或載入過場畫面；暫停辨識。')
                     self.stop_event.wait(.2)
                     continue
                 self._connection('connected')
@@ -321,16 +335,8 @@ class Monitor:
                     result_consistency.observe(observation,(self.tracker.session or {}).get('session_id'),sampled,image)
                     self._capture_ocr_failure(image, observation)
                     self.latest_image = image
-                    self._consume_observation(observation, last_ocr, image, sampled)
+                    self._consume_observation(observation, last_ocr, image, sampled, result_consistency)
                     if self.downloads:self.downloads.observe(observation,self.tracker,image)
-                    pending = self.tracker.last_session
-                    if observation.get('result_ocr') and pending and pending.get('status') == 'pending_result' and (
-                            pending.get('result') or {}).get('frame_hash') == observation['frame_hash']:
-                        # Reuse these OCR tokens once; repeated frames cannot overwrite human review.
-                        folder=self.directory/'sessions'/pending['session_id']
-                        if not (folder/'result-review.json').exists():
-                            result_consistency.save(folder,observation['result_ocr'])
-                        self.reviews.ingest(pending, observation['result_ocr'])
                     self.metrics.update(analyzed_frames=self.metrics['analyzed_frames']+1, ocr_calls=analyzer.calls,
                         ocr_ms=round(elapsed, 2), ocr_p50_ms=round(statistics.median(durations), 2),
                         ocr_p95_ms=round(sorted(durations)[max(0, math.ceil(len(durations)*.95)-1)], 2))
@@ -353,6 +359,7 @@ class Monitor:
             if catalog:catalog.close()
             with self.lock:
                 self.tracker.interrupt('monitor_stopped' if self.stop_event.is_set() else 'monitor_error')
+                self._ingest_pending_result()
                 self.running = False
                 if self.stop_event.is_set():
                     self.connection = 'stopped'

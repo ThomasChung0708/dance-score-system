@@ -1,0 +1,19 @@
+{
+  "image": "realplay3_dearest_result.png",
+  "sha256": "d484d157074d3a64880071fed91c1422b4763886de4db56e1cae4890aadbba85",
+  "screen_type": "results",
+  "fields": {
+    "title": "DEAREST DROP",
+    "game_level": 22,
+    "max_combo": 512,
+    "perfect": 819,
+    "cool": 21,
+    "bad": 2,
+    "miss": 1,
+    "game_score": 52500,
+    "grade": "A+",
+    "completion_status": "COMPLETED",
+    "player_name": "TC"
+  },
+  "annotation": "Session 3 ground truth supplied by user (Nov 10); original PNG unchanged."
+}

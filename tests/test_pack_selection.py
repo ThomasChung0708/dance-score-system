@@ -88,7 +88,11 @@ class InferenceTests(unittest.TestCase):
                                        (None, ('one',), 'selected_pack_uncertain')]:
             s = infer_selected_pack(selection(*titles, hint=hint), catalog())
             s['pack_list_visible'] = True
-            self.assertIn(expected, failure_details(dict(screen_type='song_select', selection=s))['reason'])
+            reasons = failure_details(dict(screen_type='song_select', selection=s))['reason']
+            if expected == 'selected_pack_disagreement':
+                self.assertIn(expected, reasons)
+            else:
+                self.assertNotIn(expected, reasons)
 
     def test_failure_capture_ignores_pack_uncertainty_without_pack_list(self):
         s = infer_selected_pack(selection('one'), catalog())
@@ -97,9 +101,9 @@ class InferenceTests(unittest.TestCase):
         self.assertNotIn('selected_pack_uncertain', reasons)
         self.assertNotIn('selected_pack_disagreement', reasons)
 
-    def test_diagnostics_never_confirm_tracker_pack_or_bind_score(self):
+    def test_successful_inference_is_persisted_for_tracker_consumption(self):
         c = catalog()
-        c.match = lambda *args: dict(status='pending_manual_review', bound_song_id=None, reasons=[])
+        c.match_identity = lambda *args: dict(status='pending_manual_review', bound_song_id=None, reasons=[])
         s = selection('one', 'two')
         s.update(pack_list_visible=True, fields={})
         s['visible_packs'] = [dict(text='Pack A', evidence=token('Pack A', 180, 260)),
@@ -110,8 +114,12 @@ class InferenceTests(unittest.TestCase):
             observed = apply_selection(dict(state='SONG_SELECT', selection=s),
                                        Image.new('RGB', (1024, 800)), tracker, c)
             self.assertEqual(observed['selection']['selected_pack_id'], 1)
-            self.assertIsNone(tracker.current_pack)
+            self.assertEqual(tracker.current_pack['pack_id'], 1)
             self.assertIsNone(observed['matching']['bound_song_id'])
+            apply_selection(dict(state='SONG_SELECT', selection=s),
+                            Image.new('RGB', (1024, 800)), tracker, c)
+            self.assertEqual(tracker.current_pack['pack_id'], 1)
+            self.assertEqual(tracker.current_pack['source'], 'right_song_list_unique_pack')
 
 
 class RowHintTests(unittest.TestCase):

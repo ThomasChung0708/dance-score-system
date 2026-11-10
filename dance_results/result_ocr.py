@@ -26,6 +26,18 @@ def incomplete_result(ocr):
             any(ocr.get('fields', {}).get(key, {}).get('value') is None for key in NUMERIC))
 
 
+def complete_reliable_result(ocr):
+    """A complete own row is worth retaining even without temporal confirmation."""
+    from .ocr_policy import result_required, RESULT_NONFATAL_ERRORS
+
+    fields = ocr.get('fields') or {}
+    return (not incomplete_result(ocr) and ocr.get('local_player_status') == 'CONFIRMED'
+            and not any(e not in RESULT_NONFATAL_ERRORS for e in ocr.get('errors', []))
+            and all(fields.get(k, {}).get('value') is not None
+                    and fields[k].get('confidence', 0) >= AUTO_CONFIDENCE
+                    and not fields[k].get('reason') for k in result_required(ocr)))
+
+
 def superscript_plus_count(mask):
     """Count separate raised crosses to the right of the grade's main letter.
 
@@ -162,11 +174,17 @@ def parse_result(tokens, player_name='TC'):
     for t in footer:
         found = re.fullmatch(r'歌曲名\s*[:：]\s*(.+)', t['text'].strip())
         if found:
-            titles.append(value(found[1].strip(), [t]))
+            title = re.split(r'\s+LV\s*[:：]?\s*\d+\s*$', found[1], flags=re.I)[0].strip()
+            if len(title) > 1 or (re.fullmatch(r'[A-Za-z0-9\u3400-\u9fff]', title)
+                                  and t['confidence'] >= AUTO_CONFIDENCE):
+                titles.append(value(title, [t]))
         elif compact(t['text']) in ('歌曲名:', '歌曲名'):
             x, y = center(t)
             following = [n for n in footer if x < center(n)[0] < 440 and abs(center(n)[1]-y)<13
-                         and not compact(n['text']).startswith('LV') and not re.fullmatch(r'\d+', n['text'])]
+                         and not compact(n['text']).startswith('LV')
+                         and (len(n['text'].strip()) > 1 and not re.fullmatch(r'\d+', n['text'])
+                              or re.fullmatch(r'[A-Za-z0-9\u3400-\u9fff]', n['text'].strip())
+                              and n['confidence'] >= AUTO_CONFIDENCE)]
             if len(following) == 1:
                 titles.append(value(re.sub(r'^[:：]\s*', '', following[0]['text'].strip()), [t, following[0]]))
     if len(titles) == 1:
@@ -297,6 +315,28 @@ def recognize_result(image, engine, player_name='TC', tokens=None):
                     if len(retry) == 1 and compact(retry[0]['text']) == compact(player_name) and retry[0]['confidence'] >= .9:
                         tokens = [t for t in tokens if not (left <= center(t)[0] <= right and abs(center(t)[1]-y) <= 16)]
                         tokens.extend(retry)
+    # The page detector can omit a one-character title. Re-read only the space
+    # immediately following an observed footer label, bounded by the LV anchor.
+    if result['fields']['title']['value'] is None:
+        labels = [t for t in in_region(tokens, (0, 740, 440, 800))
+                  if compact(t['text']) in ('歌曲名:', '歌曲名') and t['confidence'] >= AUTO_CONFIDENCE]
+        reader = getattr(engine, 'recognize_line', None)
+        if len(labels) == 1 and reader:
+            label = labels[0]
+            left = int(max(p[0] for p in label['box'])) + 2
+            y = center(label)[1]
+            ends = [min(p[0] for p in t['box']) for t in in_region(tokens, (left, 740, 440, 800))
+                    if compact(t['text']).startswith('LV')]
+            right = int(min(ends, default=min(left+140, 440))) - 4
+            box = (left, max(740, int(y)-16), right, min(800, int(y)+16))
+            if right > left:
+                crop = normalized.crop(box)
+                found = reader(crop.resize((crop.width*3, crop.height*3)), origin=box[:2], scale=3)
+                rereads.append(dict(field='title', tokens=found, region=box,
+                                    preprocessing='footer_title_after_label'))
+                if (len(found) == 1 and found[0]['confidence'] >= AUTO_CONFIDENCE
+                        and re.fullmatch(r'[A-Za-z0-9\u3400-\u9fff]', found[0]['text'].strip())):
+                    tokens.extend(found)
     final = parse_result(tokens, player_name)
     if grade_reading is not None:
         final['fields']['grade'] = grade_reading

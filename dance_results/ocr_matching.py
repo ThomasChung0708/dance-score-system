@@ -161,3 +161,53 @@ class ReadOnlyCatalog:
             reasons.append('multiple_fully_matching_candidates')
         return dict(status=status, bound_song_id=None, bound_difficulty_id=None,
                     candidate_count=len(candidates), candidates=candidates, reasons=reasons)
+
+    def match_identity(self, fields, pack_id=None, source_type=None):
+        """Bind one consistent identity; missing chart verification still gates auto.
+
+        Unknown chart metadata cannot eliminate a namesake. A Pack constraint is
+        applied only after comparing all title candidates, so a contradiction
+        never silently selects a song from another Pack.
+        """
+        from .ocr_policy import AUTO_CONFIDENCE, SELECTION_REQUIRED
+
+        match = self.match(fields, source_type=source_type)
+        consistent = []
+        uncertain_conflict = False
+        for candidate in match['candidates']:
+            gd = candidate.get('difficulty') or {}
+            conflicts = set(candidate['conflicts']) - {'duration_seconds'}
+            for key in ('game_level', 'total_notes', 'duration_seconds'):
+                observed = fields.get(key, {}).get('value')
+                known = gd.get(key)
+                if observed is not None and known is not None and observed != known:
+                    conflicts.add(key)
+                    item = fields[key]
+                    if item.get('confidence', 0) < AUTO_CONFIDENCE or item.get('reason'):
+                        uncertain_conflict = True
+            candidate['conflicts'] = sorted(conflicts)
+            if not conflicts:
+                consistent.append(candidate)
+        constrained = [c for c in consistent if pack_id is None or c['pack_id'] == pack_id]
+        if pack_id is not None:
+            match['candidates'] = [c for c in match['candidates'] if c['pack_id'] == pack_id]
+            match['candidate_count'] = len(match['candidates'])
+        reliable = all(fields.get(k, {}).get('value') is not None
+                       and fields[k].get('confidence', 0) >= AUTO_CONFIDENCE
+                       and not fields[k].get('reason') for k in SELECTION_REQUIRED)
+        level = fields.get('game_level', {}).get('value')
+        reliable = (reliable and fields.get('difficulty', {}).get('value') in ('EASY', 'NORMAL', 'HARD')
+                    and type(level) is int and 0 < level <= 10**7)
+        if not reliable or uncertain_conflict or len(constrained) != 1:
+            match['reasons'] = ['identity_missing_ambiguous_or_pack_conflicting']
+            return match
+        chosen = constrained[0]
+        if 'reviewed_source_title' in chosen['missing']:
+            match['reasons'] = ['reviewed_source_title_required']
+            return match
+        verified = not (set(chosen['missing']) - {'confirmed_pack'})
+        match.update(status='unique_verified_candidate' if verified else 'unique_consistent_candidate',
+                     confirmed_song_id=chosen['song_id'], bound_song_id=chosen['song_id'],
+                     bound_difficulty_id=(chosen.get('difficulty') or {}).get('difficulty_id'),
+                     reasons=[])
+        return match

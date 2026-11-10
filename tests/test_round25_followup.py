@@ -124,7 +124,7 @@ class SelectionGapTests(unittest.TestCase):
         good = copy.deepcopy(self.tracker.selection)
         unreadable = selected()
         unreadable['fields']['title'].update(value=None, confidence=0, reason='not_readable')
-        catalog = SimpleNamespace(packs=[], match=lambda *args: copy.deepcopy(unreadable['matching']))
+        catalog = SimpleNamespace(packs=[], match_identity=lambda *args: copy.deepcopy(unreadable['matching']))
         observation = dict(state='SONG_SELECT', frame_hash='transition', selection=dict(
             fields=unreadable['fields'], pack_list_visible=False))
         observation = apply_selection(observation, Image.new('RGB', (1024, 800)), self.tracker, catalog)

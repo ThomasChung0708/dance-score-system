@@ -341,7 +341,8 @@ class RealScreenshotReplayTests(unittest.TestCase):
                 self.assertEqual(tracker.selection['fields']['game_level']['value'],20)
                 self.assertEqual(tracker.selection['fields']['total_notes']['value'],929)
                 self.assertEqual(tracker.selection['fields']['duration_seconds']['value'],95)
-                self.assertIsNone(tracker.current_pack) # No clear selected Pack in original list.
+                self.assertEqual(tracker.current_pack['name'], "Otaku's Dream 9th Anime Mix")
+                self.assertEqual(tracker.current_pack['source'], 'right_song_list_unique_pack')
                 self.assertIsNone(tracker.selection['matching'].get('confirmed_song_id'))
                 for name in ['遊玩畫面開始.PNG','結算畫面.PNG']:
                     for _ in range(2):

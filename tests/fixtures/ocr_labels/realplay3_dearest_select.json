@@ -1,0 +1,16 @@
+{
+  "image": "realplay3_dearest_select.png",
+  "sha256": "44bc5813392115c745b8b4cb76a2eebada73e0346d69febcd2c474b6c76894ab",
+  "screen_type": "song_select",
+  "fields": {
+    "title": "DEAREST DROP",
+    "difficulty": "HARD",
+    "game_level": 22,
+    "duration_seconds": 88,
+    "selected_pack": "Blue's 6th step",
+    "total_notes": null,
+    "bpm": null,
+    "artist": null
+  },
+  "annotation": "Session 3 ground truth supplied by user (Nov 10); original PNG unchanged."
+}
