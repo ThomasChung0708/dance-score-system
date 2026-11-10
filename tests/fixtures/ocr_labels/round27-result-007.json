@@ -1,0 +1,18 @@
+{
+  "image": "round27/result-007.png",
+  "sha256": "d597cd1ccc41f1b78f40105cd22686bae058e71a5fb77d9596ef04bd52813664",
+  "screen_type": "results",
+  "fields": {
+    "perfect": 751,
+    "cool": 9,
+    "bad": 0,
+    "miss": 0,
+    "max_combo": 760,
+    "game_score": 53653,
+    "grade": "A++",
+    "completion_status": "COMPLETED",
+    "player_name": "TC",
+    "title": "The Everlasting Guilty Crown"
+  },
+  "annotation": "Manually checked PNG table and footer in Round 2.7. Difficulty is not displayed. Footer level omitted for multiplayer; result-018 grade suffix is clipped at right edge and is not labelled. Result-005 is an incomplete animated row, only footer fields are labelled."
+}

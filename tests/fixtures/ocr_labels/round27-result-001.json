@@ -1,0 +1,18 @@
+{
+  "image": "round27/result-001.png",
+  "sha256": "e598b8696364786c2663c895d8501adcf70f22794631a62bd219dab961dceb25",
+  "screen_type": "results",
+  "fields": {
+    "perfect": 1231,
+    "cool": 8,
+    "bad": 0,
+    "miss": 0,
+    "max_combo": 1239,
+    "game_score": 87538,
+    "grade": "A++",
+    "completion_status": "COMPLETED",
+    "player_name": "TC",
+    "title": "Cosmic Cat"
+  },
+  "annotation": "Manually checked PNG table and footer in Round 2.7. Difficulty is not displayed. Footer level omitted for multiplayer; result-018 grade suffix is clipped at right edge and is not labelled. Result-005 is an incomplete animated row, only footer fields are labelled."
+}

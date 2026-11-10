@@ -9,8 +9,12 @@ from .ocr_policy import AUTO_CONFIDENCE, result_required
 POLICY='phase5f1-two-fresh-results-v1'
 
 
-def keys(ocr):
-    return result_required(ocr)
+def keys(ocr, samples=()):
+    fields = [ocr.get('fields', {})]
+    fields.extend(sample.get('fields', {}) for sample in samples)
+    optional = tuple(key for key in ('total_notes', 'result_status')
+                     if any(row.get(key, {}).get('value') is not None for row in fields))
+    return (*result_required(ocr), *optional)
 
 
 class ResultConsistency:
@@ -38,7 +42,7 @@ class ResultConsistency:
         samples=copy.deepcopy(self.samples);status='confirmed';reasons=[]
         if len(samples)<2:reasons.append('two_distinct_result_frames_required')
         for sample in samples:
-            for k in keys(ocr):
+            for k in keys(ocr, samples):
                 f=sample['fields'].get(k,{})
                 if f.get('value') is None or f.get('confidence',0)<AUTO_CONFIDENCE or f.get('reason'):reasons.append('unreliable_'+k)
                 if f.get('value')!=ocr['fields'].get(k,{}).get('value'):reasons.append('conflicting_'+k)
@@ -58,7 +62,7 @@ class ResultConsistency:
 def issues(ocr,session,directory):
     evidence=ocr.get('temporal_validation')
     if not evidence:
-        return ['automatic_temporal_confirmation_required'] if ocr.get('parser_version')=='phase5f1-v1' else []
+        return ['automatic_temporal_confirmation_required']
     errors=[];samples=evidence.get('samples',[])
     if evidence.get('policy')!=POLICY or evidence.get('session_id')!=session['session_id'] or evidence.get('status')!='confirmed':errors.append('automatic_temporal_confirmation_required')
     if len(samples)!=2:return sorted(set([*errors,'automatic_two_result_frames_required']))
@@ -69,7 +73,7 @@ def issues(ocr,session,directory):
     if samples[-1].get('frame_hash')!=(session.get('result')or{}).get('frame_hash'):errors.append('automatic_temporal_result_frame_conflict')
     for i,s in enumerate(samples):
         if not isinstance(s.get('capture_id'),(float,int)) or not math.isfinite(s['capture_id']):errors.append('automatic_temporal_capture_invalid')
-        for k in keys(ocr):
+        for k in keys(ocr, samples):
             f=s.get('fields',{}).get(k,{})
             if f.get('value') is None or f.get('confidence',0)<AUTO_CONFIDENCE or f.get('reason') or f.get('value')!=ocr['fields'].get(k,{}).get('value'):errors.append('automatic_temporal_field_conflict')
         try:

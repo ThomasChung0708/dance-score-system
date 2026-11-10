@@ -10,10 +10,13 @@ from .monitor_tracking import atomic_json,utc,ManualReferences
 from .ocr_matching import ReadOnlyCatalog,normalize
 from .note_review import result_time
 from .result_ocr import NUMERIC
+from .result_consistency import screen_catalog, screen_totals, validate
 from .ocr_policy import (
     AUTO_CONFIDENCE, RESULT_REQUIRED, SELECTION_REQUIRED,
-    CUSTOM_SELECTION_REQUIRED, RESULT_NONFATAL_ERRORS,
+    RESULT_NONFATAL_ERRORS,
 )
+
+STORAGE_POLICY = 'round27-screen-v1'
 
 
 def reliable(field):
@@ -29,6 +32,9 @@ def automatic_request(reviews,row):
     binding=verified_download_binding(reviews,row)
     if binding:selection=binding['selection']
     ocr=row['ocr'];raw=ocr.get('fields') or {}
+    screen_values = {k: item.get('value') for k, item in raw.items()}
+    consistency = validate(screen_values, screen_totals(raw, selection))
+    issues.extend(consistency['issues'])
     if row['revision']!=0 or row['status']!='pending_review':issues.append('automatic_review_already_edited')
     from datetime import datetime
     try:
@@ -60,14 +66,15 @@ def automatic_request(reviews,row):
         issues.append('automatic_result_level_conflict')
     catalog=ReadOnlyCatalog(reviews.database)
     try:
-        source=selection.get('source_type');sid=None;gd=None
+        source = selection.get('source_type')
+        sid = None
+        gd = None
+        match = {}
         if source=='official':
             match=catalog.match_official(fields,source_confirmed=True);sid=match.get('confirmed_song_id')
             if sid:gd=catalog.difficulties.get((sid,fields.get('difficulty',{}).get('value')))
         elif source=='custom':
             pack=selection.get('pack') or {}
-            for key in CUSTOM_SELECTION_REQUIRED:
-                if not reliable(fields.get(key)):issues.append('automatic_selection_'+key+'_required')
             confirmed_pack = pack.get('pack_id') if pack.get('status') == 'confirmed' else None
             match = catalog.match_identity(fields, confirmed_pack, 'custom')
             reference_match = catalog.match(fields, confirmed_pack, 'custom')
@@ -75,38 +82,38 @@ def automatic_request(reviews,row):
             sid = ref['song_id'] if ref else match.get('confirmed_song_id')
             if pack.get('status') != 'confirmed' and sid is None:
                 issues.append('automatic_pack_unconfirmed')
-            if sid is not None and not ref and match.get('status') != 'unique_verified_candidate':
-                issues.append('automatic_chart_evidence_unverified')
             if sid:
                 song=reviews._song(catalog,sid)
                 gd=next((d for d in song['difficulties'] if d['difficulty']==fields.get('difficulty',{}).get('value')),None)
         else:issues.append('automatic_source_unconfirmed')
         if sid is None:issues.append('automatic_unique_verified_identity_required')
+        if any('total_notes' in c.get('conflicts', []) for c in match.get('candidates', [])):
+            issues.append('automatic_screen_catalog_notes_conflict')
         if sid is not None and s.get('song_id') is not None and s['song_id']!=sid:issues.append('automatic_locked_identity_conflict')
-        if gd is None or not gd.get('notes_verified') or gd.get('total_notes') is None:issues.append('automatic_full_notes_unverified')
         if issues:return None,sorted(set(issues))
         song=catalog.songs[sid]
         values={k:copy.deepcopy(raw.get(k,{}).get('value')) for k in (*NUMERIC,'grade','completion_status','player_name','game_level')}
         values.update(difficulty=fields['difficulty']['value'],game_level=fields['game_level']['value'],
-            total_notes=gd['total_notes'],duration_seconds=fields.get('duration_seconds',{}).get('value'))
+            total_notes=consistency['judged_total'] if screen_values.get('completion_status') == 'COMPLETED' else None,
+            duration_seconds=fields.get('duration_seconds',{}).get('value'))
         if values['completion_status'] not in ('COMPLETED','FAILED'):issues.append('automatic_completion_unknown')
-        if gd.get('game_level') is not None and gd['game_level']!=values['game_level']:issues.append('automatic_catalog_level_conflict')
-        observed=fields.get('total_notes',{}).get('value')
-        if observed is not None and observed!=gd['total_notes']:issues.append('automatic_note_source_conflict')
+        if gd and gd.get('game_level') is not None and gd['game_level']!=values['game_level']:issues.append('automatic_catalog_level_conflict')
+        if screen_catalog(gd):
+            for _, item in screen_totals(raw, selection):
+                if item['value'] != gd['total_notes']:
+                    issues.append('automatic_screen_catalog_notes_conflict')
+            if values['completion_status'] == 'COMPLETED' and consistency['judged_total'] != gd['total_notes']:
+                issues.append('automatic_screen_catalog_notes_conflict')
         judgments=[values[k] for k in ('perfect','cool','bad','miss')]
         if any(type(n) is not int or n<0 for n in judgments):issues.append('automatic_judgments_invalid')
         elif values['completion_status']=='COMPLETED':
             from .score_comparison import comparison
-            compared=comparison(catalog.db,sid,values['difficulty'],sum(judgments),directory=reviews.directory,session_id=row['session_id'])
-            if reviews.scoring_policy=='custom-judged-v1' and compared['ranking_paused']:issues.append('automatic_cross_session_basis_conflict')
-            if sum(judgments)!=gd['total_notes']:
-                # Deployment guard pending actual play validation, not an OCR
-                # error or a requirement for manual custom MAX submission.
-                issues.append('automatic_custom_difference_policy_pending_live_validation' if reviews.scoring_policy=='custom-judged-v1' else 'automatic_note_discrepancy')
+            compared=comparison(catalog.db,sid,values['difficulty'],sum(judgments),directory=reviews.directory,session_id=row['session_id'],confirmed_only=True)
+            if compared['ranking_paused']:issues.append('automatic_cross_session_basis_conflict')
         if issues:return None,sorted(set(issues))
         body=dict(session_id=row['session_id'],review_id=row['review_id'],revision=row['revision'],song_id=sid,
             root_id=song['root_id'],relative_path=song['relative_folder'],values=values,
-            player_row_id=own[0]['row_id'],notes_verified=True,identity_reviewed=True,player_verified=True,
+            player_row_id=own[0]['row_id'],notes_verified=values['total_notes'] is not None,identity_reviewed=True,player_verified=True,
             duration_verified=bool(fields.get('duration_seconds',{}).get('value')),confirmation_note='',
             play_mode='multiplayer' if ocr['multiplayer'] else 'single',submission_mode='VERIFIED_AUTO')
         return body,[]
@@ -119,16 +126,16 @@ class AutomaticStorage:
         self.submissions=submissions;self.reviews=submissions.reviews
         self.path=self.reviews.directory/'storage-mode.json';self.lock=threading.RLock()
         self.queue=queue.Queue();self.stop_event=threading.Event();self.queued=set();self.worker=None
-        self.state=dict(mode='MANUAL',catalog_path=str(self.reviews.database),excluded_sessions=[],enabled_at=None,ocr_policy='phase5f1')
+        self.state=dict(mode='MANUAL',catalog_path=str(self.reviews.database),excluded_sessions=[],enabled_at=None,ocr_policy=STORAGE_POLICY)
         if self.path.exists():
             data=json.loads(self.path.read_text(encoding='utf8'))
             if data.get('catalog_path')!=str(self.reviews.database):raise LibraryError('自動儲存設定屬於其他歌曲庫。',409)
             if data.get('mode') not in ('MANUAL','VERIFIED_AUTO'):raise LibraryError('自動儲存模式設定無效。',409)
             self.state=data
-            if self.state.get('ocr_policy')!='phase5f1':
+            if self.state.get('ocr_policy')!=STORAGE_POLICY:
                 # An OCR upgrade never turns an old Pending into a new automatic play.
                 self.state['excluded_sessions']=sorted(set(self.state.get('excluded_sessions',[]))|{p.parent.name for p in (self.reviews.directory/'sessions').glob('*/session.json')})
-                self.state['ocr_policy']='phase5f1'
+                self.state['ocr_policy']=STORAGE_POLICY
                 atomic_json(self.path,self.state)
         self.events=[];self.diagnostics={}
         submissions.auto_allowed=self.allowed

@@ -13,6 +13,7 @@ from .scoring import calculate, percentage_display
 from .sqlite_safety import verified_backup, check_integrity
 from .achievements import progress_for_songs, feedback
 from .note_review import result_time
+from .result_consistency import screen_catalog, observation, screen_totals, validate
 
 def basis_is_custom(score):return score.get('max_policy')=='custom-judged-v1'
 
@@ -80,7 +81,9 @@ class SubmissionService:
             if values.get('total_notes') is None:
                 values['total_notes']=gd['total_notes']
                 issues=[i for i in issues if i['code']!='verified_catalog_notes_conflict']
-            if values['total_notes']!=gd['total_notes']:error('verified_catalog_notes_conflict','total_notes')
+            if values['total_notes']!=gd['total_notes']:
+                if screen_catalog(dict(gd)):
+                    error('verified_catalog_notes_conflict','total_notes')
             else:
                 verified=True;notes_source=gd['notes_source']
         if not verified:
@@ -114,6 +117,21 @@ class SubmissionService:
             result_verification=dict(confirmed=not issues,source='verified_ocr' if automatic else 'explicit_human_review'),
             automatic=dict(authorized=automatic,method='revalidated_session_ocr_catalog' if automatic else None),
             full_notes_source=notes_source,play_mode=mode,player_row_id=chosen['row_id'] if chosen else None)
+        evidence['screen_note_observation'] = observation(values)
+        raw = row['ocr'].get('fields') or {}
+        evidence['screen_consistency'] = validate(
+            {k: item.get('value') for k, item in raw.items()},
+            screen_totals(raw, session.get('selection') or {}))
+        screen = evidence['screen_note_observation']
+        if screen is not None and gd is not None and gd['total_notes'] is not None:
+            if screen['total_notes'] != gd['total_notes']:
+                disagreement = dict(code='catalog_screen_notes_disagreement',
+                                    catalog_value=gd['total_notes'], catalog_source=gd['notes_source'],
+                                    screen_value=screen['total_notes'], provenance='screen_observed')
+                evidence['catalog_note_disagreement'] = disagreement
+                warnings.append(dict(disagreement, field='total_notes'))
+        if automatic and screen is not None:
+            evidence['full_notes_source'] = 'screen_observed'
         from .download_tracking import session_download
         evidence['download_evidence']=session_download(self.reviews.directory,row['session_id'])
         token_evidence=copy.deepcopy(evidence)
@@ -181,6 +199,8 @@ class SubmissionService:
                     if gd is None:
                         gd_id=db.execute('INSERT INTO game_difficulties(song_id,difficulty,game_level,level_source,total_notes,notes_source,notes_verified) VALUES(?,?,?,\'manual\',?,?,?)',
                             (song['song_id'],v['difficulty'],v['game_level'],v['total_notes'],
+                             'game_screen' if evidence['screen_note_observation'] and
+                             evidence['screen_note_observation']['total_notes'] == v['total_notes'] else
                              'manual' if s['full_notes_verified'] else None,int(s['full_notes_verified']))).lastrowid
                     else:gd_id=gd['difficulty_id']
                     self._checkpoint('after_difficulty')

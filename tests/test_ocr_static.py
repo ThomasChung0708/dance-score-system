@@ -80,7 +80,7 @@ class MatchingSafetyTests(unittest.TestCase):
         ids = [i for i, s in self.catalog.songs.items() if s['pack_id'] == self.pack_a]
         for i in ids:
             self.catalog.difficulties[(i, 'HARD')] = dict(difficulty_id=i+100, difficulty='HARD',
-                game_level=17, level_source='manual', total_notes=821, notes_source='manual',
+                game_level=17, level_source='manual', total_notes=821, notes_source='game_screen',
                 notes_verified=1, duration_seconds=96, duration_verified=1)
         result = self.catalog.match(observation(), self.pack_a)
         self.assertEqual(result['status'], 'pending_manual_review')  # Two equally matching candidates.

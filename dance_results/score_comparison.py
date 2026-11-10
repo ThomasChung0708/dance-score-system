@@ -11,10 +11,12 @@ def total(values):
     return sum(counts) if all(type(n) is int and 0<=n<=10**7 for n in counts) else None
 
 
-def comparison(db,song_id,difficulty,judged_total=None,*,directory=None,session_id=None,max_basis_notes=None,max_basis_policy=None):
+def comparison(db,song_id,difficulty,judged_total=None,*,directory=None,session_id=None,max_basis_notes=None,max_basis_policy=None,confirmed_only=False):
     observations={}
     full_bases={}
-    for r in db.execute("SELECT r.session_id,r.record_id,r.completion_status,r.perfect,r.cool,r.bad,r.miss,r.evidence_json FROM play_records r JOIN game_difficulties d ON d.difficulty_id=r.difficulty_id WHERE d.song_id=? AND d.difficulty=? AND r.match_status='confirmed'",(song_id,difficulty)):
+    for r in db.execute("SELECT r.session_id,r.record_id,r.completion_status,r.perfect,r.cool,r.bad,r.miss,r.evidence_json,r.confirmation_method FROM play_records r JOIN game_difficulties d ON d.difficulty_id=r.difficulty_id WHERE d.song_id=? AND d.difficulty=? AND r.match_status='confirmed'",(song_id,difficulty)):
+        if confirmed_only and r['confirmation_method'] not in ('manual_review', 'manual_note_exception', 'verified_auto'):
+            continue
         sid=r['session_id']
         if sid==session_id:continue
         e=json.loads(r['evidence_json']);basis=e.get('max_basis_verification') or {}
@@ -37,6 +39,8 @@ def comparison(db,song_id,difficulty,judged_total=None,*,directory=None,session_
             if human:
                 matched=draft.get('song_id')==song_id and v.get('difficulty')==difficulty
             else:
+                if confirmed_only:
+                    continue
                 s=r.get('locked_session') or {};selection=s.get('selection') or {};f=selection.get('fields') or {}
                 raw=(r.get('ocr') or {}).get('fields') or {}
                 reliable=lambda x:isinstance(x,dict) and x.get('value') is not None and x.get('confidence',0)>=.95 and not x.get('reason')

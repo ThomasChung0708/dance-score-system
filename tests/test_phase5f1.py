@@ -122,6 +122,7 @@ class AutomaticIntegrationTests(unittest.TestCase):
 
     def test_new_parser_single_static_frame_cannot_bypass_consistency_gate(self):
         row=self.official_auto();row['ocr']['parser_version']='phase5f1-v1'
+        row['ocr'].pop('temporal_validation', None)
         self.assertIn('automatic_temporal_confirmation_required',automatic_request(self.service,row)[1])
 
     def test_ocr_upgrade_excludes_old_pending_without_changing_its_evidence(self):

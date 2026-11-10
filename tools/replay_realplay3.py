@@ -12,6 +12,7 @@ from datetime import datetime
 import hashlib
 import json
 from pathlib import Path
+import shutil
 import tempfile
 
 from PIL import Image
@@ -182,6 +183,24 @@ def replay(snapshot, database, *, engine=None):
                 if pending.get('status') == 'pending_result':
                     row = monitor.reviews._read(pending['session_id'])[1]
                 body, issues = automatic_request(monitor.reviews, row) if row else (None, ['no_result_review'])
+                simulated_submission = None
+                if body is not None:
+                    # Exercise the real transaction only on a disposable DB copy.
+                    # Reviews and matching continue reading the original read-only
+                    # snapshot, so no catalog enrichment is fabricated for replay.
+                    from dance_results.library_service import LibraryService
+                    from dance_results.submissions import SubmissionService
+
+                    copy_database = Path(temporary)/f'catalog-{index}.sqlite3'
+                    shutil.copyfile(database, copy_database)
+                    submissions = SubmissionService(LibraryService(copy_database), monitor.reviews)
+                    submissions.auto_allowed = lambda sid: True
+                    record = submissions.submit_verified(pending['session_id'])['record']
+                    simulated_submission = dict(
+                        status='saved_on_disposable_copy',
+                        confirmation_method=record['confirmation_method'],
+                        observed_notes=record['evidence']['screen_note_observation'],
+                    )
                 plays.append(dict(
                     original_session=original['session_id'],
                     title=(original.get('playing_preview') or {}).get('title'),
@@ -192,6 +211,11 @@ def replay(snapshot, database, *, engine=None):
                     result_title=row['ocr']['fields']['title']['value'] if row else None,
                     result_grade=row['ocr']['fields']['grade']['value'] if row else None,
                     result_score=row['ocr']['fields']['game_score']['value'] if row else None,
+                    result_judgments={k: row['ocr']['fields'][k]['value']
+                                      for k in ('perfect', 'cool', 'bad', 'miss')} if row else None,
+                    bound_pack=catalog.songs.get(pending.get('song_id'), {}).get('pack_name'),
+                    difficulty=(body or {}).get('values', {}).get('difficulty'),
+                    simulated_submission=simulated_submission,
                     recovery_reason=(pending.get('result') or {}).get('recovery_reason'),
                     temporal_status=row['ocr'].get('temporal_validation', {}).get('status') if row else None,
                     auto_eligible=body is not None, automatic_issues=issues,
@@ -213,9 +237,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--snapshot', type=Path, default=PROJECT/'data/realplay3_snapshot')
     parser.add_argument('--database', type=Path, default=PROJECT/'data/library.sqlite3')
+    parser.add_argument('--output', type=Path, default=PROJECT/'reports/round26-replay.json')
     args = parser.parse_args()
     report = replay(args.snapshot, args.database)
-    destination = PROJECT/'reports/round26-replay.json'
+    destination = args.output
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(json.dumps(report, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
     print(json.dumps(report, ensure_ascii=False, indent=2))

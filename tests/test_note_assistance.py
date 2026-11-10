@@ -71,7 +71,7 @@ class NoteEvidenceTests(unittest.TestCase):
 
     def test_source_conflict_blocks_even_if_sum_matches_database(self):
         n=note_evidence(dict(selection=dict(fields=fields(total_notes=12))),fixture.values(),
-                        dict(total_notes=11,notes_verified=1),identity_confirmed=True)
+                        dict(total_notes=11,notes_verified=1,notes_source='game_screen'),identity_confirmed=True)
         self.assertTrue(n['selected_database_conflict']);self.assertIsNone(n['conditional_score'])
 
     def test_differences_are_generic_no_two_note_exception(self):
@@ -184,12 +184,15 @@ class AssistanceTests(unittest.TestCase):
             self.assertIsNone(catalog.match_official(f,source_confirmed=True)['confirmed_song_id'])
         finally:catalog.close()
 
-    def test_official_low_confidence_notes_or_conflict_never_bind(self):
+    def test_official_low_confidence_notes_abstain_but_csv_difference_can_bind(self):
         self.official();catalog=ReadOnlyCatalog(self.db)
         try:
             f=fields();f['total_notes']['confidence']=.6
             self.assertIsNone(catalog.match_official(f,source_confirmed=True)['confirmed_song_id'])
             f=fields(total_notes=1192)
+            self.assertIsNotNone(catalog.match_official(f,source_confirmed=True)['confirmed_song_id'])
+            for gd in catalog.difficulties.values():
+                gd['notes_source'] = 'game_screen'
             self.assertIsNone(catalog.match_official(f,source_confirmed=True)['confirmed_song_id'])
         finally:catalog.close()
 
@@ -295,7 +298,7 @@ class AssistanceTests(unittest.TestCase):
 
     def test_source_conflict_rejects_formal_even_when_judgments_match_canonical(self):
         with closing(sqlite3.connect(self.db)) as db, db:
-            db.execute("INSERT INTO game_difficulties(song_id,difficulty,game_level,level_source,total_notes,notes_source,notes_verified) VALUES(1,'HARD',17,'manual',12,'manual',1)")
+            db.execute("INSERT INTO game_difficulties(song_id,difficulty,game_level,level_source,total_notes,notes_source,notes_verified) VALUES(1,'HARD',17,'manual',12,'game_screen',1)")
         b=self.body(values=fixture.values(perfect=11,cool=1,max_combo=12,total_notes=12))
         p=self.service.preview(b)
         self.assertIn('selected_database_notes_conflict',{i['code'] for i in p['issues']})

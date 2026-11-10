@@ -1,5 +1,47 @@
 # 固定 OCR 回歸考卷與失敗擷取
 
+## Round 2.7：以結算畫面為準
+
+自動儲存以兩張不同 capture/hash、15 秒範圍內欄位相同且信心至少 0.95 的
+完整本人結算為準。舊 parser payload 缺少雙幀證據也不能直接自動儲存。
+仍須唯一歌曲身份、明確來源與可靠的選歌 title/difficulty/game_level；
+不再要求曲庫 notes_verified、曲庫總數，或自訂曲的選歌總數/時長已驗證。
+新 storage policy 排除升級前的 Pending，不會自動補存歷史積件。
+
+`result_consistency` 的必要檢查包括非負整數判定、完成結果非空、可讀原始畫面
+總數與判定合計一致（FAILED 只允許小於等於全曲總數）、連擊不超過判定合計
+及 Perfect+Cool、非負整數遊戲分數，以及顯示的 FULL COMBO/ALL PERFECT
+與判定、連擊、完成狀態一致。GAME OVER 與本人成績完成狀態亦須一致。
+原始選歌總數若存在也會交叉檢查；低信心的非空總數保留待確認。
+`official_catalog_fill` 與其他 catalog 標記的總數不算畫面證據。
+結果額外顯示的總數/特殊狀態也必須在雙幀中一致，消失不能當成一致。
+
+CSV 或一般 manual 曲庫總數與畫面不符時，保留曲庫原值；正式成績的 immutable
+`evidence_json.screen_note_observation` 分開記錄 `provenance: screen_observed`、
+完成判定合計與推導方式，`catalog_note_disagreement` 記錄來源及雙方數值。
+不新增資料表，schema 維持 10；人工作業確認只改 sidecar，不寫入曲庫。
+新建缺少的譜面列可使用既有 `game_screen` 來源，既有列絕不覆寫。
+只有明確 screen 來源的曲庫總數，或先前已正式提交/人工確認的完成畫面觀測，
+會因不符而阻擋自動儲存。`notes_verified=1` 本身不代表來自畫面。
+匯入總數不符也不能單獨阻擋歌曲身份比對；同名/多 Pack 歧義仍保留待確認。
+
+這組標籤沒有覆蓋評級閾值邊界，也沒有完整連擊過程，無法可靠推出評級或
+原遊戲分數公式；兩項公式檢查明確記為 skipped，沒有猜測或降低 OCR 門檻。
+未綁定身份（含 guest/沒有選歌的路徑）仍保留 Pending。
+沒有可見總數時，雙幀相同且仍符合界限的系統性錯字可能無法被一致性規則發現。
+標籤集 100% 完全相同比率不是未知畫面正確率或自動儲存覆蓋率保證。
+
+新增標籤前須目視核對 PNG。Round 2.7 補回既有 Session 3 SHA-256 對應圖片，
+另標 Yasashisa no Riyuu、地獄之門Remix，以及 8 張經核對的補充樣本。
+result-005 是動畫，只標可見 footer 並要求 incomplete；result-018 右側評級
+上標被裁掉，grade 保留 null，其他可見數字照實評分。舊答案沒有修改。
+中英合併 footer 改用分離白色歌名的 OCR；若與頁面文字矛盾，保留原讀值並
+標明 review reason，不能因靜態答案讀對而取得自動儲存資格。
+
+`python -X utf8 -m tools.note_conflicts` 使用 `mode=ro`/`query_only=ON` 與前後
+SHA-256 分析匯入來源和已確認觀測，對同一 session 去重。回放工具新增
+`--output`；自動合格結果會在拋棄式資料庫副本實際執行正式提交，來源快照不寫入。
+
 Round 2.5 增加失敗診斷去噪、未完成結算幀處理、評級字形 ROI 與資訊性計時。
 Round 2.6 增加完整結算保留、唯一一致候選綁定、Pack 推論持久化與單字元 footer 重讀。
 自動提交的信心門檻仍為 0.95，仍要求兩張新鮮且欄位相同的結算幀。

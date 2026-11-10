@@ -16,6 +16,65 @@ COLUMNS = {'max_combo': (325, 425), 'perfect': (425, 523), 'cool': (523, 595),
            'bad': (595, 671), 'miss': (671, 746), 'game_score': (837, 940), 'grade': (940, 1024)}
 
 
+def row_cell(tokens, left, right, y, *, numeric=True):
+    found = in_region(tokens, (left, y-11, right, y+11))
+    if not found and numeric:
+        # A right-aligned glyph may straddle a column edge after normalization.
+        # Accept only one wholly numeric token within the 3px box rounding
+        # margin; never widen the ROI into the adjacent accuracy percentage.
+        found = [t for t in in_region(tokens, (left-3, y-11, right+3, y+11))
+                 if re.fullmatch(r'\d{1,10}', t['text'].strip())
+                 and not any(a <= center(t)[0] <= b
+                             for a, b in COLUMNS.values() if (a, b) != (left, right))]
+    return cell(found, numeric=numeric)
+
+
+def refine_footer_title(image, engine, original):
+    """Separate the cyan label from a merged bilingual footer OCR line.
+
+    The isolated white title is read without a vocabulary or catalog. Conflicting
+    page text remains an explicit review reason, even when the line is readable.
+    """
+    from PIL import Image, ImageOps
+    import numpy as np
+
+    reader = getattr(engine, 'recognize_line', None)
+    evidence = original.get('evidence') or []
+    if reader is None or len(evidence) != 1:
+        return original, []
+    token = evidence[0]
+    if not re.match(r'^歌曲名\s*[:：]\s*\S', token['text']):
+        return original, []
+    xs, ys = zip(*token['box'])
+    box = (int(min(xs)), int(min(ys))-2, int(max(xs))+2, min(800, int(max(ys))+2))
+    pixels = np.array(image.crop(box).convert('RGB')).astype('int16')
+    r, g, b = [pixels[:, :, i] for i in range(3)]
+    cyan = Image.fromarray((((b-r > 60) & (g-r > 30) & (b > 160))*255).astype('uint8'))
+    label = cyan.getbbox()
+    if not label:
+        return original, []
+    mask = (pixels.min(axis=2) > 180) & (pixels.max(axis=2)-pixels.min(axis=2) < 65)
+    mask[:, :label[2]+2] = False
+    ink = Image.fromarray((mask*255).astype('uint8'))
+    bounds = ink.getbbox()
+    if not bounds:
+        return original, []
+    view = ImageOps.expand(ImageOps.invert(ink.crop(bounds)), border=3, fill=255).convert('RGB')
+    found = reader(view.resize((view.width*3, view.height*3)),
+                   origin=(box[0]+bounds[0]-3, box[1]+bounds[1]-3), scale=3)
+    diagnostic = [dict(field='title', tokens=found, region=box,
+                       preprocessing='isolated_white_footer_title')]
+    if len(found) != 1 or found[0]['confidence'] < AUTO_CONFIDENCE or not found[0]['text'].strip():
+        return original, diagnostic
+    title = found[0]['text'].strip()
+    if title == original['value']:
+        return original, diagnostic
+    field = value(title, found, method='isolated_footer_title',
+                  reason='footer_title_page_roi_conflict_requires_review')
+    field['original_reading'] = copy.deepcopy(original)
+    return field, diagnostic
+
+
 def incomplete_result(ocr):
     """Missing local row/digits cannot supply complete local score evidence.
 
@@ -212,9 +271,15 @@ def parse_result(tokens, player_name='TC'):
         row = dict(y=y, name_box=name['box'])
         fields['player_name'] = value(name['text'].strip(), [name],
                                       reason='low_confidence' if name['confidence'] < .9 else None)
+        badges = [t for t in in_region(tokens, (0, y-32, 1024, y+32))
+                  if compact(t['text']) in ('FULLCOMBO', 'ALLPERFECT')]
+        if len(badges) == 1:
+            fields['result_status'] = value(
+                'ALL PERFECT' if compact(badges[0]['text']) == 'ALLPERFECT' else 'FULL COMBO', badges)
+        elif badges:
+            errors.append('ambiguous_local_result_status')
         for key, (left, right) in COLUMNS.items():
-            found = in_region(tokens, (left, y-11, right, y+11))
-            fields[key] = cell(found, numeric=key != 'grade')
+            fields[key] = row_cell(tokens, left, right, y, numeric=key != 'grade')
         markers = [t for t in in_region(tokens, (0, y-32, 57, y+32))
                    if compact(t['text']) in ('GAME', 'OVER', 'GAMEOVER')]
         failed = any('OVER' in compact(t['text']) and t['confidence'] >= .9 for t in markers)
@@ -231,7 +296,7 @@ def parse_result(tokens, player_name='TC'):
     player_rows = []
     for index, name in enumerate(rows):
         _, y = center(name)
-        row_fields = {key: cell(in_region(tokens, (left,y-11,right,y+11)), numeric=key!='grade')
+        row_fields = {key: row_cell(tokens, left, right, y, numeric=key!='grade')
                       for key,(left,right) in COLUMNS.items()}
         markers = [t for t in in_region(tokens,(0,y-32,57,y+32))
                    if compact(t['text']) in ('GAME','OVER','GAMEOVER')]
@@ -338,6 +403,8 @@ def recognize_result(image, engine, player_name='TC', tokens=None):
                         and re.fullmatch(r'[A-Za-z0-9\u3400-\u9fff]', found[0]['text'].strip())):
                     tokens.extend(found)
     final = parse_result(tokens, player_name)
+    final['fields']['title'], title_views = refine_footer_title(normalized, engine, final['fields']['title'])
+    rereads.extend(title_views)
     if grade_reading is not None:
         final['fields']['grade'] = grade_reading
         for own in final.get('player_rows', []):

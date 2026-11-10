@@ -62,7 +62,7 @@ class IdentityTests(unittest.TestCase):
         c.index['joint'] = {10}
         c.difficulties[(10, 'HARD')] = dict(
             difficulty_id=100, game_level=17, total_notes=821, duration_seconds=96,
-            level_source='manual', notes_source='manual', notes_verified=1, duration_verified=1,
+            level_source='manual', notes_source='game_screen', notes_verified=1, duration_verified=1,
         )
         for key, wrong in (('game_level', 18), ('total_notes', 822), ('duration_seconds', 97)):
             fields = selected()['fields']

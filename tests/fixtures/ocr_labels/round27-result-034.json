@@ -1,0 +1,18 @@
+{
+  "image": "round27/result-034.png",
+  "sha256": "f78bea5590497785164ac3db4590718e817653a854875f93d4c828495b1cee6b",
+  "screen_type": "results",
+  "fields": {
+    "perfect": 22,
+    "cool": 0,
+    "bad": 0,
+    "miss": 0,
+    "max_combo": 22,
+    "game_score": 503,
+    "grade": "A++",
+    "completion_status": "COMPLETED",
+    "player_name": "TC",
+    "title": "Friends No More - AstraNova"
+  },
+  "annotation": "Manually checked PNG table and footer in Round 2.7. Difficulty is not displayed. Footer level omitted for multiplayer; result-018 grade suffix is clipped at right edge and is not labelled. Result-005 is an incomplete animated row, only footer fields are labelled."
+}

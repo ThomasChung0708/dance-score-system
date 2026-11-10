@@ -1,0 +1,11 @@
+{
+  "image": "round27/result-005.png",
+  "sha256": "987c65ac5dcd452f6e0357dc229d7b5c5119605451a5c77b7df0ba8923c240d6",
+  "screen_type": "results",
+  "fields": {
+    "title": "Crisscrosser",
+    "game_level": 39
+  },
+  "annotation": "Manually checked PNG table and footer in Round 2.7. Difficulty is not displayed. Footer level omitted for multiplayer; result-018 grade suffix is clipped at right edge and is not labelled. Result-005 is an incomplete animated row, only footer fields are labelled.",
+  "expect_incomplete": true
+}

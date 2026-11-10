@@ -1,0 +1,19 @@
+{
+  "image": "realplay3_yasashisa_result.png",
+  "sha256": "5bab877e6203d3f6055a1fe50a5ef7a10718a29f68eb897f20cf3b385d832917",
+  "screen_type": "results",
+  "fields": {
+    "title": "Yasashisa no Riyuu",
+    "game_level": 13,
+    "max_combo": 648,
+    "perfect": 680,
+    "cool": 1,
+    "bad": 2,
+    "miss": 1,
+    "game_score": 47477,
+    "grade": "A+",
+    "completion_status": "COMPLETED",
+    "player_name": "TC"
+  },
+  "annotation": "Manually transcribed complete visible TC row and footer from the session-3 original PNG in Round 2.7. Difficulty is not displayed."
+}

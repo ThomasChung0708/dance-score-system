@@ -23,6 +23,28 @@ from dance_results.sqlite_safety import audit,check_integrity
 from dance_results.migrations_v7 import migrate_v6
 
 
+def attach_auto_frames(test, row, *, persist_review=True):
+    """Actual disposable PNGs support the two-frame requirement in auto tests."""
+    from PIL import Image
+    from dance_results.monitor_ocr import image_hash
+    from dance_results.ocr_temporal import ResultConsistency
+
+    consistency = ResultConsistency()
+    for index, color in enumerate(('gray', 'navy'), 1):
+        image = Image.new('RGB', (1024, 800), color)
+        obs = dict(state='RESULT', frame_hash=image_hash(image), result_ocr=copy.deepcopy(row['ocr']))
+        consistency.observe(obs, test.sid, index, image)
+    row['ocr'] = obs['result_ocr']
+    test.session['result']['frame_hash'] = obs['frame_hash']
+    row['locked_session'] = copy.deepcopy(test.session)
+    folder = test.output/'sessions'/test.sid
+    consistency.save(folder, row['ocr'])
+    atomic_json(folder/'session.json', test.session)
+    if persist_review:
+        atomic_json(folder/'result-review.json', row)
+    return row
+
+
 class Phase5CTests(unittest.TestCase):
     setUp=fixture.ReviewPersistenceTests.setUp
     tearDown=fixture.ReviewPersistenceTests.tearDown
@@ -60,7 +82,7 @@ class Phase5CTests(unittest.TestCase):
         atomic_json(self.output/'sessions'/self.sid/'session.json',self.session)
         row=self.service._read(self.sid)[1];row.update(locked_session=copy.deepcopy(self.session),ocr=copy.deepcopy(self.ocr))
         row['draft']['song_id']=sid
-        atomic_json(self.output/'sessions'/self.sid/'result-review.json',row)
+        attach_auto_frames(self, row)
         self.row=row
         return row
 
@@ -148,9 +170,9 @@ class Phase5CTests(unittest.TestCase):
         row['ocr']['local_player_status']='UNKNOWN'
         self.assertIn('automatic_local_player_uncertain',automatic_request(self.service,row)[1])
 
-    def test_auto_never_allows_note_difference_or_prior_human_exception(self):
+    def test_auto_never_allows_screen_total_difference_or_prior_human_exception(self):
         row=self.official_auto(notes=13)
-        self.assertIn('automatic_note_discrepancy',automatic_request(self.service,row)[1])
+        self.assertIn('automatic_consistency_judgment_sum_selection',automatic_request(self.service,row)[1])
         row['draft']['note_review']=dict(authorized=True);row['revision']=1
         self.assertTrue(automatic_request(self.service,row)[1])
 
@@ -243,7 +265,8 @@ class Phase5CTests(unittest.TestCase):
         self.clone_session()
         self.service.save(self.body(song_id=2,relative_path='Pack A\\Folder B',
             values=fixture.values(perfect=12,cool=1,total_notes=13,game_level=20,duration_seconds=95),duration_verified=True))
-        self.clone_session();request,issues=automatic_request(self.service,self.row)
+        self.clone_session();attach_auto_frames(self, self.row)
+        request,issues=automatic_request(self.service,self.row)
         self.assertFalse(issues,issues);self.assertEqual(request['song_id'],1)
         r=self.auto_store().submit_verified(self.sid)['record']
         self.assertEqual(r['song_id'],1);self.assertEqual(r['confirmation_method'],'verified_auto')

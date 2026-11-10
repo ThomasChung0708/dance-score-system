@@ -75,11 +75,17 @@ class SubmissionTests(unittest.TestCase):
         return store.submit({**body,'submission_token':preview['submission_token'],'submit_acknowledge':True})
 
     def clone_session(self):
+        was_automatic = bool(getattr(self, 'row', {}).get('ocr', {}).get('temporal_validation'))
         sid=str(uuid4());session=copy.deepcopy(self.session);session['session_id']=sid
         folder=self.output/'sessions'/sid;folder.mkdir(parents=True)
         shutil.copyfile(self.output/'sessions'/self.sid/'result.png',folder/'result.png')
-        atomic_json(folder/'session.json',session);row=self.service.ingest(session,self.ocr)
-        self.sid=sid;self.session=session;self.row=row
+        self.sid=sid;self.session=session
+        ocr = self.ocr
+        if was_automatic:
+            from test_phase5c import attach_auto_frames
+            prepared = attach_auto_frames(self, dict(ocr=copy.deepcopy(ocr)), persist_review=False)
+            ocr = prepared['ocr']
+        atomic_json(folder/'session.json',session);self.row=self.service.ingest(session,ocr)
 
     def test_completed_submission_backup_snapshot_core_and_history(self):
         body=self.approved();result=self.commit(body);record=result['record']

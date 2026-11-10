@@ -1,0 +1,18 @@
+{
+  "image": "round27/result-025.png",
+  "sha256": "8c585d976021391125723964defd26b57ab82e8d2d78fa6b816ad999a0b6d14d",
+  "screen_type": "results",
+  "fields": {
+    "perfect": 981,
+    "cool": 37,
+    "bad": 0,
+    "miss": 0,
+    "max_combo": 1018,
+    "game_score": 71608,
+    "grade": "A++",
+    "completion_status": "COMPLETED",
+    "player_name": "TC",
+    "title": "Macuilxochitl"
+  },
+  "annotation": "Manually checked PNG table and footer in Round 2.7. Difficulty is not displayed. Footer level omitted for multiplayer; result-018 grade suffix is clipped at right edge and is not labelled. Result-005 is an incomplete animated row, only footer fields are labelled."
+}

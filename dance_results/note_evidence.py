@@ -4,6 +4,7 @@ No counter is replaced with judgment totals. This module does not authorize a
 formal submission or define exceptions to the game's unresolved counting rules.
 """
 from .scoring import calculate, percentage_display
+from .result_consistency import screen_catalog
 
 
 def positive(value):
@@ -53,13 +54,13 @@ def note_evidence(session, values, difficulty=None, *, identity_confirmed=False,
     supplied = positive(values.get('total_notes'))
     verified = supplied if identity_confirmed and supplied is not None and (
         (database_verified and supplied == database) or
-        (manual_notes_verified is True and not database_verified)) else None
+        (manual_notes_verified is True and not screen_catalog(gd))) else None
     total = judged(values)
     # A catalog comparison can warn before the human identity checkbox is
     # checked. It remains a candidate basis, never a verified formal MAX.
     comparison_total = verified if verified is not None else (
         database if database_verified else None)
-    source_conflict = bool(selected is not None and database_verified and selected != database)
+    source_conflict = bool(selected is not None and screen_catalog(gd) and selected != database)
     discrepancy = bool(values.get('completion_status') == 'COMPLETED' and
                        total is not None and comparison_total is not None and total != comparison_total)
     if source_conflict:status = 'source_conflict_pending'

@@ -131,14 +131,14 @@ class CustomMaxTests(unittest.TestCase):
         self.assertEqual(r['max_score'],22);self.assertEqual(r['lamp_status'],'AC')
         self.assertEqual(r['confirmation_method'],'verified_auto')
 
-    def test_csv_difference_automatic_rollout_remains_conservative(self):
+    def test_screen_selection_difference_automatic_remains_conservative(self):
         self.official_auto();folder,row=self.service._read(self.sid)
         # Both raw own-row and extracted fields must be consistently changed.
         row['ocr']['fields']['bad']['value']=1
         for pr in row['ocr']['player_rows']:
             if pr['name']=='TC':pr['fields']['bad']['value']=1
         atomic_json(folder/'result-review.json',row)
-        with self.assertRaisesRegex(LibraryError,'pending_live_validation'):
+        with self.assertRaisesRegex(LibraryError,'automatic_consistency_judgment_sum_selection'):
             self.auto_store().submit_verified(self.sid)
 
     def test_cross_session_conflict_blocks_automatic_even_if_catalog_matches(self):

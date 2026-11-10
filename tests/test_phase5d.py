@@ -237,6 +237,8 @@ class DownloadTests(unittest.TestCase):
         folder,row=self.service._read(self.sid);row.update(locked_session=copy.deepcopy(self.session),ocr=self.ocr)
         row['draft']['song_id']=None
         atomic_json(folder/'session.json',self.session);atomic_json(folder/'result-review.json',row)
+        from test_phase5c import attach_auto_frames
+        attach_auto_frames(self, row)
         self.begin();source=self.add('Pack A','Folder A','dwi');self.poll()
         binding=verified_download_binding(self.service,self.service._read(self.sid)[1])
         self.assertEqual(binding['song_id'],1)

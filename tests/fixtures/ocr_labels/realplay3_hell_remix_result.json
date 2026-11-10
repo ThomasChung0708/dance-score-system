@@ -1,0 +1,19 @@
+{
+  "image": "realplay3_hell_remix_result.png",
+  "sha256": "a1281bfaf0dee3973be7c9546f5061676181253daea399ba3a3d61ea4b0a95ef",
+  "screen_type": "results",
+  "fields": {
+    "title": "地獄之門Remix",
+    "game_level": 14,
+    "max_combo": 1146,
+    "perfect": 1144,
+    "cool": 2,
+    "bad": 0,
+    "miss": 0,
+    "game_score": 81024,
+    "grade": "A++",
+    "completion_status": "COMPLETED",
+    "player_name": "TC"
+  },
+  "annotation": "Manually transcribed complete visible TC row and footer from the session-3 original PNG in Round 2.7. Difficulty is not displayed."
+}

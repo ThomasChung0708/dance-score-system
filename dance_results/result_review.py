@@ -311,7 +311,8 @@ class ResultReviews:
                 if gd:
                     if gd['game_level'] is not None and values.get('game_level') != gd['game_level']:
                         issues.append(dict(field='game_level', code='verified_catalog_level_conflict'))
-                    if gd['total_notes'] is not None and gd['notes_verified'] and values.get('total_notes') != gd['total_notes']:
+                    from .result_consistency import screen_catalog
+                    if screen_catalog(gd) and values.get('total_notes') != gd['total_notes']:
                         issues.append(dict(field='total_notes', code='verified_catalog_notes_conflict'))
             fields = selected.get('fields') or {}
             for key in ('title', 'game_level'):

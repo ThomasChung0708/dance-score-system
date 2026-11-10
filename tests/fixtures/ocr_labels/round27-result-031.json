@@ -1,0 +1,18 @@
+{
+  "image": "round27/result-031.png",
+  "sha256": "0e698ae4868989c337b46a8218c28b7d7f6c24acf91d13949f3acdc0c5d8d30b",
+  "screen_type": "results",
+  "fields": {
+    "perfect": 1043,
+    "cool": 26,
+    "bad": 3,
+    "miss": 5,
+    "max_combo": 508,
+    "game_score": 63893,
+    "grade": "A+",
+    "completion_status": "COMPLETED",
+    "player_name": "TC",
+    "title": "PARANOiA Revolution"
+  },
+  "annotation": "Manually checked PNG table and footer in Round 2.7. Difficulty is not displayed. Footer level omitted for multiplayer; result-018 grade suffix is clipped at right edge and is not labelled. Result-005 is an incomplete animated row, only footer fields are labelled."
+}

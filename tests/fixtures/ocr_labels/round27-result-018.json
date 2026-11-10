@@ -1,0 +1,18 @@
+{
+  "image": "round27/result-018.png",
+  "sha256": "48f418adaea78ecf75e1249d4777ef2953bdead367a5898e61ed355540d79f41",
+  "screen_type": "results",
+  "fields": {
+    "perfect": 921,
+    "cool": 21,
+    "bad": 3,
+    "miss": 2,
+    "max_combo": 742,
+    "game_score": 62323,
+    "grade": null,
+    "completion_status": "COMPLETED",
+    "player_name": "TC",
+    "title": "HAERETICUS"
+  },
+  "annotation": "Manually checked PNG table and footer in Round 2.7. Difficulty is not displayed. Footer level omitted for multiplayer; result-018 grade suffix is clipped at right edge and is not labelled. Result-005 is an incomplete animated row, only footer fields are labelled."
+}

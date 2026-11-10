@@ -6,6 +6,8 @@ import sqlite3
 import unicodedata
 from pathlib import Path
 
+from .result_consistency import screen_catalog
+
 
 def normalize(value):
     return ' '.join(unicodedata.normalize('NFKC', value or '').casefold().split())
@@ -48,8 +50,9 @@ class ReadOnlyCatalog:
         """K catalog assistance requires an explicit Official source and chart.
 
         A title search alone never binds. Missing optional screen notes can be
-        filled from the catalog, but observed notes must agree, even at low OCR
-        confidence. Unknown metadata on a namesake cannot eliminate it.
+        filled from the catalog. Only screen-derived catalog notes constrain
+        observed notes; imported counts cannot disqualify a chart identity.
+        Unknown metadata on a namesake cannot eliminate it.
         """
         def reliable(key):
             item = fields.get(key, {})
@@ -63,10 +66,12 @@ class ReadOnlyCatalog:
             missing = []; conflicts = []
             if not src or src['mode'] != 'K':missing.append('official_k_source')
             if not gd:missing.append('catalog_game_difficulty')
-            elif gd['game_level'] is None or not gd['level_source'] or not gd['notes_source'] or not gd['notes_verified'] or gd['total_notes'] is None:
+            elif gd['game_level'] is None or not gd['level_source']:
                 missing.append('verified_catalog_chart')
             else:
                 for key in ('game_level', 'total_notes'):
+                    if key == 'total_notes' and not screen_catalog(gd):
+                        continue
                     observed = fields.get(key, {}).get('value')
                     if observed is not None and observed != gd[key]:conflicts.append(key)
                 bpm = fields.get('bpm', {}).get('value')
@@ -133,7 +138,7 @@ class ReadOnlyCatalog:
                 for name, source in [('game_level', 'level_source'), ('total_notes', 'notes_source')]:
                     if gd[name] is None or gd[source] is None or (name == 'total_notes' and not gd['notes_verified']):
                         missing.append('verified_database_'+name)
-                    elif fields.get(name, {}).get('value') is not None and gd[name] != fields[name]['value']:
+                    elif (name != 'total_notes' or screen_catalog(gd)) and fields.get(name, {}).get('value') is not None and gd[name] != fields[name]['value']:
                         conflicts.append(name)
             # Schema 5 has no confirmed game-duration columns. Never substitute CSV dur* / audio length.
             if not gd or not gd.get('duration_verified') or gd.get('duration_seconds') is None:
@@ -163,7 +168,7 @@ class ReadOnlyCatalog:
                     candidate_count=len(candidates), candidates=candidates, reasons=reasons)
 
     def match_identity(self, fields, pack_id=None, source_type=None):
-        """Bind one consistent identity; missing chart verification still gates auto.
+        """Bind one consistent identity without requiring library note verification.
 
         Unknown chart metadata cannot eliminate a namesake. A Pack constraint is
         applied only after comparing all title candidates, so a contradiction
@@ -178,6 +183,8 @@ class ReadOnlyCatalog:
             gd = candidate.get('difficulty') or {}
             conflicts = set(candidate['conflicts']) - {'duration_seconds'}
             for key in ('game_level', 'total_notes', 'duration_seconds'):
+                if key == 'total_notes' and not screen_catalog(gd):
+                    continue
                 observed = fields.get(key, {}).get('value')
                 known = gd.get(key)
                 if observed is not None and known is not None and observed != known:
