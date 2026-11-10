@@ -4,6 +4,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import sqlite3
 from pathlib import Path
 import threading
 from uuid import UUID, uuid5, NAMESPACE_URL
@@ -73,9 +74,22 @@ class ResultReviews:
 
     def list(self):
         with self.lock:
+            # SQLite receipts are authoritative even if a crash happened after
+            # commit and before the review sidecar could be updated. Read only;
+            # listing reviews must never rewrite historical evidence.
+            saved = set()
+            if self.database.is_file():
+                connection = sqlite3.connect(self.database.as_uri()+'?mode=ro', uri=True)
+                try:
+                    connection.execute('PRAGMA query_only=ON')
+                    saved = {r[0] for r in connection.execute('SELECT session_id FROM play_records')}
+                finally:
+                    connection.close()
             rows = []
             for path in (self.directory/'sessions').glob('*/session.json'):
                 try:
+                    if path.parent.name in saved:
+                        continue
                     if json.loads(path.read_text(encoding='utf8')).get('status') != 'pending_result':
                         continue
                     folder, session, _, sha = self._source(path.parent.name)
@@ -95,6 +109,20 @@ class ResultReviews:
             return dict(results=sorted(rows, key=lambda r: r.get('started_at') or '', reverse=True),
                         jobs=copy.deepcopy(self.jobs), writes_play_record=False)
 
+    def record_automatic_submission(self, record):
+        """Reflect a committed receipt without changing the locked OCR/session."""
+        if record['confirmation_method'] != 'verified_auto':
+            return
+        with self.lock:
+            folder, row = self._read(record['session_id'])
+            if (row['review_id'] != record['review_id'] or
+                    row['screenshot_sha256'] != record['screenshot_sha256']):
+                raise LibraryError('Committed result evidence differs from review', 409)
+            row.update(status='saved_verified_auto', writes_play_record=True,
+                       generates_play_record=True, record_id=record['record_id'],
+                       confirmed_at=record['confirmed_at'])
+            atomic_json(folder/'result-review.json', row)
+
     def ingest(self, session, ocr):
         with self.lock:
             folder, stored, image, sha = self._source(session['session_id'])
@@ -113,6 +141,23 @@ class ResultReviews:
                 notes_verified=bool(stored.get('song_id') and binding in ('confirmed_manual', 'confirmed_manual_reference', 'unique_verified_candidate', 'confirmed_official_catalog')),
                 duration_verified=bool(stored.get('song_id') and binding in ('confirmed_manual', 'confirmed_manual_reference', 'unique_verified_candidate') and values.get('duration_seconds')),
                 player_verified=False, identity_reviewed=False)
+            if draft['song_id'] is None and selected_fields:
+                # A clearer result title can recover a review's song binding.
+                # Keep the original locked selection/confidences intact: this
+                # assistance grants no automatic submission authority.
+                fields = copy.deepcopy(selection.get('ocr_fields', selected_fields))
+                observed_title = ocr['fields'].get('title') or {}
+                if normalize(observed_title.get('value')) == normalize(fields.get('title', {}).get('value')):
+                    fields['title'] = copy.deepcopy(observed_title)
+                pack = selection.get('pack') or {}
+                catalog = ReadOnlyCatalog(self.database)
+                try:
+                    match = catalog.match_identity(fields,
+                        pack.get('pack_id') if pack.get('status') == 'confirmed' else None,
+                        selection.get('source_type'))
+                    draft['song_id'] = match.get('confirmed_song_id')
+                finally:
+                    catalog.close()
             row = dict(schema_version=1, review_id=str(uuid5(NAMESPACE_URL, 'dance-result:'+stored['session_id']+':'+sha)),
                 session_id=stored['session_id'], screenshot_sha256=sha, catalog_path=str(self.database),
                 created_at=utc(), revision=0, status='pending_review', ocr=copy.deepcopy(ocr),

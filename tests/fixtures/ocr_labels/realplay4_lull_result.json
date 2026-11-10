@@ -1,0 +1,19 @@
+{
+  "image": "realplay4_lull_result.png",
+  "sha256": "e3596660eca7d1cc069e7c523fdc81818d441aa73f50dd9fa9416555be060620",
+  "screen_type": "results",
+  "fields": {
+    "title": "lull ~そして僕らは~",
+    "game_level": 18,
+    "max_combo": 708,
+    "perfect": 856,
+    "cool": 17,
+    "bad": 1,
+    "miss": 0,
+    "game_score": 58198,
+    "grade": "A+",
+    "completion_status": "COMPLETED",
+    "player_name": "TC"
+  },
+  "annotation": "Session 4 original PNG; visible TC row/footer manually verified in Round 2.8. Title uses visible ASCII tildes and spacing; no catalog subtitle."
+}

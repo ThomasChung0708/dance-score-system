@@ -40,6 +40,10 @@ def refine_footer_title(image, engine, original):
 
     reader = getattr(engine, 'recognize_line', None)
     evidence = original.get('evidence') or []
+    if reader is not None and original.get('confidence', 0) < AUTO_CONFIDENCE:
+        refined, diagnostics = refine_mixed_title_prefix(image, reader, original)
+        if diagnostics:
+            return refined, diagnostics
     if reader is None or len(evidence) != 1:
         return original, []
     token = evidence[0]
@@ -75,6 +79,52 @@ def refine_footer_title(image, engine, original):
     return field, diagnostic
 
 
+def refine_mixed_title_prefix(image, reader, original):
+    """Read an isolated Latin word before a Japanese footer, without a lexicon.
+
+    A full bilingual line can omit thin Latin strokes. A visible word gap
+    supplies the crop boundary; neither catalog matches nor labels set text or
+    confidence. Keep the original lower confidence for the untouched suffix.
+    """
+    import numpy as np
+
+    found = re.fullmatch(r'([A-Za-z1ı|]+)\s*([~〜～][\u3040-\u30ff\u3400-\u9fff]{4,}[~〜～])',
+                         original.get('value') or '')
+    evidence = original.get('evidence') or []
+    if not found or not evidence or original.get('reason'):
+        return original, []
+    token = evidence[-1]
+    xs, ys = zip(*token['box'])
+    box = (int(min(xs)), int(min(ys))-2, int(max(xs))+2, min(800, int(max(ys))+2))
+    pixels = np.array(image.crop(box).convert('RGB')).astype('int16')
+    mask = (pixels.min(axis=2) > 180) & (pixels.max(axis=2)-pixels.min(axis=2) < 65)
+    columns = mask.sum(axis=0)
+    tall = [i for i, n in enumerate(columns) if n >= 6]
+    if not tall:
+        return original, []
+    start = tall[0]
+    end = None
+    for x in range(start+2, len(columns)-4):
+        if not columns[x:x+4].any():
+            end = x
+            break
+    if end is None or not 10 <= end-start <= 100:
+        return original, []
+    region = (box[0]+max(0, start-2), box[1], box[0]+end+2, box[3])
+    crop = image.crop(region)
+    tokens = reader(crop.resize((crop.width*3, crop.height*3)), origin=region[:2], scale=3)
+    diagnostic = [dict(field='title', tokens=tokens, region=region,
+                       preprocessing='isolated_latin_word_before_japanese')]
+    if (len(tokens) != 1 or tokens[0]['confidence'] < .9 or
+            not re.fullmatch(r'[A-Za-z]+', tokens[0]['text'].strip())):
+        return original, diagnostic
+    text = tokens[0]['text'].strip()+' '+found[2]
+    field = value(text, [*tokens, *evidence], method='mixed_footer_latin_word_roi')
+    field['confidence'] = min(original['confidence'], tokens[0]['confidence'])
+    field['original_reading'] = copy.deepcopy(original)
+    return field, diagnostic
+
+
 def incomplete_result(ocr):
     """Missing local row/digits cannot supply complete local score evidence.
 
@@ -86,7 +136,11 @@ def incomplete_result(ocr):
 
 
 def complete_reliable_result(ocr):
-    """A complete own row is worth retaining even without temporal confirmation."""
+    """Retain a readable own score independently of song identity confidence.
+
+    This is only a review-evidence gate. Temporal and automatic submission
+    continue to require every identity field at AUTO_CONFIDENCE.
+    """
     from .ocr_policy import result_required, RESULT_NONFATAL_ERRORS
 
     fields = ocr.get('fields') or {}
@@ -94,7 +148,7 @@ def complete_reliable_result(ocr):
             and not any(e not in RESULT_NONFATAL_ERRORS for e in ocr.get('errors', []))
             and all(fields.get(k, {}).get('value') is not None
                     and fields[k].get('confidence', 0) >= AUTO_CONFIDENCE
-                    and not fields[k].get('reason') for k in result_required(ocr)))
+                    and not fields[k].get('reason') for k in result_required(ocr) if k != 'title'))
 
 
 def superscript_plus_count(mask):

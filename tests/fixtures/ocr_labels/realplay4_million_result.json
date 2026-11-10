@@ -1,0 +1,19 @@
+{
+  "image": "realplay4_million_result.png",
+  "sha256": "f97ab127178dcaa76fa352565e48697ebff5b9930536d6295a2149e54c18d9d7",
+  "screen_type": "results",
+  "fields": {
+    "title": "Million of Bravery",
+    "game_level": 12,
+    "max_combo": 676,
+    "perfect": 667,
+    "cool": 9,
+    "bad": 0,
+    "miss": 0,
+    "game_score": 47713,
+    "grade": "A++",
+    "completion_status": "COMPLETED",
+    "player_name": "TC"
+  },
+  "annotation": "Session 4 original PNG; visible TC row/footer manually verified in Round 2.8. Title uses visible ASCII tildes and spacing; no catalog subtitle."
+}

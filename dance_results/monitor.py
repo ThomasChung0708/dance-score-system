@@ -11,8 +11,8 @@ import time
 
 from .library_service import LibraryError
 from .monitor_tracking import Tracker, ManualReferences, utc
-from .monitor_ocr import Analyzer, apply_selection, change_signature, change_amount, black_or_loading_frame
-from .ocr_matching import ReadOnlyCatalog
+from .monitor_ocr import Analyzer, SelectionFrameBuffer, apply_selection, change_signature, change_amount, black_or_loading_frame
+from .ocr_matching import ReadOnlyCatalog, normalize
 from .window_capture import Windows, WGCCapture, CaptureError
 from .ocr_failures import FailureCapture
 
@@ -190,6 +190,50 @@ class Monitor:
             result_consistency.save(folder, observed['result_ocr'])
         self.reviews.ingest(pending, observed['result_ocr'])
 
+    def _recover_fast_selection(self, analyzer, frames, observation, sampled, catalog):
+        """Re-read captured selection pixels once, before the PLAYING handoff.
+
+        A preview can corroborate a captured title, never supply missing song-
+        select fields. An observed newer different song stops the search.
+        """
+        if observation['state'] != 'PLAYING' or self.tracker.session or self.tracker.proposed == 'PLAYING':
+            return
+        preview = observation.get('playing_preview') or {}
+        if not preview.get('title'):
+            return
+        current = self.tracker.selection or self.tracker.fast_selection(sampled)
+        if (current and sampled-current['last_seen'] <= self.tracker.selection_ttl
+                and normalize(current['fields'].get('title', {}).get('value')) == normalize(preview['title'])):
+            return
+        for captured_at, image in frames.before(sampled):
+            recovered = analyzer.analyze(image, 'SONG_SELECT', full=False)
+            if recovered['state'] != 'SONG_SELECT':
+                continue
+            fields = recovered['selection']['fields']
+            title = fields.get('title') or {}
+            if not title.get('value') or title.get('reason'):
+                continue
+            if normalize(title['value']) != normalize(preview['title']):
+                self.tracker.invalidate_selection('newer_captured_selection_differs_from_playing')
+                break
+            from .pack_selection import infer_selected_pack
+            infer_selected_pack(recovered['selection'], catalog)
+            current_pack = self.tracker.current_pack or {}
+            pack_time = self.tracker.pack_observed_at
+            if (pack_time is not None and captured_at < pack_time
+                    and current_pack.get('status') == 'confirmed'
+                    and recovered['selection'].get('selected_pack_id') != current_pack.get('pack_id')):
+                self.tracker.log('selection_capture_rejected', reason='newer_pack_evidence',
+                                 frame_hash=recovered['frame_hash'])
+                break
+            recovered = apply_selection(recovered, image, self.tracker, catalog,
+                                        self.references, self.config.get('source_mode', 'auto'))
+            self.tracker.update_selection(recovered, captured_at)
+            self.tracker.log('selection_recovered_from_capture', captured_at=captured_at,
+                             playing_captured_at=sampled, frame_hash=recovered['frame_hash'])
+            break
+        frames.clear()
+
     def _run(self):
         capture = None
         current = None
@@ -203,6 +247,7 @@ class Monitor:
             analyzer = Analyzer(engine, self.config['player_name'])
             from .ocr_temporal import ResultConsistency
             result_consistency=ResultConsistency()
+            selection_frames=SelectionFrameBuffer()
             try:
                 import psutil
                 process = psutil.Process()
@@ -229,6 +274,7 @@ class Monitor:
                         except Exception:pass
                         capture = None; current = None
                         signature = None
+                        selection_frames.clear()
                         self._connection('window_not_found', '遊戲視窗已關閉；等候重新啟動。')
                         continue
                     current = live
@@ -263,12 +309,14 @@ class Monitor:
                     last_ocr = -1e9
                     last_full = -1e9
                     signature = None
+                    selection_frames.clear()
                 with self.lock:
                     self.window = current
                 if current['minimized']:
                     if self.connection != 'minimized':
                         with self.lock:
                             self.tracker.invalidate_selection('window_minimized')
+                        selection_frames.clear()
                     self._connection('minimized', '遊戲已最小化；暫停辨識，現有遊玩 Session 保留。')
                     self.stop_event.wait(.25)
                     continue
@@ -279,6 +327,7 @@ class Monitor:
                     try:capture.stop()
                     except Exception:pass
                     capture = None; current = None
+                    selection_frames.clear()
                     self.stop_event.wait(1)
                     continue
                 frame = capture.take()
@@ -289,9 +338,14 @@ class Monitor:
                             with self.lock:
                                 self.tracker.invalidate_selection('capture_stale')
                             signature = None
+                            selection_frames.clear()
                     self.stop_event.wait(.05)
                     continue
                 sampled, image = frame
+                recent = capture.take_recent() if hasattr(capture, 'take_recent') else [frame]
+                if not isinstance(recent, (list, tuple)):
+                    recent = [frame]
+                selection_frames.observe(recent, time.monotonic())
                 last_native = now
                 if black_or_loading_frame(image):
                     self._connection('capture_error','擷取到黑色或載入過場畫面；暫停辨識。')
@@ -330,6 +384,7 @@ class Monitor:
                     if self.downloads and self.downloads.generation!=catalog_generation:
                         refreshed=time.perf_counter();catalog.close();catalog=ReadOnlyCatalog(self.database);catalog_generation=self.downloads.generation
                         self.metrics['catalog_refresh_ms']=round((time.perf_counter()-refreshed)*1000,2)
+                    self._recover_fast_selection(analyzer, selection_frames, observation, sampled, catalog)
                     observation = apply_selection(observation, image, self.tracker, catalog, self.references,
                                                   self.config['source_mode'])
                     result_consistency.observe(observation,(self.tracker.session or {}).get('session_id'),sampled,image)

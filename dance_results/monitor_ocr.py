@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+from collections import deque
 import hashlib
 import re
 import statistics
@@ -11,6 +12,42 @@ from .ocr_screens import classify, parse_selection, result_context, room_context
 
 def image_hash(image):
     return hashlib.sha256(image.tobytes()+str(image.size).encode()).hexdigest()
+
+
+class SelectionFrameBuffer:
+    """Short, bounded pixel lookback for selection frames skipped by OCR cadence."""
+    def __init__(self):
+        self.frames = deque(maxlen=6)
+        self.last_sample = float('-inf')
+
+    def clear(self):
+        self.frames.clear()
+        self.last_sample = float('-inf')
+
+    def observe(self, frames, now):
+        for sampled, image in sorted(frames, key=lambda frame: frame[0]):
+            if sampled <= self.last_sample:
+                continue
+            self.last_sample = sampled
+            if not 0 <= now-sampled <= 10:
+                continue
+            normalized = image.convert('RGB').resize((1024, 800))
+            center_y = Analyzer.selected_row(normalized)
+            if center_y is None:
+                continue
+            # Reject broad uniform/background bands: a highlighted song row
+            # has an edge within 30px, unlike ordinary gameplay backgrounds.
+            def active(y):
+                return statistics.mean(b-r for r, g, b in
+                    (normalized.getpixel((x, y)) for x in (776, 781, 786))) > -30
+            if active(max(235, center_y-30)) and active(min(569, center_y+30)):
+                continue
+            self.frames.append((sampled, normalized))
+        while self.frames and now-self.frames[0][0] > 10:
+            self.frames.popleft()
+
+    def before(self, sampled):
+        return [(at, image) for at, image in reversed(self.frames) if 0 < sampled-at <= 10]
 
 
 def black_or_loading_frame(image):

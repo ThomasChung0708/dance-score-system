@@ -26,12 +26,12 @@ def screen_totals(raw, selection):
         and 'catalog' not in str(item.get('method', '')).lower()]
 
 
-def validate(values, totals=()):
+def validate(values, totals=(), *, selection_reference=False):
     rules = []
 
-    def rule(name, passed, explanation):
+    def rule(name, passed, explanation, *, mandatory=True):
         rules.append(dict(rule=name, status='pass' if passed else 'fail',
-                          mandatory=True, reason=explanation))
+                          mandatory=mandatory, reason=explanation))
 
     counts = [values.get(key) for key in JUDGMENTS]
     valid = all(type(n) is int and 0 <= n <= 10**7 for n in counts)
@@ -52,7 +52,8 @@ def validate(values, totals=()):
              'Displayed totals need reliable original screen evidence.')
         rule('judgment_sum_' + source, readable and valid and (
             total == n if state == 'COMPLETED' else total <= n),
-            'Completed judgments equal the displayed total; failed partial judgments cannot exceed it.')
+            'Completed judgments equal the displayed total; failed partial judgments cannot exceed it.',
+            mandatory=not (source == 'selection' and selection_reference and state == 'COMPLETED'))
     combo = values.get('max_combo')
     rule('combo_bound', type(combo) is int and valid and 0 <= combo <= total,
          'Maximum combo cannot exceed judged notes.')
@@ -74,8 +75,20 @@ def validate(values, totals=()):
     ):
         rules.append(dict(rule=name, status='skipped', mandatory=False, reason=reason))
     return dict(judged_total=total, rules=rules,
+                warnings=['custom_selection_judgment_count_difference' for r in rules
+                          if not r['mandatory'] and r['status'] == 'fail'],
                 issues=['automatic_consistency_' + r['rule'] for r in rules
                         if r['mandatory'] and r['status'] == 'fail'])
+
+
+def selection_is_reference(scoring_policy, selection):
+    """Custom MAX counts this result's judgments, not the song-select counter.
+
+    Preserve and compare that separate counter as evidence. Official charts,
+    independent game MAX, result-screen totals and failed partial bounds keep
+    their mandatory checks.
+    """
+    return scoring_policy == 'custom-judged-v1' and selection.get('source_type') == 'custom'
 
 
 def observation(values):

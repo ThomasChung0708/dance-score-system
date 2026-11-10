@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import unicodedata
 from pathlib import Path
@@ -11,6 +12,16 @@ from .result_consistency import screen_catalog
 
 def normalize(value):
     return ' '.join(unicodedata.normalize('NFKC', value or '').casefold().split())
+
+
+def stylized_title_key(value):
+    """Narrow confusable folding for mixed Latin/Japanese titles only."""
+    key = normalize(value).replace('〜', '~')
+    key = re.sub(r'\s*~\s*', '~', key)
+    found = re.fullmatch(r'([a-z1ı|]+)(~[\u3040-\u30ff\u3400-\u9fff]{4,}~)', key)
+    if not found:
+        return None
+    return found[1].translate(str.maketrans({'1': 'l', 'i': 'l', 'ı': 'l', '|': 'l'}))+found[2]
 
 
 class ReadOnlyCatalog:
@@ -110,11 +121,11 @@ class ReadOnlyCatalog:
                 for p in self.packs if key and (normalize(p['name']) == key or
                     (len(key) >= 12 and normalize(p['name']).startswith(key)))]
 
-    def match(self, fields, confirmed_pack_id=None, source_type=None):
+    def match(self, fields, confirmed_pack_id=None, source_type=None, *, candidate_ids=None):
         title = fields.get('title', {}).get('value')
         difficulty = fields.get('difficulty', {}).get('value')
         # Retrieve all exact-normalized titles, including raw source Title without Subtitle.
-        ids = sorted(self.index.get(normalize(title), set()))
+        ids = sorted(self.index.get(normalize(title), set()) if candidate_ids is None else candidate_ids)
         if source_type in ('official', 'custom'):
             ids = [i for i in ids if self.songs[i]['source_type'] == source_type]
         if confirmed_pack_id is not None:
@@ -177,6 +188,21 @@ class ReadOnlyCatalog:
         from .ocr_policy import AUTO_CONFIDENCE, SELECTION_REQUIRED
 
         match = self.match(fields, source_type=source_type)
+        fuzzy = False
+        # Confusable matching never searches outside an independently confirmed
+        # Pack, and still runs every known chart conflict check below. Unknown
+        # chart metadata cannot eliminate a namesake to manufacture uniqueness.
+        if not match['candidates'] and pack_id is not None:
+            key = stylized_title_key(fields.get('title', {}).get('value'))
+            title_field = fields.get('title', {})
+            chart_readable = all(fields.get(k, {}).get('value') is not None
+                                 and fields[k].get('confidence', 0) >= AUTO_CONFIDENCE
+                                 and not fields[k].get('reason') for k in ('difficulty', 'game_level'))
+            if key and chart_readable and title_field.get('confidence', 0) >= .8 and not title_field.get('reason'):
+                ids = {sid for name, songs in self.index.items() if stylized_title_key(name) == key
+                       for sid in songs if self.songs[sid]['pack_id'] == pack_id}
+                match = self.match(fields, pack_id, source_type, candidate_ids=ids)
+                fuzzy = bool(match['candidates'])
         consistent = []
         uncertain_conflict = False
         for candidate in match['candidates']:
@@ -200,7 +226,7 @@ class ReadOnlyCatalog:
             match['candidates'] = [c for c in match['candidates'] if c['pack_id'] == pack_id]
             match['candidate_count'] = len(match['candidates'])
         reliable = all(fields.get(k, {}).get('value') is not None
-                       and fields[k].get('confidence', 0) >= AUTO_CONFIDENCE
+                       and fields[k].get('confidence', 0) >= (.8 if fuzzy and k == 'title' else AUTO_CONFIDENCE)
                        and not fields[k].get('reason') for k in SELECTION_REQUIRED)
         level = fields.get('game_level', {}).get('value')
         reliable = (reliable and fields.get('difficulty', {}).get('value') in ('EASY', 'NORMAL', 'HARD')
@@ -217,4 +243,6 @@ class ReadOnlyCatalog:
                      confirmed_song_id=chosen['song_id'], bound_song_id=chosen['song_id'],
                      bound_difficulty_id=(chosen.get('difficulty') or {}).get('difficulty_id'),
                      reasons=[])
+        if fuzzy:
+            match.update(method='pack_constrained_stylized_title', review_only=True)
         return match

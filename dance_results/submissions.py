@@ -13,7 +13,7 @@ from .scoring import calculate, percentage_display
 from .sqlite_safety import verified_backup, check_integrity
 from .achievements import progress_for_songs, feedback
 from .note_review import result_time
-from .result_consistency import screen_catalog, observation, screen_totals, validate
+from .result_consistency import screen_catalog, observation, screen_totals, validate, selection_is_reference
 
 def basis_is_custom(score):return score.get('max_policy')=='custom-judged-v1'
 
@@ -121,7 +121,12 @@ class SubmissionService:
         raw = row['ocr'].get('fields') or {}
         evidence['screen_consistency'] = validate(
             {k: item.get('value') for k, item in raw.items()},
-            screen_totals(raw, session.get('selection') or {}))
+            screen_totals(raw, session.get('selection') or {}),
+            selection_reference=selection_is_reference(self.reviews.scoring_policy, session.get('selection') or {}))
+        for warning in evidence['screen_consistency']['warnings']:
+            warnings.append(dict(code=warning, field='total_notes',
+                selected_total=(session.get('selection') or {}).get('fields', {}).get('total_notes', {}).get('value'),
+                judged_total=evidence['screen_consistency']['judged_total']))
         screen = evidence['screen_note_observation']
         if screen is not None and gd is not None and gd['total_notes'] is not None:
             if screen['total_notes'] != gd['total_notes']:
@@ -162,11 +167,22 @@ class SubmissionService:
     def submit_verified(self,session_id):
         from .verified_auto import automatic_request
         _,row=self.reviews._read(session_id)
+        # A committed retry may encounter the already-updated sidecar. Consult
+        # the receipt before asking whether this is still an untouched draft.
+        with self.reviews.lock,self.library.open() as library:
+            old=self._existing(library.connection,session_id,row['review_id'])
+            if old:
+                record=self._record(library.connection,old['record_id'])
+                self.reviews.record_automatic_submission(record)
+                return dict(record=record,idempotent=True)
         body,issues=automatic_request(self.reviews,row)
         if issues:raise LibraryError('自動儲存轉待確認：'+', '.join(issues),409)
         with self.reviews.lock,self.library.open() as library:
             old=self._existing(library.connection,session_id,row['review_id'])
-            if old:return dict(record=self._record(library.connection,old['record_id']),idempotent=True)
+            if old:
+                record=self._record(library.connection,old['record_id'])
+                self.reviews.record_automatic_submission(record)
+                return dict(record=record,idempotent=True)
             prepared,_=self._build(library.connection,body,automatic=True)
         if not prepared['can_submit']:raise LibraryError('自動儲存轉待確認：'+', '.join(i['code'] for i in prepared['issues']),409)
         return self.submit({**body,'submission_token':prepared['submission_token'],'submit_acknowledge':True},automatic=True)
@@ -185,7 +201,9 @@ class SubmissionService:
                         if old['session_id']!=body.get('session_id') or old['review_id']!=body.get('review_id') or old['submission_hash']!=request_hash:
                             raise LibraryError('此結算已提交不同內容；保留原成績，不覆寫。',409)
                         db.rollback()
-                        return dict(record=self._record(db,old['record_id']),idempotent=True)
+                        receipt=self._record(db,old['record_id'])
+                        self.reviews.record_automatic_submission(receipt)
+                        return dict(record=receipt,idempotent=True)
                     prepared,evidence=self._build(db,body,automatic=automatic)
                     if not prepared['can_submit']:raise LibraryError('仍有必要資料待確認：'+', '.join(i['code'] for i in prepared['issues']),409)
                     if body.get('submission_token')!=prepared['submission_token']:raise LibraryError('摘要或來源已變更，請重新核對正式提交摘要。',409)
@@ -197,11 +215,19 @@ class SubmissionService:
                         raise LibraryError('備份期間確認資料已變更，未寫入成績。',409)
                     s=checked['summary'];v=s['values'];score=s['score'];song=evidence['song'];gd=evidence['difficulty']
                     if gd is None:
-                        gd_id=db.execute('INSERT INTO game_difficulties(song_id,difficulty,game_level,level_source,total_notes,notes_source,notes_verified) VALUES(?,?,?,\'manual\',?,?,?)',
-                            (song['song_id'],v['difficulty'],v['game_level'],v['total_notes'],
+                        # A per-result custom MAX is not verified chart metadata.
+                        # A differing select counter stays in immutable evidence;
+                        # do not turn the result's judged sum into a catalog fact.
+                        chart_notes=v['total_notes']
+                        notes_verified=s['full_notes_verified']
+                        if automatic and evidence['screen_consistency']['warnings']:
+                            chart_notes=None
+                            notes_verified=False
+                        gd_id=db.execute('INSERT INTO game_difficulties(song_id,difficulty,game_level,level_source,total_notes,notes_source,notes_verified) VALUES(?,?,?,?,?,?,?)',
+                            (song['song_id'],v['difficulty'],v['game_level'],'game_screen' if automatic else 'manual',chart_notes,
                              'game_screen' if evidence['screen_note_observation'] and
-                             evidence['screen_note_observation']['total_notes'] == v['total_notes'] else
-                             'manual' if s['full_notes_verified'] else None,int(s['full_notes_verified']))).lastrowid
+                             evidence['screen_note_observation']['total_notes'] == chart_notes else
+                             'manual' if notes_verified else None,int(notes_verified))).lastrowid
                     else:gd_id=gd['difficulty_id']
                     self._checkpoint('after_difficulty')
                     from .bests_policy import EX_POLICY
@@ -227,7 +253,9 @@ class SubmissionService:
                     record_id=db.execute('INSERT INTO play_records('+columns+') VALUES('+placeholders+')',tuple(record.values())).lastrowid
                     self._checkpoint('after_record');check_integrity(db);self._checkpoint('before_commit')
                     db.commit()
-                    return dict(record=self._record(db,record_id),idempotent=False,backup_path=backup)
+                    receipt=self._record(db,record_id)
+                    self.reviews.record_automatic_submission(receipt)
+                    return dict(record=receipt,idempotent=False,backup_path=backup)
                 except BaseException:db.rollback();raise
         finally:self.library._write_lock.release()
 

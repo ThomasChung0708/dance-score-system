@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import ctypes
+from collections import deque
 from ctypes import wintypes
 import re
 import sys
@@ -63,7 +64,7 @@ class Windows:
 
 
 class WGCCapture:
-    """Latest-frame buffer of capacity one, independent of OCR and GUI threads."""
+    """Latest frame plus bounded capture history independent of the OCR thread."""
     def __init__(self, hwnd, capture_hz=2):
         try:
             from windows_capture import WindowsCapture
@@ -71,6 +72,7 @@ class WGCCapture:
             raise CaptureError('請用 .venv-ocr 安裝 requirements-monitor.txt，並從 MonitorGUI.cmd 啟動。') from error
         self.lock = threading.Lock()
         self.latest = None
+        self.recent = deque(maxlen=24)
         self.closed = False
         self.error = None
         self.frames = 0
@@ -95,6 +97,7 @@ class WGCCapture:
                 image = Image.fromarray(pixels)
                 with self.lock:
                     self.latest = (now, image)
+                    self.recent.append(self.latest)
                     self.frames += 1
                     self.copy_ms = (time.perf_counter()-started)*1000
                 self.last_copy = now
@@ -112,6 +115,13 @@ class WGCCapture:
             frame = self.latest
             self.latest = None
             return frame
+
+    def take_recent(self):
+        """Drain sampled originals that could otherwise vanish while OCR runs."""
+        with self.lock:
+            frames = list(self.recent)
+            self.recent.clear()
+            return frames
 
     def stop(self):
         self.control.stop()

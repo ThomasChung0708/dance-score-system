@@ -285,6 +285,9 @@ class ResultAuthorityTests(unittest.TestCase):
             self.assertEqual(result['conflicting_charts'], 0)
         row = self.temporal_row()
         self.sid = 'different-session'
+        # This fixture represents a new unsubmitted play, independent of the
+        # prior committed review (whose sidecar now correctly says saved).
+        row.update(status='pending_review', writes_play_record=False)
         folder = self.output/'sessions'/self.sid
         folder.mkdir()
         import shutil

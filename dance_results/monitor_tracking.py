@@ -39,8 +39,11 @@ class Tracker:
         self.count = 0
         self.last_sample = None
         self.current_pack = None
+        self.pack_observed_at = None
         self.current_source = 'unknown'
         self.selection = None
+        self.selection_candidate = None
+        self.playing_candidate = None
         self.selection_count = 0
         self.selection_key = None
         self.session = None
@@ -72,10 +75,13 @@ class Tracker:
         if reason == 'black_capture':
             return
         self.selection = None
+        self.selection_candidate = None
+        self.playing_candidate = None
         self.selection_key = None
         self.selection_count = 0
         if clear_pack:
             self.current_pack = None
+            self.pack_observed_at = None
             self.current_source = 'unknown'
             self.proposed_pack=None
             self.pack_count=0
@@ -145,6 +151,7 @@ class Tracker:
         after=((self.current_pack or {}).get('root_id'),(self.current_pack or {}).get('pack_id'))
         if before != after:
             self.invalidate_selection('pack_changed_or_uncertain', clear_pack=False)
+            self.pack_observed_at = time.monotonic() if self.current_pack else None
             self.log('pack_observed', pack=self.current_pack)
 
     def update_selection(self, observation, now):
@@ -157,6 +164,11 @@ class Tracker:
             return field.get('value') in (None, '') or bool(field.get('reason'))
 
         if unreadable('title'):
+            incoming = fields.get('title', {}).get('value')
+            previous = self.selection or self.selection_candidate or {}
+            previous_title = previous.get('fields', {}).get('title', {}).get('value')
+            if incoming and previous_title and normalize(incoming) != normalize(previous_title):
+                self.invalidate_selection('unreliable_new_selection_title', clear_pack=False)
             return
         if any(unreadable(key) for key in SELECTION_REQUIRED):
             # Partially readable frame: keep the current selection only when it
@@ -173,7 +185,11 @@ class Tracker:
         for key in ('raw_ocr_fields','numeric_roi_evidence'):
             if key in observation:payload[key]=copy.deepcopy(observation[key])
         # Confidence boxes and background pixels are not song identity.
-        key = fingerprint(dict(values={k: v.get('value') for k, v in payload['fields'].items()},
+        # Optional metadata can alternate while the selected chart stays put
+        # (e.g. notes disappearing during a preview animation). Debounce chart
+        # identity, not the incidental presence of artist/duration/notes.
+        key = fingerprint(dict(values={k: payload['fields'].get(k, {}).get('value')
+                                       for k in SELECTION_REQUIRED},
                                pack_id=(self.current_pack or {}).get('pack_id'), source_type=payload['source_type'], epoch=self.epoch))
         manual = (self.selection or {}).get('manual_confirmation')
         if manual and manual['observed_values'] == {k: v.get('value') for k, v in payload['fields'].items()} and (
@@ -186,14 +202,31 @@ class Tracker:
             self.log('selection_changed', observation_id=key)
         else:
             self.selection_count += 1
+        # Preserve even one observed chart before the user immediately starts.
+        # It is review evidence, not a substitute for a debounced selection.
+        payload.update(observation_id=key, observed_at=utc(), last_seen=now, epoch=self.epoch)
+        self.selection_candidate = copy.deepcopy(payload)
         if self.selection_count >= self.confirmations:
             previous = self.selection
-            payload.update(observation_id=key, observed_at=utc(), last_seen=now, epoch=self.epoch)
             if previous and previous.get('manual_confirmation'):
                 payload['manual_confirmation'] = previous['manual_confirmation']
                 payload['matching'] = previous['matching']
                 payload['fields'] = previous['fields']
             self.selection = payload
+
+    def fast_selection(self, now):
+        candidate = self.selection_candidate
+        if (not candidate or candidate['epoch'] != self.epoch
+                or not 0 <= now-candidate['last_seen'] <= min(10, self.selection_ttl)):
+            return None
+        title = candidate['fields'].get('title') or {}
+        pack = candidate.get('pack') or {}
+        if (not title.get('value') or title.get('reason') or title.get('confidence', 0) < .8
+                or pack.get('status') != 'confirmed'):
+            return None
+        selected = copy.deepcopy(candidate)
+        selected.update(handoff='single_observation', observed_frames=self.selection_count)
+        return selected
 
     def consume(self, observation, now=None, image=None, sample_id=None):
         now = time.monotonic() if now is None else now
@@ -206,7 +239,8 @@ class Tracker:
             ocr = observation.get('result_ocr') or {}
             if complete_reliable_result(ocr):
                 from .ocr_policy import result_required
-                quality = min(ocr['fields'][k].get('confidence', 0) for k in result_required(ocr))
+                quality = min(ocr['fields'][k].get('confidence', 0)
+                              for k in result_required(ocr) if k != 'title')
                 previous = self.best_result
                 if previous is None or quality >= previous[0].get('retention_quality', 0):
                     saved = copy.deepcopy(observation)
@@ -215,6 +249,18 @@ class Tracker:
         if wanted == 'SONG_SELECT':
             # A readable new identity invalidates the prior one before debounce.
             self.update_selection(observation, now)
+        if wanted == 'PLAYING' and self.proposed != 'PLAYING':
+            # Check freshness on the first PLAYING sample, before state debounce
+            # spends another OCR interval confirming that play really started.
+            self.playing_candidate = self.fast_selection(now) if self.selection is None else None
+            if self.playing_candidate:
+                preview = observation.get('playing_preview') or {}
+                fields = self.playing_candidate['fields']
+                if ((preview.get('title') and normalize(preview['title']) != normalize(fields['title']['value']))
+                        or (preview.get('game_level') is not None
+                            and fields.get('game_level', {}).get('value') is not None
+                            and preview['game_level'] != fields['game_level']['value'])):
+                    self.playing_candidate = None
         if wanted != self.proposed:
             self.proposed = wanted
             self.count = 1
@@ -229,9 +275,10 @@ class Tracker:
             if (role is False and self.last_room_role is not False) or (role is None and self.last_room_role is True):
                 self.invalidate_selection('multiplayer_guest_source_not_confirmed')
             self.last_room_role=role
-            if self.selection and any(preview.get(k) is not None and
-                    (normalize(preview[k])!=normalize(self.selection['fields'][k]['value']) if k=='title'
-                     else preview[k]!=self.selection['fields'][k]['value']) for k in ['title','difficulty','game_level']):
+            current_selection = self.selection or self.selection_candidate
+            if current_selection and any(preview.get(k) is not None and
+                    (normalize(preview[k])!=normalize(current_selection['fields'].get(k, {}).get('value')) if k=='title'
+                     else preview[k]!=current_selection['fields'].get(k, {}).get('value')) for k in ['title','difficulty','game_level']):
                 self.invalidate_selection('room_preview_changed',clear_pack=False)
         if wanted == self.state:
             return
@@ -241,7 +288,7 @@ class Tracker:
         if wanted=='UNKNOWN' and not self.session:
             self.invalidate_selection('unknown_screen_breaks_selection_context')
         if wanted == 'PLAYING' and not self.session:
-            selected = copy.deepcopy(self.selection)
+            selected = copy.deepcopy(self.selection or self.playing_candidate)
             reason = None
             if selected and (now-selected['last_seen'] > self.selection_ttl or selected['epoch'] != self.epoch):
                 selected = None
@@ -252,7 +299,8 @@ class Tracker:
                 if preview.get('title') and normalize(preview['title']) != normalize(fields['title']['value']):
                     selected = None
                     reason = 'playing_title_differs_from_selection'
-                elif preview.get('game_level') is not None and fields['game_level']['value'] != preview['game_level']:
+                elif (preview.get('game_level') is not None and fields.get('game_level', {}).get('value') is not None
+                      and fields['game_level']['value'] != preview['game_level']):
                     selected = None
                     reason = 'playing_level_differs_from_selection'
             binding = (selected or {}).get('matching', {})
@@ -284,7 +332,7 @@ class Tracker:
         elif (self.session and (old == 'PLAYING' or self.best_result)
               and wanted in ('LOBBY', 'WAITING_ROOM', 'LOGIN', 'SONG_SELECT')):
             # Quit/disconnect/room return without a result must not become a game failure.
-            self.interrupt('left_gameplay_without_result')
+            self.interrupt('result_left_before_confirmation' if self.best_result else 'left_gameplay_without_result')
         if wanted in ('LOGIN', 'LOBBY'):
             self.invalidate_selection('left_song_context')
 

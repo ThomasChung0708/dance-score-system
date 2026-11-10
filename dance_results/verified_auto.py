@@ -10,13 +10,13 @@ from .monitor_tracking import atomic_json,utc,ManualReferences
 from .ocr_matching import ReadOnlyCatalog,normalize
 from .note_review import result_time
 from .result_ocr import NUMERIC
-from .result_consistency import screen_catalog, screen_totals, validate
+from .result_consistency import screen_catalog, screen_totals, validate, selection_is_reference
 from .ocr_policy import (
     AUTO_CONFIDENCE, RESULT_REQUIRED, SELECTION_REQUIRED,
     RESULT_NONFATAL_ERRORS,
 )
 
-STORAGE_POLICY = 'round27-screen-v1'
+STORAGE_POLICY = 'round28-screen-v1'
 
 
 def reliable(field):
@@ -32,8 +32,11 @@ def automatic_request(reviews,row):
     binding=verified_download_binding(reviews,row)
     if binding:selection=binding['selection']
     ocr=row['ocr'];raw=ocr.get('fields') or {}
+    if selection.get('handoff') == 'single_observation':
+        issues.append('automatic_selection_single_observation_requires_review')
     screen_values = {k: item.get('value') for k, item in raw.items()}
-    consistency = validate(screen_values, screen_totals(raw, selection))
+    consistency = validate(screen_values, screen_totals(raw, selection),
+        selection_reference=selection_is_reference(reviews.scoring_policy, selection))
     issues.extend(consistency['issues'])
     if row['revision']!=0 or row['status']!='pending_review':issues.append('automatic_review_already_edited')
     from datetime import datetime
@@ -87,6 +90,7 @@ def automatic_request(reviews,row):
                 gd=next((d for d in song['difficulties'] if d['difficulty']==fields.get('difficulty',{}).get('value')),None)
         else:issues.append('automatic_source_unconfirmed')
         if sid is None:issues.append('automatic_unique_verified_identity_required')
+        if match.get('review_only'):issues.append('automatic_stylized_title_requires_review')
         if any('total_notes' in c.get('conflicts', []) for c in match.get('candidates', [])):
             issues.append('automatic_screen_catalog_notes_conflict')
         if sid is not None and s.get('song_id') is not None and s['song_id']!=sid:issues.append('automatic_locked_identity_conflict')
