@@ -42,13 +42,14 @@ def main():
     parser.add_argument('--snapshot', type=Path, default=PROJECT/'data/realplay5_snapshot')
     parser.add_argument('--failures', type=Path, default=PROJECT/'data/ocr_failures_snapshot')
     parser.add_argument('--database', type=Path, default=PROJECT/'data/library.sqlite3')
+    parser.add_argument('--output-prefix', default='round29-replay5')
     args = parser.parse_args()
     report = replay(args.snapshot, args.failures, args.database)
     report['acceptance'] = acceptance(report)
     report['passed'] = all(report['acceptance'].values())
-    atomic_json(PROJECT/'reports/round29-replay5.json', report)
+    atomic_json(PROJECT/'reports'/f'{args.output_prefix}.json', report)
     output = json.dumps(report, ensure_ascii=False, indent=2)+'\n'
-    (PROJECT/'reports/round29-replay5.txt').write_text(output, encoding='utf8')
+    (PROJECT/'reports'/f'{args.output_prefix}.txt').write_text(output, encoding='utf8')
     print(output)
     return 0 if report['passed'] else 1
 

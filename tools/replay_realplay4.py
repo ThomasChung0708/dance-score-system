@@ -126,10 +126,20 @@ def acceptance(report):
     checks['snapshot_unchanged'] = report['snapshot_unchanged']
     checks['fast_selection_probes'] = all(p['fast_selection_probe']['status'] == 'passed'
         for p in report['plays'] if p['fast_selection_probe']['status'] != 'not_testable')
+    expected_autos = {
+        '826e1c86': 161,
+        '09b734cc': 162,
+        'b1cc6c9d': 242,
+        '8834a38c': 350,
+        '203488b8': 762,
+    }
+    checks['no_wrong_auto'] = all(
+        p['simulated_submission']['song_id'] == expected_autos.get(p['original_session_id'][:8])
+        for p in report['plays'] if p['simulated_submission'])
     return checks
 
 
-def replay(snapshot, failures, database):
+def replay(snapshot, failures, database, *, handoff_scenarios=None, replay_packs=False):
     before = digest(database)
     events = [json.loads(line) for line in (snapshot/'diagnostics.jsonl').read_text(encoding='utf8').splitlines()]
     sessions = sorted((read(p) for p in (snapshot/'sessions').glob('*/session.json')), key=lambda s: s['started_at'])
@@ -202,6 +212,9 @@ def replay(snapshot, failures, database):
                     end = min(end, seconds(sessions[index+1]['started_at'])-1)
                 begin = start-60
                 locked = copy.deepcopy(original.get('selection'))
+                scenario = (handoff_scenarios or {}).get(original['session_id'])
+                if scenario:
+                    locked = copy.deepcopy(scenario)
                 ordered = [(seconds(e['at']), 'event', e) for e in events
                            if begin <= seconds(e['at']) <= end]
                 if locked:
@@ -219,6 +232,10 @@ def replay(snapshot, failures, database):
                     now = moment-begin
                     if kind in ('locked', 'selection'):
                         payload = copy.deepcopy(item)
+                        if replay_packs and not payload.get('pack'):
+                            payload['pack'] = copy.deepcopy(tracker.current_pack)
+                            if payload['pack']:
+                                payload['source_type'] = 'custom'
                         pack = payload.get('pack') or {}
                         payload['matching'] = catalog.match_identity(payload['fields'], pack.get('pack_id'), payload['source_type'])
                         tracker.current_pack = copy.deepcopy(payload.get('pack'))
@@ -234,6 +251,9 @@ def replay(snapshot, failures, database):
                             known_identities[key] = observation
                         continue
                     event = item['event']
+                    if replay_packs and event == 'pack_observed':
+                        tracker.pack_observation(item.get('pack'), inferred=bool(item.get('pack')), now=now)
+                        continue
                     if event == 'selection_changed':
                         current_identity = item['observation_id']
                         continue
@@ -259,6 +279,10 @@ def replay(snapshot, failures, database):
                             observation.update(fields={}, matching={})
                     elif state == 'WAITING_ROOM':
                         observation['context'] = dict(local_is_host=True)
+                        if scenario:
+                            observation['room_preview'] = dict(
+                                title=scenario['fields']['title']['value'],
+                                game_level=scenario['fields']['game_level']['value'])
                     elif state == 'PLAYING':
                         observation['playing_preview'] = original.get('playing_preview') or {}
                     elif state in ('RESULT', 'GAME_OVER'):
@@ -288,7 +312,7 @@ def replay(snapshot, failures, database):
                         receipt = service.submit_verified(row['session_id'])
                         submission = {k: receipt['record'][k] for k in (
                             'record_id', 'song_id', 'difficulty', 'confirmation_method',
-                            'perfect', 'cool', 'bad', 'miss', 'max_combo', 'game_score', 'grade', 'total_notes')}
+                            'perfect', 'cool', 'bad', 'miss', 'max_combo', 'game_score', 'grade', 'game_level', 'total_notes')}
                         row = monitor.reviews._read(row['session_id'])[1]
                     except Exception as error:
                         issues.append('submission_failed: '+str(error))
@@ -301,6 +325,7 @@ def replay(snapshot, failures, database):
                 timing['replayed_selection_to_first_playing_seconds'] = round(seconds(timing['first_playing_at'])-observed_time, 3) if observed_time and timing['first_playing_at'] else None
                 plays.append(dict(
                     original_session_id=original['session_id'], original_title=(original.get('playing_preview') or {}).get('title'),
+                    selection_evidence='counterfactual_handoff_scenario' if scenario else 'recorded_selection',
                     session_status=pending.get('status'), pending_reason=pending.get('pending_reason'),
                     selection_consumed=bool(pending.get('selection')), repeated_selection_fingerprint=repeated_selection,
                     black_preserved=black_preserved, bound_song_id=(row['draft'].get('song_id') if row else pending.get('song_id')),

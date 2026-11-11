@@ -40,6 +40,7 @@ class Tracker:
         self.last_sample = None
         self.current_pack = None
         self.pack_observed_at = None
+        self.pack_confirmed_at = None
         self.current_source = 'unknown'
         self.selection = None
         self.selection_candidate = None
@@ -82,6 +83,7 @@ class Tracker:
         if clear_pack:
             self.current_pack = None
             self.pack_observed_at = None
+            self.pack_confirmed_at = None
             self.current_source = 'unknown'
             self.proposed_pack=None
             self.pack_count=0
@@ -128,8 +130,9 @@ class Tracker:
         self.state = 'UNKNOWN'
         self.log('window_connected', identity=identity, epoch=self.epoch)
 
-    def pack_observation(self, pack, *, inferred=False):
+    def pack_observation(self, pack, *, inferred=False, uncertain=False, now=None):
         """Called whenever the list is visible, BEFORE debounce or matching."""
+        now = time.monotonic() if now is None else now
         before = ((self.current_pack or {}).get('root_id'),(self.current_pack or {}).get('pack_id'))
         if pack and pack.get('status') == 'confirmed':
             proposed=(pack.get('root_id'),pack['pack_id'])
@@ -140,18 +143,25 @@ class Tracker:
             if inferred or self.pack_count>=self.confirmations:
                 self.current_pack = copy.deepcopy(pack)
                 self.current_source = 'custom'
+                self.pack_confirmed_at = now
             else:
                 self.current_pack=None
                 self.current_source='unknown'
         else:
+            # Absence is not conflicting evidence. Never refresh this bounded
+            # grace period with empty frames, or restore a previously cleared pack.
+            if (not uncertain and self.current_pack and self.pack_confirmed_at is not None
+                    and 0 <= now-self.pack_confirmed_at <= self.selection_ttl):
+                return
             self.current_pack = None
+            self.pack_confirmed_at = None
             self.current_source = 'unknown'
             self.proposed_pack=None
             self.pack_count=0
         after=((self.current_pack or {}).get('root_id'),(self.current_pack or {}).get('pack_id'))
         if before != after:
             self.invalidate_selection('pack_changed_or_uncertain', clear_pack=False)
-            self.pack_observed_at = time.monotonic() if self.current_pack else None
+            self.pack_observed_at = now if self.current_pack else None
             self.log('pack_observed', pack=self.current_pack)
 
     def update_selection(self, observation, now):
@@ -228,6 +238,13 @@ class Tracker:
         selected.update(handoff='single_observation', observed_frames=self.selection_count)
         return selected
 
+    def room_title_agrees(self, preview):
+        selected = self.selection or self.selection_candidate or {}
+        title = normalize(selected.get('fields', {}).get('title', {}).get('value'))
+        room_title = normalize(preview.get('title'))
+        return (not room_title or room_title == title or
+                (len(room_title) >= 8 and title.startswith(room_title)))
+
     def consume(self, observation, now=None, image=None, sample_id=None):
         now = time.monotonic() if now is None else now
         if sample_id is not None and sample_id == self.last_sample:
@@ -249,6 +266,10 @@ class Tracker:
         if wanted == 'SONG_SELECT':
             # A readable new identity invalidates the prior one before debounce.
             self.update_selection(observation, now)
+        if wanted == 'WAITING_ROOM' and not self.session and not self.room_title_agrees(observation.get('room_preview') or {}):
+            # Contradictory identity wins even before scene debounce. A later
+            # blank preview cannot resurrect this selection.
+            self.invalidate_selection('room_preview_changed', clear_pack=False)
         if wanted == 'PLAYING' and self.proposed != 'PLAYING':
             # Check freshness on the first PLAYING sample, before state debounce
             # spends another OCR interval confirming that play really started.
@@ -285,17 +306,31 @@ class Tracker:
                 self.invalidate_selection('multiplayer_guest_source_not_confirmed')
             self.last_room_role=role
             current_selection = self.selection or self.selection_candidate
-            if current_selection and any(preview.get(k) is not None and
-                    (normalize(preview[k])!=normalize(current_selection['fields'].get(k, {}).get('value')) if k=='title'
-                     else preview[k]!=current_selection['fields'].get(k, {}).get('value')) for k in ['title','difficulty','game_level']):
+            # Room LV/difficulty describe the host preview, not necessarily the
+            # local player's chart. Only a different title breaks local identity.
+            # The narrow room title ROI may clip a long title at its right edge;
+            # PLAYING still has to agree with the full selected title below.
+            room_title = normalize(preview.get('title'))
+            selected_title = normalize((current_selection or {}).get('fields', {}).get('title', {}).get('value'))
+            if current_selection and not self.room_title_agrees(preview):
                 self.invalidate_selection('room_preview_changed',clear_pack=False)
+            elif (self.selection is None and current_selection and role is True
+                  and room_title and room_title == selected_title
+                  and 0 <= now-current_selection['last_seen'] <= self.selection_ttl
+                  and (current_selection.get('pack') or {}).get('status') == 'confirmed'):
+                # A debounced host room corroborates a single captured local
+                # selection during a longer room-start handoff. Keep original
+                # timestamp/confidences and the strict single-observation gate.
+                self.selection = copy.deepcopy(current_selection)
+                self.selection['handoff'] = 'single_observation'
+                self.selection['room_title_corroborated'] = True
         if wanted == self.state:
             return
         old = self.state
         self.state = wanted
         self.log('state_transition', previous=old, current=wanted)
-        if wanted=='UNKNOWN' and not self.session:
-            self.invalidate_selection('unknown_screen_breaks_selection_context')
+        # UNKNOWN/load fades contain no contradictory identity. Existing TTL,
+        # window epoch, room-title and PLAYING-title checks still apply.
         if wanted == 'PLAYING' and not self.session:
             selected = copy.deepcopy(self.selection or self.playing_candidate)
             reason = None

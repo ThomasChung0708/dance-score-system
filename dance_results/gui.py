@@ -62,8 +62,14 @@ def create_server(database,port=0,monitor_directory=None):
             self.send_header('X-Frame-Options','DENY')
             self.send_header('Referrer-Policy','no-referrer')
             self.send_header('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data: blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
-            self.end_headers()
-            self.wfile.write(data)
+            try:
+                self.end_headers()
+                self.wfile.write(data)
+            except ConnectionError:
+                # Navigation and AbortController can close a GET while its
+                # response is being sent. The client is gone; do not attempt a
+                # second 500 response or log this as an application failure.
+                self.close_connection=True
 
         def _check(self,api=False):
             expected=f'127.0.0.1:{self.server.server_port}'
@@ -169,6 +175,7 @@ def create_server(database,port=0,monitor_directory=None):
                 elif route=='/api/reviews/preview':result=monitor.reviews.preview(body)
                 elif route=='/api/reviews/assist':result=monitor.reviews.assist(body)
                 elif route=='/api/reviews/save':result=monitor.reviews.save(body)
+                elif route=='/api/reviews/discard':result=monitor.reviews.discard(body)
                 elif route=='/api/reviews/submission-preview':result=submissions.prepare(body)
                 elif route=='/api/reviews/submit':result=submissions.submit(body)
                 elif route=='/api/reviews/rescan':

@@ -275,7 +275,16 @@ def apply_selection(observation, image, tracker, catalog, references=None, sourc
             inferred = dict(pack, status='confirmed', source=selection['pack_reason'],
                             evidence=copy.deepcopy(selection['selected_pack_evidence']))
     if inferred or selection['pack_list_visible']:
-        tracker.pack_observation(inferred, inferred=bool(inferred))
+        evidence = selection.get('selected_pack_evidence') or {}
+        visible = evidence.get('visible_pack_ids') or []
+        current_id = (tracker.current_pack or {}).get('pack_id')
+        hint_ids = {p['pack_id'] for p in catalog.visible_pack_candidates(evidence.get('row_hint'))} if evidence.get('row_hint') else set()
+        uncertain = (selection.get('pack_reason') == 'selected_pack_disagreement'
+                     or len(evidence.get('candidate_pack_ids') or []) > 1
+                     or bool(visible and current_id is not None and current_id not in visible)
+                     or evidence.get('uncertainty') == 'visible_packs_missing_from_catalog')
+        uncertain = uncertain or bool(hint_ids and current_id is not None and current_id not in hint_ids)
+        tracker.pack_observation(inferred, inferred=bool(inferred), uncertain=uncertain)
     if selection['pack_list_visible']:
         _, evidence = active_pack(selection, image.resize((1024, 800)).convert('RGB'), catalog)
         tracker.pack_candidates = evidence

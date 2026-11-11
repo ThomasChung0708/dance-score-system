@@ -78,11 +78,14 @@ class ResultReviews:
             # commit and before the review sidecar could be updated. Read only;
             # listing reviews must never rewrite historical evidence.
             saved = set()
+            song_packs = {}
             if self.database.is_file():
                 connection = sqlite3.connect(self.database.as_uri()+'?mode=ro', uri=True)
                 try:
                     connection.execute('PRAGMA query_only=ON')
                     saved = {r[0] for r in connection.execute('SELECT session_id FROM play_records')}
+                    song_packs = dict(connection.execute(
+                        'SELECT s.song_id, p.name FROM songs s LEFT JOIN packs p ON p.pack_id=s.pack_id'))
                 finally:
                     connection.close()
             rows = []
@@ -95,6 +98,10 @@ class ResultReviews:
                     folder, session, _, sha = self._source(path.parent.name)
                     review_path = folder/'result-review.json'
                     row = json.loads(review_path.read_text(encoding='utf8')) if review_path.exists() else None
+                    if (folder/'review-dismissal.json').exists():
+                        continue
+                    if row and row.get('status') in ('saved_verified_auto', 'confirmed_manual', 'discarded'):
+                        continue
                     selection = session.get('selection') or {}
                     title = selection.get('fields', {}).get('title', {}).get('value')
                     if row:
@@ -102,12 +109,66 @@ class ResultReviews:
                     rows.append(dict(session_id=session['session_id'], started_at=session.get('started_at'),
                         title=title, song_id=(row.get('draft') or {}).get('song_id') if row else session.get('song_id'),
                         status=row['status'] if row else 'unprocessed', revision=row['revision'] if row else 0,
+                        pack_name=song_packs.get((row.get('draft') or {}).get('song_id')) if row else
+                            (selection.get('pack') or {}).get('name'),
+                        values=copy.deepcopy(row['draft']['values']) if row else {},
+                        review_reasons=self.review_reasons(row) if row else ['尚未辨識結算，請先辨識原圖。'],
                         image_intact=not row or row['screenshot_sha256'] == sha,
                         job=self.jobs.get(session['session_id'])))
                 except (LibraryError, OSError, ValueError, KeyError, TypeError):
                     rows.append(dict(session_id=path.parent.name, status='invalid_source'))
             return dict(results=sorted(rows, key=lambda r: r.get('started_at') or '', reverse=True),
                         jobs=copy.deepcopy(self.jobs), writes_play_record=False)
+
+    @staticmethod
+    def review_reasons(row):
+        session = row.get('locked_session') or {}
+        reasons = []
+        selection = session.get('selection') or {}
+        if len((selection.get('matching') or {}).get('candidates') or []) > 1:
+            reasons.append('有多首同名候選，請核對所屬曲包並選擇正確歌曲。')
+        if not (row.get('draft') or {}).get('song_id'):
+            reasons.append('歌曲尚未唯一確認，請核對歌曲與曲包。')
+        if session.get('pending_reason') == 'no_fresh_selection':
+            reasons.append('開始遊玩前沒有保留到可用的選曲資料。')
+        temporal = row.get('ocr', {}).get('temporal_validation') or {}
+        if temporal.get('status') != 'confirmed':
+            reasons.append('結算停留時間或清晰畫面不足，請核對截圖中的數字。')
+        fields = row.get('ocr', {}).get('fields') or {}
+        if any(f.get('value') is None or f.get('reason') or f.get('confidence', 0) < .95
+               for k, f in fields.items() if k in ('perfect', 'cool', 'bad', 'miss', 'grade', 'game_score')):
+            reasons.append('部分成績欄位辨識不確定，請對照原圖修正。')
+        return reasons or ['本次未通過自動儲存檢查，請核對歌曲與本人成績後儲存。']
+
+    def discard(self, body):
+        """Dismiss one play without deleting screenshot/OCR or writing SQLite."""
+        with self.lock:
+            folder, _, _, sha = self._source(body.get('session_id'))
+            connection = sqlite3.connect(self.database.as_uri()+'?mode=ro', uri=True)
+            try:
+                connection.execute('PRAGMA query_only=ON')
+                if connection.execute('SELECT 1 FROM play_records WHERE session_id=?',
+                                      (body['session_id'],)).fetchone():
+                    raise LibraryError('這次成績已儲存，不能捨棄待確認結算。', 409)
+            finally:
+                connection.close()
+            path = folder/'result-review.json'
+            if path.exists():
+                _, row = self._read(body.get('session_id'))
+                if row['status'] == 'discarded':
+                    return dict(session_id=row['session_id'], status='discarded')
+                if body.get('review_id') != row['review_id'] or body.get('revision') != row['revision']:
+                    raise LibraryError('審核版本已變更，請重新載入。', 409)
+                if row['status'] == 'saved_verified_auto':
+                    raise LibraryError('已儲存的成績請至歷史成績查看。', 409)
+                row['history'].append(dict(at=utc(), previous_status=row['status'],
+                                           revision=row['revision'], source='explicit_user_discard'))
+                row.update(status='discarded', revision=row['revision']+1, updated_at=utc())
+                atomic_json(path, row)
+            else:
+                atomic_json(folder/'review-dismissal.json', dict(
+                    session_id=body['session_id'], screenshot_sha256=sha, discarded_at=utc()))
+            return dict(session_id=body['session_id'], status='discarded')
 
     def record_automatic_submission(self, record):
         """Reflect a committed receipt without changing the locked OCR/session."""
@@ -407,6 +468,7 @@ class ResultReviews:
         with self.lock:
             _, row = self._read(session_id)
             result = copy.deepcopy(row)
+            result['review_reasons'] = self.review_reasons(row)
             result['draft']['values'].setdefault('duration_seconds',None)
             result['preview'] = self._preview(row, row['draft'])
             result['player_rows']=self.player_rows(row)
@@ -558,6 +620,8 @@ class ResultReviews:
     def save(self, body):
         with self.lock:
             folder, row = self._read(body.get('session_id'))
+            if row['status'] == 'discarded':
+                raise LibraryError('此結算已捨棄，原始證據仍保留。', 409)
             if body.get('review_id') != row['review_id']:
                 raise LibraryError('結算身份已變更，請重新載入。', 409)
             draft = self._body(row, body)

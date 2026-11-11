@@ -215,7 +215,7 @@ class ReviewPersistenceTests(unittest.TestCase):
         self.service.save(self.body(values=values(perfect=9,cool=2)))
         self.service.ingest(self.session,self.ocr)
         self.assertEqual(self.service.detail(self.sid)['draft']['values']['perfect'],9)
-        self.assertEqual(len(self.service.list()['results']),1)
+        self.assertEqual(len(self.service.list()['results']),0)
 
     def test_stale_revision_conflicting_song_path_or_image_rejected(self):
         self.service.save(self.body())

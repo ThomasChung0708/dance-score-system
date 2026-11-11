@@ -106,7 +106,7 @@ class TrackingTests(unittest.TestCase):
         self.assertEqual(self.tracker.selection['pack']['pack_id'],29)
         self.send(selected(title='Second'))
         self.assertEqual(self.tracker.selection['pack']['pack_id'],29)
-        self.tracker.pack_observation(None)
+        self.tracker.pack_observation(None, uncertain=True)
         self.assertIsNone(self.tracker.selection)
         self.assertIsNone(self.tracker.current_pack)
         self.tracker.pack_observation(dict(pack_id=30,name='B',status='confirmed'))
@@ -142,9 +142,9 @@ class TrackingTests(unittest.TestCase):
         self.send(scene('WAITING_ROOM',room_preview={'title':'JOINT'},context={'local_is_host':False}))
         self.assertIsNone(self.tracker.selection)
 
-    def test_unknown_context_clears_selection_without_forging_failure(self):
+    def test_unknown_context_preserves_recent_selection_without_forging_failure(self):
         self.send(selected());self.send(scene('UNKNOWN'))
-        self.assertIsNone(self.tracker.selection)
+        self.assertIsNotNone(self.tracker.selection)
         self.assertIsNone(self.tracker.last_result)
 
 

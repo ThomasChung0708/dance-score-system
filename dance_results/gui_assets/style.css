@@ -9,4 +9,11 @@
 
 .independent-bests{border:1px solid #4b415c;border-radius:10px;padding:12px;margin:10px 0}.independent-bests p{margin:5px 0}
 
+/* Tablet/landscape widths below the desktop minimum must fit the viewport. */
+@media (max-width: 719px) {
+  body {
+    min-width: 0;
+  }
+}
+
 @media(max-width:650px){body{min-width:0}.workspace{display:flex;flex-direction:column;min-height:0}.packs-panel{position:static;max-height:250px;padding:14px 12px;border-right:0;border-bottom:1px solid var(--line)}.panel-heading{padding-bottom:8px}.packs-panel #pack-list{max-height:145px;min-height:70px}.aside-note{display:none}.songs-panel{height:540px;min-height:420px;padding:18px 14px 0}.details-panel{border-left:0;overflow:visible}.topbar{gap:12px;flex-wrap:wrap;padding:16px}.header-actions{gap:8px}.header-actions a{font-size:11px}.library-picker{width:100%}#root{width:100%;max-width:100%}.totals{white-space:normal;line-height:1.8}.app-footer{padding:10px 14px}.app-footer span:last-child{white-space:normal}.full-path{font-size:10px}.search-tools select{width:105px}}

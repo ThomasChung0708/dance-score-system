@@ -44,6 +44,8 @@ class SubmissionService:
         preview=self.reviews._preview(row,draft)
         issues=list(preview['issues']);warnings=list(preview['warnings'])
         def error(code,field='review'):issues.append(dict(code=code,field=field))
+        if row['status'] == 'discarded':
+            error('review_discarded')
         if body.get('review_id')!=row['review_id'] or body.get('revision')!=row['revision']:
             error('review_revision_changed')
         if not automatic and (row['status'] not in ('confirmed_manual','reviewed_pending_full_notes','reviewed_pending_duration','reviewed_pending_max_basis') or not row.get('identity_confirmation')):

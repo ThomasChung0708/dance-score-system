@@ -182,7 +182,7 @@ class SelectionGapTests(unittest.TestCase):
         self.assertEqual(self.tracker.session['pending_reason'], 'selection_expired')
 
     def test_explicit_invalidation_still_wins_after_unreadable_selection(self):
-        for mode in ('window_minimized', 'UNKNOWN', 'LOBBY', 'pack'):
+        for mode in ('window_minimized', 'LOGIN', 'LOBBY', 'pack'):
             with self.subTest(mode=mode):
                 self.send(selected())
                 unreadable = selected()
