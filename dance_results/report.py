@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import html
 import json
+from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 
 from . import __version__
 from .models import Diagnostic, GAME_DIFFICULTIES, ScanReport
+from .songs import display_title
 
 STATUS = {"ok": "歌名已讀取", "partial": "歌名待核對", "failed": "未取得歌名"}
 
@@ -39,7 +41,8 @@ def render_html(report: ScanReport) -> str:
                            + ('<p class="candidates">上次完整掃描未找到此來源；保留既有資料。</p>' if source.is_present is False else '')
                            + issues_html(source.diagnostics) + '</details>')
         display_pack = song.pack_name or "未知 Pack"
-        title = f'<strong>{esc(song.title) if song.title else "歌名待確認"}</strong>'
+        name = display_title(asdict(song), [sources[path].to_dict() for path in song.source_paths])
+        title = f'<strong>{esc(name)}</strong>'
         title += f'<small class="path">{esc(song.song_folder)}</small>'
         if song.song_id is not None:
             title += f'<small>歌曲 ID：{song.song_id}</small>'

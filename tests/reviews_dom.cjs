@@ -11,6 +11,38 @@ async function main() {
     const errors = [];
     page.on('pageerror', e => errors.push(e.message));
     await page.goto(base + '/reviews');
+    if (mode === 'title-bound' || mode === 'title-fallback') {
+      await page.waitForSelector('#review-inputs:not([disabled])');
+      const summary = await page.locator('#bound-summary').textContent();
+      if (mode === 'title-bound') {
+        assert.match(summary, /^Watch Out Pt\.2 · #1/);
+        assert.ok(!summary.includes('beatmania'));
+        assert.ok(!summary.includes('歌曲待確認'));
+      } else {
+        assert.match(summary, /^歌曲待確認 · /);
+        await page.goto(base + '/history');
+        await page.waitForSelector('.record-title');
+        assert.equal(await page.locator('.record-title').textContent(), 'Watch Out Pt.2');
+        await page.goto(base + '/');
+        await page.waitForSelector('.song-row[data-song-id="1"]');
+        assert.match(await page.locator('.song-row[data-song-id="1"] .song-title').textContent(),
+          /^Watch Out Pt\.2/);
+        await page.getByRole('button', {name: /Recent Update/}).click();
+        await page.waitForSelector('.recent-update-row');
+        assert.match(await page.locator('.recent-update-row .song-title').textContent(),
+          /^Watch Out Pt\.2 \/ HARD/);
+        await page.route('**/api/monitor/windows?**', route => route.fulfill({
+          status: 200, contentType: 'application/json', body: JSON.stringify({windows: []})
+        }));
+        await page.goto(base + '/monitor');
+        await page.waitForFunction(() =>
+          document.querySelector('#monitor-song dd')?.textContent === 'Watch Out Pt.2');
+        assert.match(await page.locator('#monitor-session').textContent(), /歌曲：Watch Out Pt\.2/);
+      }
+      assert.deepEqual(errors, []);
+      console.log(JSON.stringify({mode, passed: true}));
+      return;
+    }
     if (mode === 'responsive') {
       // Read-only monitor fixture: no OS window enumeration or capture needed.
       await page.route('**/api/monitor/windows?**', route => route.fulfill({

@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import copy
+from contextlib import closing
 import math
 import json
 from pathlib import Path
 import statistics
+import sqlite3
 import threading
 import time
 
@@ -15,6 +17,7 @@ from .monitor_ocr import Analyzer, SelectionFrameBuffer, apply_selection, change
 from .ocr_matching import ReadOnlyCatalog, normalize
 from .window_capture import Windows, WGCCapture, CaptureError
 from .ocr_failures import FailureCapture
+from .songs import catalog_display_title
 
 PROJECT = Path(__file__).resolve().parent.parent
 
@@ -139,6 +142,25 @@ class Monitor:
                           config=copy.deepcopy(self.config), metrics=copy.deepcopy(self.metrics),
                           output_directory=str(self.directory.resolve()),downloads=self.downloads.status() if self.downloads else None,
                           tracking=self.tracker.snapshot() if self.tracker else None)
+            tracking = result['tracking'] or {}
+            # Enrich the public copy only. Display fallbacks never feed back into
+            # selection fields, session evidence or matching/auto-save decisions.
+            missing_titles = []
+            for key in ('selection', 'session', 'last_session'):
+                item = tracking.get(key)
+                if not item:
+                    continue
+                selected = item.get('selection') or item
+                title = ((selected.get('fields') or {}).get('title') or {}).get('value')
+                song_id = item.get('song_id') or (item.get('matching') or {}).get('confirmed_song_id')
+                if song_id and not title:
+                    missing_titles.append((item, song_id))
+            if missing_titles:
+                with closing(sqlite3.connect(self.database.resolve().as_uri()+'?mode=ro', uri=True)) as db:
+                    db.row_factory = sqlite3.Row
+                    db.execute('PRAGMA query_only=ON')
+                    for item, song_id in missing_titles:
+                        item['display_song_title'] = catalog_display_title(db, song_id=song_id)
             return result
 
     def _connection(self, status, error=None):

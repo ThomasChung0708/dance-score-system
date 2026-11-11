@@ -14,6 +14,7 @@ from .sqlite_safety import verified_backup, check_integrity
 from .achievements import progress_for_songs, feedback
 from .note_review import result_time
 from .result_consistency import screen_catalog, observation, screen_totals, validate, selection_is_reference
+from .songs import catalog_display_title, evidence_titles, record_display_title
 
 def basis_is_custom(score):return score.get('max_policy')=='custom-judged-v1'
 
@@ -145,7 +146,8 @@ class SubmissionService:
         token_evidence['comparison'].pop('observations',None)
         token=fingerprint(token_evidence)
         summary=dict(session_id=row['session_id'],review_id=row['review_id'],review_revision=row['revision'],
-            song_id=draft.get('song_id'),title=(song['saved_title'] or song['latest_title']) if song else None,
+            song_id=draft.get('song_id'),
+            title=catalog_display_title(db, song, observed_titles=evidence_titles(evidence)),
             pack_name=song['pack_name'] if song else None,relative_path=song['relative_folder'] if song else None,
             source_type=song['source_type'] if song else None,play_mode=mode,played_at=played_at,
             values=values,score=score,full_notes_verified=verified,
@@ -263,12 +265,14 @@ class SubmissionService:
 
     @staticmethod
     def _record(db,record_id,*,include_evidence=True):
-        row=db.execute('SELECT r.*,d.song_id,d.difficulty,s.saved_title,s.latest_title,s.relative_folder,s.source_type,p.name AS pack_name,ps.player_name,ps.play_mode '
+        row=db.execute('SELECT r.*,d.song_id,d.difficulty,s.saved_title,s.latest_title,s.relative_folder,s.source_type,p.name AS pack_name,ps.player_name,ps.play_mode,ps.display_song_title '
             'FROM play_records r JOIN play_sessions ps ON ps.session_id=r.session_id LEFT JOIN game_difficulties d ON d.difficulty_id=r.difficulty_id '
             'LEFT JOIN songs s ON s.song_id=d.song_id LEFT JOIN packs p ON p.pack_id=s.pack_id WHERE r.record_id=?',(record_id,)).fetchone()
         if row is None:raise LibraryError('找不到成績。',404)
         result=dict(row);evidence=json.loads(result.pop('evidence_json'))
-        result['title']=(evidence.get('song') or {}).get('saved_title') or result.pop('saved_title') or result.get('latest_title')
+        result['title'] = record_display_title(
+            db, evidence, (evidence.get('song') or {}).get('song_id') or result['song_id'],
+            result.pop('display_song_title'))
         result.pop('saved_title',None);result.pop('latest_title',None)
         snapshot=evidence.get('song') or {}
         for key in ('song_id','pack_name','source_type'):

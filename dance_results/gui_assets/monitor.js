@@ -5,13 +5,44 @@ let windows=[],packs=[],current=null,observationId=null,candidates=[],lastImageK
 async function api(path,body){const response=await fetch('/api/monitor/'+path,{method:body===undefined?'GET':'POST',headers:{'X-Dance-Token':token,...(body===undefined?{}:{'Content-Type':'application/json'})},body:body===undefined?undefined:JSON.stringify(body)});const value=await response.json();if(!response.ok)throw new Error(value.error||'操作失敗');return value;}
 function message(text){el('monitor-message').hidden=!text;el('monitor-message').textContent=text;}
 function display(value){return value===null||value===undefined||value===''?'未確認':String(value);}
-function sessionSummary(session){if(!session)return '尚無 Session';const fields=session.selection&&session.selection.fields||{},v=k=>display(fields[k]&&fields[k].value);return ['Session '+session.session_id,'狀態：'+session.status,'歌曲：'+v('title'),'Song ID：'+display(session.song_id),'難度：'+v('difficulty')+' / LV '+v('game_level'),'完整音符：'+v('total_notes')+' / 時間：'+v('duration_seconds')+' 秒','匹配：'+session.matching_status,'開始：'+session.started_at,'結算：'+display(session.result&&session.result.state)].join('\n');}
+function sessionSummary(session) {
+ if (!session) return '尚無 Session';
+ const fields = session.selection && session.selection.fields || {};
+ const v = key => display(fields[key] && fields[key].value);
+ const title = (fields.title && fields.title.value) || session.display_song_title;
+ return [
+  'Session ' + session.session_id,
+  '狀態：' + session.status,
+  '歌曲：' + display(title),
+  'Song ID：' + display(session.song_id),
+  '難度：' + v('difficulty') + ' / LV ' + v('game_level'),
+  '完整音符：' + v('total_notes') + ' / 時間：' + v('duration_seconds') + ' 秒',
+  '匹配：' + session.matching_status,
+  '開始：' + session.started_at,
+  '結算：' + display(session.result && session.result.state)
+ ].join('\n');
+}
 function dl(id,entries){const root=el(id);root.replaceChildren();for(const [label,value] of entries){const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;dd.textContent=display(value);root.append(dt,dd);}}
 async function refreshWindows(){try{const data=await api('windows?all='+(el('all-windows').checked?'1':'0'));windows=data.windows;const old=el('monitor-window').value;el('monitor-window').replaceChildren(new Option('自動搜尋 dance 視窗',''));for(const window of windows)el('monitor-window').add(new Option(window.title+' · PID '+window.pid+(window.minimized?'（最小化）':''),String(window.hwnd)));el('monitor-window').value=windows.some(w=>String(w.hwnd)===old)?old:'';}catch(error){message(error.message);}}
 function candidatePath(){const candidate=candidates.find(c=>String(c.song_id)===el('monitor-candidate').value);el('candidate-path').textContent=candidate?'Song '+candidate.song_id+' · Root '+candidate.root_id+' · '+candidate.relative_path:'';}
 function render(status){current=status;const track=status.tracking||{},selection=track.selection,active=track.session,recent=['RESULT','GAME_OVER'].includes(track.state)?track.last_session:null,locked=(active||recent)&&((active||recent).selection);const shown=locked||selection;const fields=shown&&shown.fields||{},v=key=>fields[key]&&fields[key].value;const matching=shown&&shown.matching||{};
  el('monitor-state').textContent=track.state||'尚未開始';el('monitor-pending').textContent=active?'當次歌曲已鎖定；畫面背景變化不會改寫 Session':(selection?'選歌已穩定，請核對匹配狀態':'等待連續確認的選歌資料');
- const pack=active?(active.selection&&active.selection.pack):(shown&&shown.pack||track.pack),preview=active&&active.playing_preview||track.room_preview||{};dl('monitor-song',[['歌曲',v('title')||preview.title],['來源',active?(active.selection&&active.selection.source_type||'unknown'):(shown&&shown.source_type||track.source_type)],['Pack',pack&&pack.name],['難度',v('difficulty')||preview.difficulty],['歌曲 LV',v('game_level')||preview.game_level],['完整音符數',v('total_notes')],['BPM',v('bpm')],['時間（秒）',v('duration_seconds')],['Song ID',active?active.song_id:matching.confirmed_song_id],['匹配狀態',active?active.matching_status:matching.status],['待確認原因',(matching.reasons||[]).join(' / ')]]);
+ const pack = active ? active.selection && active.selection.pack : shown && shown.pack || track.pack;
+ const preview = active && active.playing_preview || track.room_preview || {};
+ const title = v('title') || (active || recent || selection || {}).display_song_title || preview.title;
+ dl('monitor-song', [
+  ['歌曲', title],
+  ['來源', active ? active.selection && active.selection.source_type || 'unknown' : shown && shown.source_type || track.source_type],
+  ['Pack', pack && pack.name],
+  ['難度', v('difficulty') || preview.difficulty],
+  ['歌曲 LV', v('game_level') || preview.game_level],
+  ['完整音符數', v('total_notes')],
+  ['BPM', v('bpm')],
+  ['時間（秒）', v('duration_seconds')],
+  ['Song ID', active ? active.song_id : matching.confirmed_song_id],
+  ['匹配狀態', active ? active.matching_status : matching.status],
+  ['待確認原因', (matching.reasons || []).join(' / ')]
+ ]);
  dl('monitor-connection',[['連線',status.stopping?'停止中（等候本次 OCR 結束）':status.connection],['視窗',status.window&&status.window.title],['視窗大小',status.window&&status.window.width+' × '+status.window.height],['前景視窗',status.window?String(status.window.foreground):null],['擷取錯誤',status.running?status.error:null],['資料目錄',status.output_directory]]);
  el('start-monitor').disabled=status.running;el('stop-monitor').disabled=!status.running||status.stopping;for(const id of ['monitor-window','monitor-player','monitor-source','capture-hz','ocr-interval','confirmations'])el(id).disabled=status.running;
  renderDownloads(status.downloads);el('monitor-metrics').textContent=JSON.stringify(status.metrics,null,2);el('monitor-diagnostics').textContent=JSON.stringify(track.diagnostics||[],null,2);el('monitor-session').textContent=sessionSummary(active||track.last_session);

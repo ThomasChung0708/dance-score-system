@@ -1,7 +1,96 @@
 from collections import defaultdict
+import json
+import re
 
 from .models import Diagnostic, ParsedFile, SongEntry
 from .parsers.common import normalized_title
+
+
+def _text(value):
+    return value.strip() if isinstance(value, str) else ''
+
+
+def _payload(row):
+    return json.loads(row.get('payload_json') or '{}')
+
+
+def _without_dwi_number(title):
+    return re.sub(r'^\d+\.\s*(?=[^\d\s])', '', _text(title))
+
+
+def display_title(song, sources=(), *, observed_titles=()):
+    """Name for an already identified song, never evidence for matching.
+
+    Keep consensus/saved catalog names intact. On a missing catalog name prefer
+    SM's TITLE alone (SUBTITLE can be an album/game credit), then this play's
+    observed names, other sources/candidates, and finally the folder basename.
+    The original titles, reliability and diagnostics are never modified.
+    """
+    if song is None:
+        return None
+    song = dict(song)
+    raw = _payload(song)
+    for key in ('saved_title', 'latest_title', 'title'):
+        if _text(song.get(key)):
+            return _text(song[key])
+    sources = [dict(source) for source in sources]
+    for source in sources:
+        if source.get('format') == 'sm':
+            title = _text(source.get('saved_title') or source.get('title') or
+                          _payload(source).get('title'))
+            if title:
+                return title
+    for title in observed_titles:
+        if _text(title):
+            return _text(title)
+    for source in sources:
+        title = _text(source.get('saved_title') or source.get('title') or
+                      _payload(source).get('title'))
+        if source.get('format') == 'dwi':
+            title = _without_dwi_number(title)
+        if title:
+            return title
+    for title in song.get('title_candidates', raw.get('title_candidates', [])):
+        if _text(title):
+            return _without_dwi_number(title)
+    folder = (song.get('folder_name') or song.get('relative_folder') or
+              song.get('song_folder') or raw.get('song_folder') or '')
+    folder = _text(folder).replace('\\', '/').rstrip('/').rsplit('/', 1)[-1]
+    return _without_dwi_number(folder) or f"Song #{song.get('song_id', '?')}"
+
+
+def catalog_display_title(db, song=None, *, song_id=None, observed_titles=()):
+    """Read-time fallback for old catalogs, with no scan or DB write required."""
+    if song is None and song_id is not None:
+        song = db.execute('SELECT * FROM songs WHERE song_id=?', (song_id,)).fetchone()
+    if song is None:
+        return None
+    song = dict(song)
+    sources = ()
+    if not any(_text(song.get(key)) for key in ('saved_title', 'latest_title', 'title')):
+        sources = db.execute(
+            'SELECT format,saved_title,payload_json FROM song_sources '
+            'WHERE song_id=? ORDER BY source_id', (song.get('song_id'),)).fetchall()
+    return display_title(song, sources, observed_titles=observed_titles)
+
+
+def evidence_titles(evidence):
+    """Only this play's result OCR and consumed selection, for display use."""
+    review = evidence.get('review') or {}
+    session = evidence.get('session') or review.get('locked_session') or {}
+    result = (review.get('ocr') or {}).get('fields') or {}
+    selection = (session.get('selection') or {}).get('fields') or {}
+    return ((result.get('title') or {}).get('value'),
+            (selection.get('title') or {}).get('value'))
+
+
+def record_display_title(db, evidence, song_id, session_title=None):
+    snapshot = evidence.get('song') or {}
+    if _text(snapshot.get('saved_title')):
+        return _text(snapshot['saved_title'])
+    observed = (session_title, *evidence_titles(evidence))
+    return (catalog_display_title(db, song_id=song_id, observed_titles=observed) or
+            display_title(snapshot or None, observed_titles=observed))
 
 
 def group_songs(files: list[ParsedFile]) -> list[SongEntry]:

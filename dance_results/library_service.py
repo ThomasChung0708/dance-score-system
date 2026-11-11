@@ -14,6 +14,7 @@ from .models import GAME_DIFFICULTIES
 from .scanner import scan_library
 from .official_import import read_catalog, preview_catalog, import_catalog
 from .achievements import progress_for_songs
+from .songs import catalog_display_title
 
 
 class LibraryError(ValueError):
@@ -67,7 +68,7 @@ class LibraryService:
         with self.open() as library:
             db=library.connection;self._root(db,root_id)
             rows=[dict(r) for r in db.execute(
-                'SELECT s.song_id,s.root_id,s.pack_id,s.relative_folder,s.folder_name,s.saved_title,s.latest_title,s.latest_status,s.is_present,s.source_type,p.name AS pack_name,p.pack_type,o.file_id,o.gn '
+                'SELECT s.song_id,s.root_id,s.pack_id,s.relative_folder,s.folder_name,s.saved_title,s.latest_title,s.payload_json,s.latest_status,s.is_present,s.source_type,p.name AS pack_name,p.pack_type,o.file_id,o.gn '
                 'FROM songs s JOIN library_roots r ON r.root_id=s.root_id LEFT JOIN packs p ON p.pack_id=s.pack_id '
                 "LEFT JOIN official_song_sources o ON o.song_id=s.song_id WHERE s.root_id=? OR r.root_kind='official_catalog'",(root_id,))]
             extra={r['song_id']:[] for r in rows}
@@ -76,8 +77,10 @@ class LibraryService:
                 for values in json.loads(r['fields'] or '{}').values():extra[r['song_id']].extend(values)
             for r in db.execute("SELECT a.song_id,a.display_title FROM song_title_aliases a JOIN songs s ON s.song_id=a.song_id JOIN library_roots r ON r.root_id=s.root_id WHERE s.root_id=? OR r.root_kind='official_catalog'",(root_id,)):
                 extra[r['song_id']].append(r['display_title'])
+            for r in rows:
+                r['display_title'] = catalog_display_title(db, r)
+                r.pop('payload_json')
         for r in rows:
-            r['display_title']=r['saved_title'] or r['latest_title'] or '名稱待確認'
             r['display_is_saved']=bool(r['saved_title'] and r['saved_title']!=r['latest_title'])
             r['category']='download' if r['pack_type']=='multiplayer_download' else r['source_type']
             r['_search']=folded('\n'.join([r['display_title'],r['relative_folder'],r['pack_name'] or '',r['file_id'] or '',r['gn'] or '',*extra[r['song_id']]]))
@@ -154,7 +157,7 @@ class LibraryService:
             official=dict(official_row) if official_row else None
             if official:official['raw']=json.loads(official.pop('raw_row_json'));artists=[song['artist']] if song['artist'] else []
             result={key:song[key] for key in ('song_id','root_id','pack_id','pack_name','pack_type','relative_folder','folder_name','latest_title','saved_title','latest_status','source_type','is_present')}
-            result.update(display_title=song['saved_title'] or song['latest_title'] or '名稱待確認',
+            result.update(display_title=catalog_display_title(db, song),
                           original_path=None if official else str(Path(song['root_path'])/song['relative_folder']),artists=artists,sources=sources,official=official,
                           formats=sorted({s['format'] for s in sources}),diagnostics=raw['diagnostics'],
                           title_candidates=raw.get('title_candidates',[]),

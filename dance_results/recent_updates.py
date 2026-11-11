@@ -5,10 +5,17 @@ from .bests_policy import VERIFIED_EX,EX_POLICY
 from .score_comparison import comparison
 from .scoring import percentage_display
 from .note_review import result_time
+from .songs import record_display_title
 
 
 def recent_updates(db,limit=30):
-    rows=db.execute("SELECT r.*,d.song_id,d.difficulty,s.saved_title,s.latest_title,s.source_type,s.relative_folder,p.name AS pack_name FROM play_records r JOIN game_difficulties d ON d.difficulty_id=r.difficulty_id JOIN songs s ON s.song_id=d.song_id LEFT JOIN packs p ON p.pack_id=s.pack_id WHERE ("+VERIFIED_EX+") ORDER BY r.record_id").fetchall()
+    rows = db.execute(
+        'SELECT r.*,d.song_id,d.difficulty,s.saved_title,s.latest_title,s.source_type,'
+        's.relative_folder,p.name AS pack_name,ps.display_song_title FROM play_records r '
+        'JOIN play_sessions ps ON ps.session_id=r.session_id '
+        'JOIN game_difficulties d ON d.difficulty_id=r.difficulty_id '
+        'JOIN songs s ON s.song_id=d.song_id LEFT JOIN packs p ON p.pack_id=s.pack_id '
+        'WHERE ('+VERIFIED_EX+') ORDER BY r.record_id').fetchall()
     bests={};latest={};blocked={};skipped=0
     for row in rows:
         r=dict(row);e=json.loads(r['evidence_json']);f=e.get('achievement_feedback') or {};policy=e.get('scoring_version')
@@ -34,7 +41,7 @@ def recent_updates(db,limit=30):
         except (ValueError,AttributeError):skipped+=1;continue
         difference=r['max_difference']
         basis_verified=(e.get('max_basis_verification') or {}).get('verified') is True
-        r.update(title=r['saved_title'] or r['latest_title'],scoring_version=policy,
+        r.update(title=record_display_title(db, e, r['song_id'], r.pop('display_song_title')),scoring_version=policy,
             previous_best_ex=expected,new_best_ex=ex,improvement=None if expected is None else ex-expected,
             update_type='FIRST BEST' if expected is None else 'NEW SCORE',
             display=(f'MAX -{difference}' if difference is not None and 0<=difference<=150 else percentage_display(ex,r['max_score'])) if basis_verified else None,

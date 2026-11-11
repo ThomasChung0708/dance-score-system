@@ -65,10 +65,19 @@ def related_new_songs(evidence,row=None):
 
 def download_receipt(database,sid):
     if not sid:return None
+    from .songs import record_display_title
     with closing(sqlite3.connect(Path(database).resolve().as_uri()+'?mode=ro',uri=True)) as db:
         db.row_factory=sqlite3.Row
-        r=db.execute('SELECT r.record_id,d.song_id,COALESCE(s.saved_title,s.latest_title) AS title FROM play_records r JOIN game_difficulties d ON d.difficulty_id=r.difficulty_id JOIN songs s ON s.song_id=d.song_id WHERE r.session_id=?',(sid,)).fetchone()
-        return dict(r) if r else None
+        db.execute('PRAGMA query_only=ON')
+        r = db.execute(
+            'SELECT r.record_id,d.song_id,r.evidence_json,ps.display_song_title '
+            'FROM play_records r JOIN game_difficulties d ON d.difficulty_id=r.difficulty_id '
+            'JOIN play_sessions ps ON ps.session_id=r.session_id WHERE r.session_id=?', (sid,)).fetchone()
+        if r is None:
+            return None
+        return dict(record_id=r['record_id'], song_id=r['song_id'],
+                    title=record_display_title(db, json.loads(r['evidence_json']),
+                                               r['song_id'], r['display_song_title']))
 
 
 def download_view(evidence,row=None,receipt=None):

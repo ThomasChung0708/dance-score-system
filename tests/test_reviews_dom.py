@@ -22,6 +22,8 @@ class ReviewDOMTests(unittest.TestCase):
         if not Path(node).is_file() or not playwright.exists():
             self.skipTest('Existing Node/Playwright runtime unavailable')
         server = create_server(self.db, monitor_directory=self.output)
+        if hasattr(self, 'configure_server'):
+            self.configure_server(server)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:

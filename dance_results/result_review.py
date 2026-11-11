@@ -14,6 +14,7 @@ from .monitor_tracking import atomic_json, fingerprint, utc, ManualReferences
 from .ocr_matching import ReadOnlyCatalog, normalize
 from .result_ocr import NUMERIC
 from .note_evidence import note_evidence
+from .songs import catalog_display_title
 
 EDITABLE = (*NUMERIC, 'grade', 'completion_status', 'game_level', 'total_notes', 'difficulty', 'player_name', 'duration_seconds')
 
@@ -79,13 +80,19 @@ class ResultReviews:
             # listing reviews must never rewrite historical evidence.
             saved = set()
             song_packs = {}
+            song_titles = {}
             if self.database.is_file():
                 connection = sqlite3.connect(self.database.as_uri()+'?mode=ro', uri=True)
                 try:
+                    connection.row_factory = sqlite3.Row
                     connection.execute('PRAGMA query_only=ON')
                     saved = {r[0] for r in connection.execute('SELECT session_id FROM play_records')}
                     song_packs = dict(connection.execute(
                         'SELECT s.song_id, p.name FROM songs s LEFT JOIN packs p ON p.pack_id=s.pack_id'))
+                    song_titles = {
+                        song['song_id']: catalog_display_title(connection, song)
+                        for song in connection.execute('SELECT * FROM songs')
+                    }
                 finally:
                     connection.close()
             rows = []
@@ -106,6 +113,9 @@ class ResultReviews:
                     title = selection.get('fields', {}).get('title', {}).get('value')
                     if row:
                         title = row['ocr']['fields']['title']['value'] or title
+                    bound_id = (row.get('draft') or {}).get('song_id') if row else session.get('song_id')
+                    if not title and bound_id:
+                        title = song_titles.get(bound_id)
                     rows.append(dict(session_id=session['session_id'], started_at=session.get('started_at'),
                         title=title, song_id=(row.get('draft') or {}).get('song_id') if row else session.get('song_id'),
                         status=row['status'] if row else 'unprocessed', revision=row['revision'] if row else 0,
@@ -320,7 +330,7 @@ class ResultReviews:
                 encoding_candidates=payload.get('encoding_candidates',[])))
         return dict(song_id=song_id, root_id=song['root_id'], relative_path=song['relative_folder'],
             pack_id=song['pack_id'], pack_name=song['pack_name'], source_type=song['source_type'],
-            title=song['saved_title'] or song['latest_title'], official_source=catalog.official_sources.get(song_id),
+            title=catalog_display_title(catalog.db, song), official_source=catalog.official_sources.get(song_id),
             artist=song.get('artist'),
             difficulties=difficulties,sources=sources,acquisition_method='unknown',acquisition_verified=False,
             is_present=bool(song['is_present']))
