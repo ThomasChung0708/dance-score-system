@@ -16,7 +16,7 @@ from .ocr_policy import (
     RESULT_NONFATAL_ERRORS,
 )
 
-STORAGE_POLICY = 'round28-screen-v1'
+STORAGE_POLICY = 'round29-screen-v1'
 
 
 def reliable(field):
@@ -32,8 +32,6 @@ def automatic_request(reviews,row):
     binding=verified_download_binding(reviews,row)
     if binding:selection=binding['selection']
     ocr=row['ocr'];raw=ocr.get('fields') or {}
-    if selection.get('handoff') == 'single_observation':
-        issues.append('automatic_selection_single_observation_requires_review')
     screen_values = {k: item.get('value') for k, item in raw.items()}
     consistency = validate(screen_values, screen_totals(raw, selection),
         selection_reference=selection_is_reference(reviews.scoring_policy, selection))
@@ -54,12 +52,13 @@ def automatic_request(reviews,row):
     result_state=(s.get('result') or {}).get('state')
     if result_state not in ('RESULT','GAME_OVER') or (result_state=='GAME_OVER' and raw.get('completion_status',{}).get('value')!='FAILED'):
         issues.append('automatic_completion_session_conflict')
+    from .ocr_temporal import reliable_result_field
     for key in RESULT_REQUIRED:
-        if not reliable(raw.get(key)):issues.append('automatic_unreliable_'+key)
+        if not reliable_result_field(ocr, key):issues.append('automatic_unreliable_'+key)
     if ocr.get('multiplayer') is None:issues.append('automatic_play_mode_unknown')
     own=[r for r in reviews.player_rows(row) if normalize(r.get('name'))==normalize(ocr.get('requested_player_name'))]
     if len(own)!=1:issues.append('automatic_unique_local_row_required')
-    elif any(not reliable(own[0]['fields'].get(k)) or own[0]['fields'][k]['value']!=raw.get(k,{}).get('value') for k in (*NUMERIC,'grade','completion_status')):
+    elif any(not reliable_result_field(ocr, k, own[0]['fields'].get(k, {})) or own[0]['fields'][k]['value']!=raw.get(k,{}).get('value') for k in (*NUMERIC,'grade','completion_status')):
         issues.append('automatic_player_row_conflict')
     fields=copy.deepcopy(selection.get('ocr_fields',selection.get('fields') or {}))
     for key in SELECTION_REQUIRED:
@@ -90,6 +89,10 @@ def automatic_request(reviews,row):
                 gd=next((d for d in song['difficulties'] if d['difficulty']==fields.get('difficulty',{}).get('value')),None)
         else:issues.append('automatic_source_unconfirmed')
         if sid is None:issues.append('automatic_unique_verified_identity_required')
+        if selection.get('handoff') == 'single_observation' and (
+                source != 'custom' or (selection.get('pack') or {}).get('status') != 'confirmed'
+                or sid is None or sid != s.get('song_id')):
+            issues.append('automatic_selection_single_observation_requires_review')
         if match.get('review_only'):issues.append('automatic_stylized_title_requires_review')
         if any('total_notes' in c.get('conflicts', []) for c in match.get('candidates', [])):
             issues.append('automatic_screen_catalog_notes_conflict')

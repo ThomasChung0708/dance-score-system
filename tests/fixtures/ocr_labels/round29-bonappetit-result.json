@@ -1,0 +1,20 @@
+{
+  "image": "round29/bonappetit-result.png",
+  "sha256": "11e6d251ceabdd2947d7d4ed152622b98afbd080d53928d303af3fce224ced78",
+  "screen_type": "results",
+  "local_player_status": "completed_observed",
+  "fields": {
+    "perfect": 888,
+    "cool": 5,
+    "bad": 0,
+    "miss": 0,
+    "max_combo": 893,
+    "game_score": 63100,
+    "grade": "A++",
+    "completion_status": "COMPLETED",
+    "player_name": "TC",
+    "title": "ぼなぺてぃーと♡S",
+    "game_level": 22
+  },
+  "annotation": "Manually checked session-5 result PNG: footer uses hiragana ぺ, heart and trailing S; HARD is not displayed and is not labelled."
+}

@@ -268,6 +268,15 @@ class Tracker:
             self.count += 1
         if self.count < self.confirmations:
             return
+        if wanted in ('RESULT', 'GAME_OVER') and self.session and self.best_result:
+            temporal = (observation.get('result_ocr') or {}).get('temporal_validation') or {}
+            if len(temporal.get('samples', [])) == 1 and not temporal.get('incomplete'):
+                # A preceding frame without a local row can advance scene
+                # debounce (it may be a settled spectator result). It cannot
+                # make the first complete own score consume the active play.
+                # Wait for a second distinct score, or retain it on quick leave.
+                self.count = 1
+                return
         if wanted=='WAITING_ROOM':
             preview=observation.get('room_preview',{})
             self.room_preview=preview

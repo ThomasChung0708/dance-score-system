@@ -97,13 +97,30 @@ class DiagnosticRulesTests(unittest.TestCase):
         if not directory.is_dir():
             self.skipTest('Read-only real-play failure snapshots are not available')
         counts = replay(directory)
-        # The supplied read-only snapshot can be a different play session.
-        # Verify all of its captures, retaining the original cooldown bound.
+        # The supplied snapshot can contain several nights of captures. Keep
+        # the original <=30 bound for each continuous diagnostic session,
+        # while checking that the combined replay covers every capture.
         snapshots = [json.loads(p.read_text(encoding='utf8')) for p in directory.glob('*.json')]
         self.assertGreater(len(snapshots), 0)
         self.assertEqual(counts['total'], len(snapshots))
         self.assertEqual(counts['before'], sum(bool(s.get('reason')) for s in snapshots))
-        self.assertLessEqual(counts['after'], 30, counts)
+        groups = []
+        from datetime import datetime
+        for snapshot in sorted(snapshots, key=lambda row: row['timestamp']):
+            now = datetime.fromisoformat(snapshot['timestamp']).timestamp()
+            previous = datetime.fromisoformat(groups[-1][-1]['timestamp']).timestamp() if groups else None
+            if previous is None or now-previous > 1800:
+                groups.append([])
+            groups[-1].append(snapshot)
+        after = 0
+        for group in groups:
+            with tempfile.TemporaryDirectory() as temporary:
+                for index, snapshot in enumerate(group):
+                    atomic_json(Path(temporary)/f'{index:04}.json', snapshot)
+                per_session = replay(temporary)
+            self.assertLessEqual(per_session['after'], 30, per_session)
+            after += per_session['after']
+        self.assertEqual(after, counts['after'])
 
 
 class AnimationTests(unittest.TestCase):

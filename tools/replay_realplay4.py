@@ -140,6 +140,8 @@ def replay(snapshot, failures, database):
     try:
         for path in sorted(failures.glob('*.json')):
             meta = read(path)
+            if not sessions or not seconds(sessions[0]['started_at'])-90 <= seconds(meta['timestamp']) <= seconds(sessions[-1]['ended_at'])+30:
+                continue
             if meta['screen_type_guess'] not in ('song_select', 'results'):
                 continue
             with Image.open(path.with_suffix('.png')) as source:
@@ -193,7 +195,9 @@ def replay(snapshot, failures, database):
                 tracker = monitor.tracker = Tracker(monitor.directory)
                 temporal = ResultConsistency()
                 start = seconds(original['started_at'])
-                end = seconds(original['ended_at'])+8
+                # ended_at is the old first saved result, not necessarily the
+                # moment the player left. Include saved later result captures.
+                end = seconds(original['ended_at'])+45
                 if index+1 < len(sessions):
                     end = min(end, seconds(sessions[index+1]['started_at'])-1)
                 begin = start-60
@@ -282,7 +286,9 @@ def replay(snapshot, failures, database):
                     service.auto_allowed = lambda sid: True
                     try:
                         receipt = service.submit_verified(row['session_id'])
-                        submission = {k: receipt['record'][k] for k in ('record_id', 'song_id', 'difficulty', 'confirmation_method')}
+                        submission = {k: receipt['record'][k] for k in (
+                            'record_id', 'song_id', 'difficulty', 'confirmation_method',
+                            'perfect', 'cool', 'bad', 'miss', 'max_combo', 'game_score', 'grade', 'total_notes')}
                         row = monitor.reviews._read(row['session_id'])[1]
                     except Exception as error:
                         issues.append('submission_failed: '+str(error))
@@ -321,17 +327,18 @@ def main():
     parser.add_argument('--snapshot', type=Path, default=PROJECT/'data/realplay4_snapshot')
     parser.add_argument('--failures', type=Path, default=PROJECT/'data/ocr_failures_snapshot')
     parser.add_argument('--database', type=Path, default=PROJECT/'data/library.sqlite3')
+    parser.add_argument('--output-prefix', default='round29-replay4')
     args = parser.parse_args()
     report = replay(args.snapshot, args.failures, args.database)
     report['acceptance'] = acceptance(report)
     report['passed'] = all(report['acceptance'].values())
-    atomic_json(PROJECT/'reports/round28-replay.json', report)
+    atomic_json(PROJECT/'reports'/f'{args.output_prefix}.json', report)
     lines = [report['limitation'], '']
     for play in report['plays']:
         lines.append(json.dumps(play, ensure_ascii=False, indent=2))
     lines.append('Snapshot unchanged: '+str(report['snapshot_unchanged']))
     lines.append('Acceptance: '+json.dumps(report['acceptance'], ensure_ascii=False, indent=2))
-    (PROJECT/'reports/round28-replay.txt').write_text('\n'.join(lines)+'\n', encoding='utf8')
+    (PROJECT/'reports'/f'{args.output_prefix}.txt').write_text('\n'.join(lines)+'\n', encoding='utf8')
     print('\n'.join(lines))
     return 0 if report['passed'] else 1
 

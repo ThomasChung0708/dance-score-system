@@ -7,6 +7,29 @@ from .result_ocr import incomplete_result
 from .ocr_policy import AUTO_CONFIDENCE, result_required
 
 POLICY='phase5f1-two-fresh-results-v1'
+MINOR_FIELDS = ('completion_status', 'player_name')
+
+
+def strict(field):
+    return (isinstance(field, dict) and field.get('value') is not None and field.get('confidence', 0) >= AUTO_CONFIDENCE
+            and not field.get('reason'))
+
+
+def readable_minor(field):
+    return (isinstance(field, dict) and field.get('value') is not None and field.get('confidence', 0) >= .9
+            and field.get('reason') in (None, 'low_confidence'))
+
+
+def reliable_result_field(ocr, key, field=None):
+    """Minor readings may agree with a strong anchor; score thresholds stay fixed."""
+    field = ocr.get('fields', {}).get(key, {}) if field is None else field
+    if strict(field):
+        return True
+    evidence = ocr.get('temporal_validation') or {}
+    samples = evidence.get('samples') or []
+    return (key in MINOR_FIELDS and readable_minor(field) and evidence.get('status') == 'confirmed'
+            and len(samples) == 2 and any(strict(s.get('fields', {}).get(key, {}))
+            and s['fields'][key]['value'] == field['value'] for s in samples))
 
 
 def keys(ocr, samples=()):
@@ -18,17 +41,35 @@ def keys(ocr, samples=()):
 
 
 class ResultConsistency:
-    def __init__(self):self.session_id=None;self.samples=[];self.images=[]
+    def __init__(self):
+        self.session_id = None
+        self.samples = []
+        self.images = []
+        self.confirmed = None
 
     def observe(self,observation,session_id,capture_id,image):
         if observation.get('state') not in ('RESULT','GAME_OVER') or not session_id:
-            self.session_id=None;self.samples=[];self.images=[];return
+            self.session_id = None
+            self.samples = []
+            self.images = []
+            self.confirmed = None
+            return
         if session_id!=self.session_id:
-            self.session_id=session_id;self.samples=[];self.images=[]
-        if self.samples and (capture_id-self.samples[-1]['capture_id']>15 or capture_id<self.samples[-1]['capture_id']):
-            self.samples=[];self.images=[]
+            self.session_id = session_id
+            self.samples = []
+            self.images = []
+            self.confirmed = None
         ocr=observation.get('result_ocr')
-        if not ocr:return
+        if not ocr:
+            return
+        if self.confirmed:
+            # A later recognition cannot replace the accepted pair or its PNGs.
+            # Submission still checks the current fields and result frame hash.
+            ocr['temporal_validation'] = copy.deepcopy(self.confirmed)
+            return
+        if self.samples and (capture_id-self.samples[-1]['capture_id']>15 or capture_id<self.samples[-1]['capture_id']):
+            self.samples = []
+            self.images = []
         if incomplete_result(ocr):
             ocr['temporal_validation'] = dict(
                 policy=POLICY, session_id=session_id, status='pending_review',
@@ -44,11 +85,15 @@ class ResultConsistency:
         for sample in samples:
             for k in keys(ocr, samples):
                 f=sample['fields'].get(k,{})
-                if f.get('value') is None or f.get('confidence',0)<AUTO_CONFIDENCE or f.get('reason'):reasons.append('unreliable_'+k)
+                anchored_minor = (k in MINOR_FIELDS and readable_minor(f)
+                    and any(strict(s['fields'].get(k, {})) for s in samples))
+                if not strict(f) and not anchored_minor:reasons.append('unreliable_'+k)
                 if f.get('value')!=ocr['fields'].get(k,{}).get('value'):reasons.append('conflicting_'+k)
         if reasons:status='pending_review'
         ocr['temporal_validation']=dict(policy=POLICY,session_id=session_id,status=status,reasons=sorted(set(reasons)),samples=samples,
                                        confidence_rule='minimum actual model confidence; no temporal boost')
+        if status == 'confirmed':
+            self.confirmed = copy.deepcopy(ocr['temporal_validation'])
 
     def save(self,directory,ocr):
         """At most two original frames, only for the newly captured result."""
@@ -75,7 +120,9 @@ def issues(ocr,session,directory):
         if not isinstance(s.get('capture_id'),(float,int)) or not math.isfinite(s['capture_id']):errors.append('automatic_temporal_capture_invalid')
         for k in keys(ocr, samples):
             f=s.get('fields',{}).get(k,{})
-            if f.get('value') is None or f.get('confidence',0)<AUTO_CONFIDENCE or f.get('reason') or f.get('value')!=ocr['fields'].get(k,{}).get('value'):errors.append('automatic_temporal_field_conflict')
+            anchored_minor = (k in MINOR_FIELDS and readable_minor(f)
+                and any(strict(row.get('fields', {}).get(k, {})) for row in samples))
+            if (not strict(f) and not anchored_minor) or f.get('value')!=ocr['fields'].get(k,{}).get('value'):errors.append('automatic_temporal_field_conflict')
         try:
             expected=f'result-observations/frame-{i}.png'
             if s.get('path')!=expected:raise ValueError('path')

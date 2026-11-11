@@ -14,14 +14,21 @@ def normalize(value):
     return ' '.join(unicodedata.normalize('NFKC', value or '').casefold().split())
 
 
-def stylized_title_key(value):
-    """Narrow confusable folding for mixed Latin/Japanese titles only."""
+def stylized_title_key(value, *, allow_latin=False):
+    """Confusable key for pack-constrained Japanese/mixed title retrieval.
+
+    Preserve unvoiced versus voiced kana; only the b/p marks are confusable.
+    This is advisory identity evidence, never automatic title authority.
+    """
     key = normalize(value).replace('〜', '~')
-    key = re.sub(r'\s*~\s*', '~', key)
-    found = re.fullmatch(r'([a-z1ı|]+)(~[\u3040-\u30ff\u3400-\u9fff]{4,}~)', key)
-    if not found:
+    if not re.search(r'[\u3040-\u30ff\u3400-\u9fff]', key) and not (
+            allow_latin and re.search(r'[a-z]', key) and re.fullmatch(r'[a-z0-9ı|\s~♡♥❤]+', key)):
         return None
-    return found[1].translate(str.maketrans({'1': 'l', 'i': 'l', 'ı': 'l', '|': 'l'}))+found[2]
+    key = ''.join(chr(ord(c)-0x60) if '\u30a1' <= c <= '\u30f6' else c for c in key)
+    key = unicodedata.normalize('NFC', unicodedata.normalize('NFD', key).replace('\u309a', '\u3099'))
+    key = key.translate(str.maketrans({'♥': '♡', '❤': '♡'})).replace('\ufe0f', '')
+    key = re.sub(r'\s*([♡~])\s*', r'\1', key)
+    return key.translate(str.maketrans({'1': 'l', 'i': 'l', 'ı': 'l', '|': 'l'}))
 
 
 class ReadOnlyCatalog:
@@ -193,13 +200,17 @@ class ReadOnlyCatalog:
         # Pack, and still runs every known chart conflict check below. Unknown
         # chart metadata cannot eliminate a namesake to manufacture uniqueness.
         if not match['candidates'] and pack_id is not None:
-            key = stylized_title_key(fields.get('title', {}).get('value'))
+            key = stylized_title_key(fields.get('title', {}).get('value'), allow_latin=True)
             title_field = fields.get('title', {})
             chart_readable = all(fields.get(k, {}).get('value') is not None
                                  and fields[k].get('confidence', 0) >= AUTO_CONFIDENCE
                                  and not fields[k].get('reason') for k in ('difficulty', 'game_level'))
+            if not re.search(r'[\u3040-\u30ff\u3400-\u9fff]', title_field.get('value') or ''):
+                notes = fields.get('total_notes') or {}
+                chart_readable = (chart_readable and type(notes.get('value')) is int and notes['value'] > 0
+                                  and notes.get('confidence', 0) >= AUTO_CONFIDENCE and not notes.get('reason'))
             if key and chart_readable and title_field.get('confidence', 0) >= .8 and not title_field.get('reason'):
-                ids = {sid for name, songs in self.index.items() if stylized_title_key(name) == key
+                ids = {sid for name, songs in self.index.items() if stylized_title_key(name, allow_latin=True) == key
                        for sid in songs if self.songs[sid]['pack_id'] == pack_id}
                 match = self.match(fields, pack_id, source_type, candidate_ids=ids)
                 fuzzy = bool(match['candidates'])

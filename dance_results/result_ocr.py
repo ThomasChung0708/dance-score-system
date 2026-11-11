@@ -38,6 +38,15 @@ def refine_footer_title(image, engine, original):
     from PIL import Image, ImageOps
     import numpy as np
 
+    # These kana have effectively identical glyphs in this skin. Resolve an
+    # isolated script switch inside a hiragana word by its immediate context,
+    # without changing voicing, looking up songs or increasing confidence.
+    text = original.get('value') or ''
+    contextual = re.sub(r'(?<=[ぁ-ゖ])[ヘベペ](?=[ぁ-ゖ])',
+                        lambda m: chr(ord(m[0])-0x60), text)
+    if contextual != text:
+        original = dict(copy.deepcopy(original), value=contextual,
+                        method='contextual_homographic_kana', original_reading=copy.deepcopy(original))
     reader = getattr(engine, 'recognize_line', None)
     evidence = original.get('evidence') or []
     if reader is not None and original.get('confidence', 0) < AUTO_CONFIDENCE:

@@ -1,0 +1,20 @@
+{
+  "image": "realplay5_harehareyukai_result.png",
+  "sha256": "7e30d46714d17b9689a898075753117d5468d3013f8e88f288bdc54cfaa619eb",
+  "screen_type": "results",
+  "local_player_status": "completed_observed",
+  "fields": {
+    "perfect": 529,
+    "cool": 0,
+    "bad": 0,
+    "miss": 0,
+    "max_combo": 529,
+    "game_score": 37410,
+    "grade": "A++",
+    "completion_status": "COMPLETED",
+    "player_name": "TC",
+    "title": "ハレ晴レユカイ",
+    "game_level": 14
+  },
+  "annotation": "Manually checked session-5 PNG; completed ACP judgment row and footer LV14. Difficulty is not displayed and is not labelled."
+}
