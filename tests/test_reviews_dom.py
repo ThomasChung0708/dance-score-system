@@ -7,12 +7,15 @@ import subprocess
 import threading
 import unittest
 import copy
+import sqlite3
+from contextlib import closing
 from uuid import uuid4
 
 from dance_results.monitor_tracking import atomic_json
 
 from dance_results.gui import create_server
 import test_result_review as fixture
+import test_round33_followup as source_fixture
 
 
 class ReviewDOMTests(unittest.TestCase):
@@ -86,6 +89,39 @@ class ReviewDOMTests(unittest.TestCase):
         preview = store.prepare(body)
         store.submit(dict(body, submission_token=preview['submission_token'], submit_acknowledge=True))
         self.run_browser('chartless')
+
+
+class SourceChoiceDOMTests(unittest.TestCase):
+    setUp = fixture.ReviewPersistenceTests.setUp
+    tearDown = fixture.ReviewPersistenceTests.tearDown
+    run_browser = ReviewDOMTests.run_browser
+    official_auto = source_fixture.FollowupTests.official_auto
+    temporal_row = source_fixture.FollowupTests.temporal_row
+    persist = source_fixture.FollowupTests.persist
+    ambiguous = source_fixture.FollowupTests.ambiguous
+
+    def test_monitor_official_prompt_and_review_preset(self):
+        self.ambiguous()
+        self.run_browser('source-official')
+
+    def test_monitor_folder_list_keyboard_choice(self):
+        self.ambiguous(custom_only=True)
+        self.run_browser('source-folder')
+
+    def test_monitor_dismiss_keeps_review_choice(self):
+        self.ambiguous()
+        self.run_browser('source-dismiss')
+
+    def test_custom_source_expands_multiple_pack_copy_choices(self):
+        self.ambiguous()
+        with closing(sqlite3.connect(self.db)) as db:
+            db.execute("INSERT INTO song_title_aliases(song_id,display_title,confirmed,source) VALUES(2,'Auto Official',1,'game_screen')")
+            db.execute("INSERT INTO game_difficulties(song_id,difficulty,game_level,level_source,total_notes,notes_source,notes_verified) VALUES(2,'HARD',17,'game_screen',11,'game_screen',1)")
+            db.commit()
+        self.run_browser('source-custom')
+
+    def test_player_setting_prefills_both_pages(self):
+        self.run_browser('player-setting')
 
 
 if __name__ == '__main__':

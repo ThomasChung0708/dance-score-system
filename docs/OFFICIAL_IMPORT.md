@@ -15,13 +15,13 @@
 
 ```powershell
 # 只讀預覽，舊資料庫也不會 migration
-python -m dance_results.official_import --csv 'C:\Users\User\Desktop\song_table.csv'
+python -m dance_results.official_import --csv '.\song_table.csv'
 
 # 備份、必要 migration，再交易匯入
-python -m dance_results.official_import --csv 'C:\Users\User\Desktop\song_table.csv' --import
+python -m dance_results.official_import --csv '.\song_table.csv' --import
 
 # 可指定另一個資料庫，完全不依賴自製歌曲庫
-python -m dance_results.official_import --csv 'C:\Users\User\Desktop\song_table.csv' --database 'data/official-test.sqlite3' --import
+python -m dance_results.official_import --csv '.\song_table.csv' --database 'data/official-test.sqlite3' --import
 ```
 
 `--result 路徑.json` 可保存來源 SHA-256、備份、變更數及舊資料稽核。結果路徑不能覆寫 CSV 或資料庫。匯入與結果檔輸出分開回報，避免已提交卻誤稱整批失敗。

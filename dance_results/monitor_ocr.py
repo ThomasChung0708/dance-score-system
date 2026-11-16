@@ -7,6 +7,7 @@ import hashlib
 import re
 import statistics
 
+from .ocr_matching import normalize
 from .ocr_screens import classify, parse_selection, result_context, room_context, in_region, center, compact, value
 
 
@@ -176,8 +177,8 @@ class Analyzer:
         if roi_mode and state == 'PLAYING':
             tokens = self.regions(normalized,[(0,150,1024,225),(0,640,1024,800)])
         elif roi_mode and self.selected_row(normalized) is not None:
-            tokens = self.regions(normalized,[(25,60,980,115),(350,130,960,195),
-                                              (380,220,945,650),(40,130,345,512)])
+            tokens = self.regions(normalized,[(25,60,980,115),(350,130,960,240),
+                                              (380,240,945,650),(40,130,345,512)])
         else:
             tokens = self.engine.recognize(normalized)
             self.calls += 1
@@ -266,7 +267,29 @@ def apply_selection(observation, image, tracker, catalog, references=None, sourc
         return observation
     selection = observation['selection']
     from .pack_selection import infer_selected_pack
-    infer_selected_pack(selection, catalog)
+    automatic_source = source_mode not in ('custom', 'official')
+    if automatic_source:
+        tracker.category_observation(selection.get('category'), selection.get('category_confidence', 0))
+    category_all = (automatic_source and selection.get('category') == 'all'
+                    and selection.get('category_confidence', 0) >= .9)
+    category_pending = (automatic_source and selection.get('category') in ('all', 'jinyue')
+                        and selection.get('category_confidence', 0) >= .9
+                        and tracker.current_category != selection['category'])
+    category_official = category_all or automatic_source and tracker.current_category == 'all'
+    if not category_official and not category_pending:
+        infer_selected_pack(selection, catalog)
+    else:
+        selection.update(selected_pack=None, selected_pack_id=None, selected_pack_confidence=0,
+                         selected_pack_evidence={}, pack_reason='category_source_precedes_pack')
+    evidence = selection.get('selected_pack_evidence') or {}
+    readable = {normalize(t['text']) for t in selection.get('song_title_tokens', [])
+                if t.get('confidence', 0) >= .9}
+    prior_pack = tracker.current_pack or {}
+    if (tracker.current_category is None and not selection['pack_list_visible'] and readable
+            and len(evidence.get('official_overlap_titles') or []) > len(readable)/2
+            and prior_pack.get('source') in ('right_song_list_unique_pack', 'right_song_list_and_row_hint')
+            and not (prior_pack.get('evidence') or {}).get('visible_pack_ids')):
+        tracker.pack_observation(None, uncertain=True)
     tracker.pack_list_visible = selection['pack_list_visible']
     inferred = None
     if selection.get('pack_reason') in ('right_song_list_unique_pack', 'right_song_list_and_row_hint'):
@@ -274,7 +297,7 @@ def apply_selection(observation, image, tracker, catalog, references=None, sourc
         if pack:
             inferred = dict(pack, status='confirmed', source=selection['pack_reason'],
                             evidence=copy.deepcopy(selection['selected_pack_evidence']))
-    if inferred or selection['pack_list_visible']:
+    if (inferred or selection['pack_list_visible']) and not (category_official or category_pending):
         evidence = selection.get('selected_pack_evidence') or {}
         visible = evidence.get('visible_pack_ids') or []
         current_id = (tracker.current_pack or {}).get('pack_id')
@@ -293,13 +316,15 @@ def apply_selection(observation, image, tracker, catalog, references=None, sourc
     pack_id = (tracker.current_pack or {}).get('pack_id')
     if source == 'official':
         tracker.current_pack = None
-        pack_id = inferred['pack_id'] if inferred else None
+        pack_id = None
     fields = copy.deepcopy(selection['fields'])
     ocr_fields = copy.deepcopy(fields)
     matching = catalog.match_identity(fields, pack_id, source)
     sid = matching.get('confirmed_song_id')
     if source not in ('custom', 'official') and sid is not None:
-        source = catalog.songs[sid]['source_type']
+        decided = catalog.songs[sid]['source_type']
+        if decided == 'custom' or matching.get('resolved_source_type') == 'official':
+            source = decided
     if source == 'official':
         official = catalog.match_official(fields, source_confirmed=True)
         if official.get('confirmed_song_id') is not None and (pack_id is None or sid is not None):
@@ -316,7 +341,11 @@ def apply_selection(observation, image, tracker, catalog, references=None, sourc
         if row:
             matching.update(status='confirmed_manual_reference', confirmed_song_id=row['song_id'], reference=row,
                             prior_automatic_reasons=matching.get('reasons',[]),reasons=[])
-    observation.update(fields=copy.deepcopy(fields), ocr_fields=ocr_fields, source_type=source, matching=matching)
+    observation.update(fields=copy.deepcopy(fields), ocr_fields=ocr_fields, source_type=source, matching=matching,
+                       category=dict(value=tracker.current_category, observed=selection.get('category'),
+                                     confidence=selection.get('category_confidence', 0),
+                                     method=selection.get('category_method'),
+                                     evidence=copy.deepcopy(selection.get('category_evidence'))))
     for key,source in [('raw_ocr_fields','raw_fields'),('numeric_roi_evidence','numeric_roi_evidence')]:
         if source in selection:observation[key]=copy.deepcopy(selection[source])
     return observation

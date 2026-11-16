@@ -25,7 +25,8 @@ def reliable(field):
 
 def automatic_request(reviews,row):
     """No manual values or identity checkboxes can become automatic evidence."""
-    issues=[];s=row['locked_session'];selection=s.get('selection') or {}
+    from .source_choice import effective_selection
+    issues=[];s=row['locked_session'];selection=effective_selection(row)
     from .ocr_temporal import issues as temporal_issues
     issues.extend(temporal_issues(row['ocr'],s,reviews.directory/'sessions'/s['session_id']))
     from .download_tracking import verified_download_binding
@@ -33,9 +34,6 @@ def automatic_request(reviews,row):
     if binding:selection=binding['selection']
     ocr=row['ocr'];raw=ocr.get('fields') or {}
     screen_values = {k: item.get('value') for k, item in raw.items()}
-    consistency = validate(screen_values, screen_totals(raw, selection),
-        selection_reference=selection_is_reference(reviews.scoring_policy, selection))
-    issues.extend(consistency['issues'])
     if row['revision']!=0 or row['status']!='pending_review':issues.append('automatic_review_already_edited')
     from datetime import datetime
     try:
@@ -67,25 +65,47 @@ def automatic_request(reviews,row):
     catalog=ReadOnlyCatalog(reviews.database)
     try:
         source = selection.get('source_type')
+        from .chart_changes import official_fields, official_context
+        official_observations = official_fields(selection, ocr, s.get('playing_preview'))
+        if source not in ('custom', 'official'):
+            from .ocr_matching import result_identity_fields
+            fields = official_observations
+            resolved = catalog.match_identity(fields)
+            resolved_sid = resolved.get('confirmed_song_id')
+            if resolved_sid is not None and (catalog.songs[resolved_sid]['source_type'] == 'custom'
+                    or resolved.get('resolved_source_type') == 'official'):
+                source = catalog.songs[resolved_sid]['source_type']
         sid = None
         gd = None
         match = {}
         if source=='official':
+            fields = official_observations
             match=catalog.match_official(fields,source_confirmed=True);sid=match.get('confirmed_song_id')
             if sid:gd=catalog.difficulties.get((sid,fields.get('difficulty',{}).get('value')))
         elif source=='custom':
+            from .ocr_matching import result_identity_fields
+            fields = result_identity_fields(selection, ocr, s.get('playing_preview'))
             pack=selection.get('pack') or {}
             confirmed_pack = pack.get('pack_id') if pack.get('status') == 'confirmed' else None
-            match = catalog.match_identity(fields, confirmed_pack, 'custom')
+            chosen_id = (row.get('source_choice') or {}).get('song_id')
+            match = catalog.match_identity(fields, confirmed_pack, 'custom',
+                candidate_ids=[chosen_id] if chosen_id is not None else None)
             reference_match = catalog.match(fields, confirmed_pack, 'custom')
             ref=ManualReferences(reviews.directory,reviews.database).safe_lookup(fields,confirmed_pack,'custom',catalog,reference_match)
-            sid = ref['song_id'] if ref else match.get('confirmed_song_id')
+            sid = ref['song_id'] if ref and chosen_id is None else match.get('confirmed_song_id')
             if pack.get('status') != 'confirmed' and sid is None:
                 issues.append('automatic_pack_unconfirmed')
             if sid:
                 song=reviews._song(catalog,sid)
                 gd=next((d for d in song['difficulties'] if d['difficulty']==fields.get('difficulty',{}).get('value')),None)
         else:issues.append('automatic_source_unconfirmed')
+        official_result = bool(sid and source == 'official' and official_context(catalog, row, sid))
+        totals = screen_totals(raw, selection)
+        if official_result:
+            totals = [(name, item) for name, item in totals if name == 'result']
+        consistency = validate(screen_values, totals,
+            selection_reference=selection_is_reference(reviews.scoring_policy, selection))
+        issues.extend(consistency['issues'])
         uncharted = bool(sid and source == 'custom'
             and not any(song_id == sid for song_id, _ in catalog.difficulties))
         for key in SELECTION_REQUIRED:
@@ -115,9 +135,9 @@ def automatic_request(reviews,row):
                 or sid is None or sid != s.get('song_id')):
             issues.append('automatic_selection_single_observation_requires_review')
         if match.get('review_only'):issues.append('automatic_stylized_title_requires_review')
-        if any('total_notes' in c.get('conflicts', []) for c in match.get('candidates', [])):
+        if not official_result and any('total_notes' in c.get('conflicts', []) for c in match.get('candidates', [])):
             issues.append('automatic_screen_catalog_notes_conflict')
-        if sid is not None and s.get('song_id') is not None and s['song_id']!=sid:issues.append('automatic_locked_identity_conflict')
+        if sid is not None and s.get('song_id') is not None and s['song_id']!=sid and not row.get('source_choice'):issues.append('automatic_locked_identity_conflict')
         if issues:return None,sorted(set(issues))
         song=catalog.songs[sid]
         values={k:copy.deepcopy(raw.get(k,{}).get('value')) for k in (*NUMERIC,'grade','completion_status','player_name','game_level')}
@@ -126,7 +146,7 @@ def automatic_request(reviews,row):
             duration_seconds=fields.get('duration_seconds',{}).get('value'))
         if values['completion_status'] not in ('COMPLETED','FAILED'):issues.append('automatic_completion_unknown')
         if gd and gd.get('game_level') is not None and gd['game_level']!=values['game_level']:issues.append('automatic_catalog_level_conflict')
-        if screen_catalog(gd):
+        if not official_result and screen_catalog(gd):
             for _, item in screen_totals(raw, selection):
                 if item['value'] != gd['total_notes']:
                     issues.append('automatic_screen_catalog_notes_conflict')

@@ -1,5 +1,7 @@
 # 熱舞 Online · 個人成績單與成長履歷
 
+朋友在自己的 Windows 電腦首次安裝，請看 [朋友安裝與使用說明](docs/FRIEND_SETUP.md)。
+
 目前版本 **0.15.2 / SQLite Schema 10**。沿用 HTML/CSS/JavaScript、Python、SQLite、增量掃描與 OCR／監控架構。關聯仍為 Pack → Song → GameDifficulty → PlayRecord，同名不同 SongFolder 保持獨立。
 
 2026-11-08 BPM 修補：修正即時 ROI 的 BPM 標籤／數字拆框後未保留定位證據的問題。失敗場次原圖經相同 ROI 路徑讀出132／0.99512，427項測試通過；驗收工具另列身份確認與完整選歌資料狀態，不改正式匹配及提交政策。**這是靜態辨識修復，新的實玩雙幀與自動提交尚未驗收。** 見[根因、證據與下次實玩步驟](docs/PHASE5F1_BPM_ROI.md)。
@@ -89,10 +91,10 @@ python -m dance_results.gui
 
 ```powershell
 # 唯讀預覽，不執行 migration
-python -m dance_results.official_import --csv 'C:\Users\User\Desktop\song_table.csv'
+python -m dance_results.official_import --csv '.\song_table.csv'
 
 # 先備份，再執行安全 migration 與交易匯入
-python -m dance_results.official_import --csv 'C:\Users\User\Desktop\song_table.csv' --import
+python -m dance_results.official_import --csv '.\song_table.csv' --import
 ```
 
 可加 `--database 路徑` 指定獨立資料庫，`--result 路徑.json` 保存核對結果。GUI 的「更新歌曲庫」仍只更新自製／connect 資料夾，不會把官方來源當作消失。

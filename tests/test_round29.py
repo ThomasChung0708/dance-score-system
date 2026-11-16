@@ -321,13 +321,13 @@ class MissingSelectionNotesTests(unittest.TestCase):
         row['ocr']['fields']['total_notes'] = dict(value=12, confidence=.99)
         self.assertIn('automatic_consistency_judgment_sum_result', automatic_request(self.service, row)[1])
 
-    def test_null_notes_official_screen_catalog_conflict_blocks(self):
+    def test_null_notes_official_catalog_change_does_not_block_result(self):
         row = self.temporal_row()
         row['locked_session']['selection']['fields']['total_notes']['value'] = None
         with closing(sqlite3.connect(self.db)) as db:
             db.execute("UPDATE game_difficulties SET total_notes=13, notes_source='game_screen', notes_verified=1 WHERE song_id=?", (self.session['song_id'],))
             db.commit()
-        self.assertIn('automatic_screen_catalog_notes_conflict', automatic_request(self.service, row)[1])
+        self.assertEqual(automatic_request(self.service, row)[1], [])
 
     def test_minor_second_frame_can_pass_actual_submit(self):
         row, _ = self.custom(single=True)

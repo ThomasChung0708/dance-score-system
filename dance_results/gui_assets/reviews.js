@@ -208,6 +208,19 @@ function readiness(r) {
   $('review-readiness').textContent = '參考音符數與歌曲時間可保持未知；請以原圖核對本次判定。';
 }
 function renderPreview(p) {
+  let warning = $('chart-change-warning');
+  if (!warning) {
+    warning = document.createElement('p');
+    warning.id = 'chart-change-warning';
+    warning.className = 'monitor-note';
+    warning.setAttribute('role', 'status');
+    $('preview-ex').after(warning);
+  }
+  const changed = (p.warnings || []).find(w => w.code === 'CHART_NOTES_CHANGED');
+  warning.hidden = !changed;
+  warning.textContent = changed ? '警告 CHART_NOTES_CHANGED：目錄 ' + changed.catalog_notes +
+    '／選曲 ' + changed.selection_notes + ' → 結算 ' + changed.observed_notes +
+    '（差 ' + changed.catalog_difference + '）；以本次結算為準。' : '';
   renderNoteSources(p);
   const completed = $('review-completion_status').value === 'COMPLETED';
   $('independent-max-panel').hidden = completed;
@@ -269,6 +282,7 @@ async function show(sessionId) {
   $('storage-status').textContent = '正在核對此 Session 的儲存狀態…';
   selectedId = sessionId;
   current = null;
+  SourceChoice.render($('source-choice'), null);
   for (const item of $('review-list').children) {
     item.classList.toggle('selected', item.dataset.sessionId === sessionId);
   }
@@ -303,6 +317,11 @@ async function show(sessionId) {
     const r = await api('/detail?session_id=' + encodeURIComponent(sessionId));
     if (selectedId !== sessionId || version !== selectionVersion) return;
     current = r;
+    SourceChoice.render($('source-choice'), r.source_prompt, async () => {
+      if (selectedId !== sessionId || version !== selectionVersion) return;
+      current = null;
+      await show(sessionId);
+    });
     if (r.download_evidence && r.download_evidence.new_song_count === undefined) {
       r.download_evidence = legacyDownloadView(r.download_evidence);
       r.candidates = r.candidates.filter(c => c.song_id === r.draft.song_id);
@@ -333,7 +352,7 @@ async function show(sessionId) {
       field.classList.toggle('needs-review', !!raw && (raw.value === null || raw.confidence < .9 || !!raw.reason));
     }
     $('review-search').value = r.ocr.fields.title.value || v('title') || '';
-    $('candidate-source').value = r.candidate_source_type || 'custom';
+    $('candidate-source').value = r.candidate_source_type || 'all';
     candidateOffset = 0;
     renderCandidates(r.candidates, r.draft.song_id, r.candidate_count);
     for (const [id, key] of [['review-player-verified', 'player_verified'],
@@ -687,6 +706,7 @@ function renderSubmission(p) {
   const allIssues = [...issues, ...(preview.issues || []), ...(preview.warnings || [])];
   const seen = new Set();
   for (const i of allIssues) {
+    if (i.code === 'CHART_NOTES_CHANGED') continue;
     const label = submissionReasons[i.code] || reasons[i.code] || '有資料衝突，請核對原始證據。';
     if (seen.has(label)) continue;
     seen.add(label);

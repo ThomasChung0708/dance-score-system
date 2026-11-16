@@ -36,6 +36,8 @@ class ResultReviews:
         self.jobs = {}
         self.worker = None
         self.on_ingest = None
+        from .player_settings import PlayerSettings
+        self.player_settings = PlayerSettings(self.database.parent/'player-settings.json')
 
     def _directory(self, session_id):
         try:
@@ -216,7 +218,8 @@ class ResultReviews:
                 # A clearer result title can recover a review's song binding.
                 # Keep the original locked selection/confidences intact: this
                 # assistance grants no automatic submission authority.
-                fields = copy.deepcopy(selection.get('ocr_fields', selected_fields))
+                from .ocr_matching import result_identity_fields
+                fields = result_identity_fields(selection, ocr, stored.get('playing_preview'))
                 observed_title = ocr['fields'].get('title') or {}
                 if normalize(observed_title.get('value')) == normalize(fields.get('title', {}).get('value')):
                     fields['title'] = copy.deepcopy(observed_title)
@@ -237,15 +240,17 @@ class ResultReviews:
             if self.on_ingest:self.on_ingest(row['session_id'])
             return row
 
-    def process(self, session_id, player_name='TC'):
+    def process(self, session_id, player_name=None):
         with self.lock:
             folder, session, image, sha = self._source(session_id)
             if (folder/'result-review.json').exists():
                 return dict(status='already_processed', review_id=self._read(session_id)[1]['review_id'])
             if self.worker and self.worker.is_alive():
                 raise LibraryError('正在辨識結算，請等候完成。', 409)
+            player_name = self.player_settings.get() if player_name is None else player_name
             if not isinstance(player_name, str) or not player_name.strip() or len(player_name) > 64:
                 raise LibraryError('請輸入本人暱稱。')
+            self.player_settings.set(player_name)
             self.jobs[session_id] = dict(status='running', started_at=utc())
             def run():
                 try:
@@ -268,7 +273,7 @@ class ResultReviews:
             self.worker.start()
             return dict(status='running', session_id=session_id)
 
-    def candidates(self, query, source_type='custom', offset=0, limit=60, values=None):
+    def candidates(self, query, source_type='all', offset=0, limit=60, values=None):
         if not isinstance(query, str) or len(query) > 200:
             raise LibraryError('搜尋字串不正確。')
         if source_type not in ('custom','official','all'):
@@ -367,6 +372,8 @@ class ResultReviews:
                     'confirmed_manual','confirmed_manual_reference','unique_verified_candidate','confirmed_official_catalog')))
             notes_verified = draft.get('notes_verified') is True and known_identity
             gd = catalog.difficulties.get((song_id, values.get('difficulty'))) if song else None
+            from .chart_changes import official_context, warnings as chart_warnings
+            official_result = bool(song and official_context(catalog, row, song_id))
             if gd and gd['notes_verified'] and gd['total_notes'] is not None and values.get('total_notes') == gd['total_notes']:
                 notes_verified = known_identity
             preview = score_preview(values, notes_verified, known_identity)
@@ -374,6 +381,17 @@ class ResultReviews:
             notes = note_evidence(session, values, gd, identity_confirmed=known_identity,
                 manual_notes_verified=draft.get('notes_verified') is True,
                 ocr_values={k:v.get('value') for k,v in (selected_player['fields'] if selected_player else row['ocr']['fields']).items()})
+            if (official_result and draft.get('notes_verified') is True
+                    and values.get('completion_status') == 'COMPLETED'
+                    and values.get('total_notes') == notes['judged_total'] == notes['ocr_judged_total']):
+                # The verified reference for this play is the result itself.
+                # Preserve all catalog/selection counts and their differences.
+                notes.update(catalog_result_difference=notes['judged_total']-gd['total_notes']
+                        if gd and gd.get('total_notes') is not None else None,
+                    verified_total_notes=notes['judged_total'],
+                    verification_source='result_screen_judged_sum',
+                    verification_scope='this_result_screen',
+                    note_count_difference=0, judgment_difference=0, status='consistent')
             notes['ocr_player_row_id']=selected_player['row_id'] if selected_player else None
             from .note_review import authorization
             exception=authorization(row,draft,notes)
@@ -388,12 +406,14 @@ class ResultReviews:
             preview=calculate(values,notes_verified=notes_verified,identity_confirmed=known_identity,
                 note_exception=notes['status']=='count_discrepancy_pending',max_basis=basis,comparison_conflict=compared['ranking_paused'])
             issues = list(preview['errors'])
-            if notes['selected_database_conflict']:
+            if notes['selected_database_conflict'] and not official_result:
                 issues.append(dict(field='total_notes',code='selected_database_notes_conflict'))
                 preview.update(max_score=None,difference=None,percentage=None,display=None,lamp_preview=None)
-            if not use_custom and notes['status']=='count_discrepancy_pending' and not exception['authorized']:
+            if not official_result and not use_custom and notes['status']=='count_discrepancy_pending' and not exception['authorized']:
                 issues.append(dict(field='total_notes',code='note_source_difference_requires_review'))
             warnings = []
+            if official_result:
+                warnings.extend(chart_warnings(row, gd))
             if use_custom and notes['status']=='count_discrepancy_pending':warnings.append(dict(field='total_notes',code='catalog_difference_informational'))
             if compared['ranking_paused']:warnings.append(dict(field='max_basis',code='cross_session_basis_conflict'))
             if not basis['verified']:warnings.append(dict(field='max_basis',code='max_basis_unverified'))
@@ -429,7 +449,7 @@ class ResultReviews:
                     if gd['game_level'] is not None and values.get('game_level') != gd['game_level']:
                         issues.append(dict(field='game_level', code='verified_catalog_level_conflict'))
                     from .result_consistency import screen_catalog
-                    if screen_catalog(gd) and values.get('total_notes') != gd['total_notes']:
+                    if not official_result and screen_catalog(gd) and values.get('total_notes') != gd['total_notes']:
                         issues.append(dict(field='total_notes', code='verified_catalog_notes_conflict'))
             fields = selected.get('fields') or {}
             for key in ('title', 'game_level'):
@@ -483,8 +503,11 @@ class ResultReviews:
             result['draft']['values'].setdefault('duration_seconds',None)
             result['preview'] = self._preview(row, row['draft'])
             result['player_rows']=self.player_rows(row)
-            selection=row['locked_session'].get('selection') or {}
-            scope='official' if selection.get('source_type')=='official' else 'custom'
+            from .source_choice import effective_selection
+            selection=effective_selection(row)
+            scope = 'official' if selection.get('source_type') == 'official' else (
+                'custom' if selection.get('source_type') == 'custom'
+                and (selection.get('pack') or {}).get('status') == 'confirmed' else 'all')
             result['candidate_source_type']=scope
             titles = [row['ocr']['fields']['title']['value'],
                       (row['locked_session'].get('selection') or {}).get('fields', {}).get('title', {}).get('value')]
@@ -503,7 +526,78 @@ class ResultReviews:
             result['pack_required_for_automatic_matching']=True
             result['autofill'] = self._assistance(row, row['draft'])
             result['download_evidence']=download['download_evidence']
+            from .source_choice import offer
+            catalog = ReadOnlyCatalog(self.database)
+            try:
+                result['source_prompt'] = offer(catalog, row)
+            finally:
+                catalog.close()
             return result
+
+    def source_prompts(self):
+        """Read-only UI poll; never blocks or calls the capture loop."""
+        from .source_choice import offer
+        prompts = []
+        catalog = ReadOnlyCatalog(self.database)
+        try:
+            for item in self.list()['results']:
+                if item['status'] != 'pending_review':
+                    continue
+                try:
+                    prompt = offer(catalog, self._read(item['session_id'])[1])
+                    if prompt and not prompt['dismissed']:
+                        prompts.append(prompt)
+                except LibraryError:
+                    continue
+        finally:
+            catalog.close()
+        return dict(prompts=prompts)
+
+    def choose_source(self, body):
+        from .source_choice import offer
+        with self.lock:
+            folder, row = self._read(body.get('session_id'))
+            if body.get('review_id') != row['review_id'] or body.get('revision') != row['revision']:
+                raise LibraryError('此結算已變更，請重新載入。', 409)
+            previous = row.get('source_choice')
+            if previous:
+                if (previous['source_type'], previous.get('song_id')) == (body.get('source_type'), body.get('song_id')):
+                    return dict(session_id=row['session_id'], status=row['status'], idempotent=True)
+                raise LibraryError('此 Session 已選擇來源，請到待確認核對。', 409)
+            catalog = ReadOnlyCatalog(self.database)
+            try:
+                prompt = offer(catalog, row)
+                if not prompt:
+                    raise LibraryError('此結算已無需選擇來源，請重新載入。', 409)
+                if body.get('dismiss') is True:
+                    row['source_prompt_dismissed'] = True
+                else:
+                    source, sid = body.get('source_type'), body.get('song_id')
+                    candidates = [c for c in prompt['candidates'] if c['source_type'] == source]
+                    if source not in ('official', 'custom') or not candidates:
+                        raise LibraryError('來源不在這次結算候選中。', 409)
+                    if source == 'custom' and (type(sid) is not int or sid not in {c['song_id'] for c in candidates}):
+                        raise LibraryError('請選擇本次候選的自製譜資料夾。', 409)
+                    if source == 'official' and sid is not None:
+                        raise LibraryError('官方來源請由正常判定流程辨識譜面。', 409)
+                    candidate = next((c for c in candidates if c['song_id'] == sid), None)
+                    row['source_choice'] = dict(source_type=source, song_id=sid,
+                        pack_id=candidate['pack_id'] if candidate else None,
+                        chosen_at=utc(), review_id=row['review_id'])
+                    if candidate:
+                        row['draft']['song_id'] = sid
+                    elif source == 'official':
+                        from .chart_changes import official_fields
+                        row['draft']['song_id'] = catalog.match_official(
+                            official_fields(row['locked_session'].get('selection') or {}, row['ocr']),
+                            source_confirmed=True).get('confirmed_song_id')
+                    row['source_prompt_dismissed'] = False
+                atomic_json(folder/'result-review.json', row)
+            finally:
+                catalog.close()
+            if not body.get('dismiss') and self.on_ingest:
+                self.on_ingest(row['session_id'])
+            return dict(session_id=row['session_id'], status=row['status'], idempotent=False)
 
     def download_detail(self,session_id,row=None):
         from .download_tracking import session_download,download_view,download_receipt

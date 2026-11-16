@@ -231,6 +231,17 @@ class ReviewPersistenceTests(unittest.TestCase):
         self.assertEqual(len(self.service.candidates('日本語')['candidates']),1)
         self.assertIsNone(self.service.preview(self.body(song_id=None))['max_score'])
 
+    def test_unknown_and_unconfirmed_custom_candidate_scope_is_all(self):
+        folder = self.output/'sessions'/self.sid
+        for source, confirmed, expected in [('unknown', False, 'all'), ('custom', False, 'all'),
+                                             ('custom', True, 'custom'), ('official', False, 'official')]:
+            self.session['selection']['source_type'] = source
+            self.session['selection']['pack']['status'] = 'confirmed' if confirmed else 'candidate'
+            self.row['locked_session'] = copy.deepcopy(self.session)
+            atomic_json(folder/'session.json', self.session)
+            atomic_json(folder/'result-review.json', self.row)
+            self.assertEqual(self.service.detail(self.sid)['candidate_source_type'], expected)
+
     def test_selection_result_and_matcher_use_same_chart_level_without_player_column(self):
         catalog=ReadOnlyCatalog(self.db)
         try:

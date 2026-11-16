@@ -16,6 +16,12 @@ function row(record){
    ...(r.difficulty ? {difficulty: r.difficulty} : {})});
  td.append(title, element('span', 'difficulty-chip difficulty-' + (r.difficulty || 'unknown').toLowerCase(),
    (r.difficulty || '難度未設定') + ' / LV ' + text(r.game_level)));
+ for (const warning of r.warnings || []) {
+  if (warning.code === 'CHART_NOTES_CHANGED') td.append(element('p', 'monitor-note',
+   '警告 CHART_NOTES_CHANGED：目錄 ' + text(warning.catalog_notes) + '／選曲 ' +
+   text(warning.selection_notes) + ' → 結算 ' + warning.observed_notes +
+   '（差 ' + text(warning.catalog_difference) + '）'));
+ }
  const source=element('details','row-source'),summary=element('summary','','來源資訊');source.append(summary,element('p','', (r.source_type==='official'?'Official / K':text(r.pack_name))+' · Song '+r.song_id+' · '+text(r.player_name)),element('p','',r.relative_folder||'來源路徑未設定'));td.append(source);
  td=cell(tr,'CLEAR STATUS','record-clear');td.append(DanceFX.lamp(r.lamp_status,{compact:true}),element('span','status-caption','當次結果'));
  td=cell(tr,'SCORE STATUS','record-score');td.append(DanceFX.scorePanel(r));

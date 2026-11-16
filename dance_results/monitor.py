@@ -50,6 +50,7 @@ class Monitor:
         self.catalog = None
         from .result_review import ResultReviews
         self.reviews = ResultReviews(self.database, self.directory, engine_factory)
+        self.player_settings = self.reviews.player_settings
         self.downloads=None
 
     def windows(self, all_windows=False):
@@ -74,7 +75,7 @@ class Monitor:
                                ocr_interval=number('ocr_interval', 2, .5, 30),
                                confirmations=int(number('confirmations', 2, 2, 5)),
                                selection_ttl=number('selection_ttl', 60, 5, 600),
-                               player_name=str(body.get('player_name', 'TC')).strip()[:64],
+                               player_name=self.player_settings.set(body.get('player_name', self.player_settings.get())),
                                source_mode=body.get('source_mode', 'auto'))
             if not self.config['player_name'] or self.config['source_mode'] not in ('auto', 'official', 'custom'):
                 raise LibraryError('暱稱或來源分類不正確。')

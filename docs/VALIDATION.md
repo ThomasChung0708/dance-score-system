@@ -158,9 +158,9 @@ fileId 12140〈動畫歌曲串燒〉只建立 EASY LV26／3417 音符／MAX6834�
 
 ## 備份與交易
 
-schema 4→5 備份：`C:\Users\User\Documents\ChatGPT\熱舞online 仿 iidx計分 成績單\data\backups\library.pre-v5.20261022T100147277140Z.8428073f.sqlite3`。
+schema 4→5 備份：`data/backups/library.pre-v5.20261022T100147277140Z.8428073f.sqlite3`（本機執行產物，不隨專案分享）。
 
-官方匯入前 schema 5 備份：`C:\Users\User\Documents\ChatGPT\熱舞online 仿 iidx計分 成績單\data\backups\library.pre-official-import.20261022T100149064082Z.572193af.sqlite3`。
+官方匯入前 schema 5 備份：`data/backups/library.pre-official-import.20261022T100149064082Z.572193af.sqlite3`（本機執行產物，不隨專案分享）。
 
 兩份均由 SQLite backup API 建立並驗證全部資料／完整性。Migration 前後以舊欄位完整投影核對，保留原有名稱、路徑、bytes、歷史及 ID，只新增 root_kind、官方表及 official_csv 難度來源 CHECK。匯入前後以既有列範圍逐表雜湊核對，原有資料不變。
 

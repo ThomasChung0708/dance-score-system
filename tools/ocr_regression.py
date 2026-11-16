@@ -246,6 +246,7 @@ def recognize_sample(path, digest, engine, catalog, *, no_cache=False, player_na
             # Same read-only matching as static OCR; no catalog fill is scored.
             catalog.match(selection['fields'], None)
             actual.update({key: field['value'] for key, field in selection['fields'].items()})
+            actual['category'] = selection['category']
             actual.update({key: selection[key] for key in (
                 'selected_pack', 'selected_pack_id', 'selected_pack_confidence',
                 'selected_pack_evidence', 'pack_reason')})

@@ -12,6 +12,7 @@
     <link rel="stylesheet" href="/reviews.css">
     <script src="/lamps.js" defer>
     </script>
+    <script src="/source-choice.js" defer></script>
     <script src="/reviews.js" defer>
     </script>
   </head>
@@ -44,6 +45,7 @@
     </header>
     <div id="review-message" class="message" role="status" hidden>
     </div>
+    <section id="source-choice" class="message" aria-label="譜面來源選擇" hidden></section>
     <main class="review-workspace">
       <aside class="review-list-panel">
         <div class="inbox-heading">
@@ -119,7 +121,8 @@
           <div id="process-panel" hidden>
             <label>
               本人暱稱
-              <input id="result-player" value="TC" maxlength="64">
+              <input id="result-player" value="PLAYER_NAME_SETTING" maxlength="64">
+              <script src="/player-settings.js" defer></script>
             </label>
             <button id="process-result" class="primary">
               辨識此結算

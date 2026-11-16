@@ -10,7 +10,8 @@
     "selected_pack": "Blue's 6th step",
     "total_notes": null,
     "bpm": null,
-    "artist": null
+    "artist": null,
+    "category": "jinyue"
   },
   "annotation": "Session 3 ground truth supplied by user (Nov 10); original PNG unchanged."
 }

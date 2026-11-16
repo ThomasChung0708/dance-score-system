@@ -160,7 +160,7 @@ class ResultAuthorityTests(unittest.TestCase):
         self.assertEqual(record['evidence']['screen_note_observation']['total_notes'], 11)
         self.assertEqual(record['evidence']['screen_note_observation']['provenance'], 'screen_observed')
         self.assertEqual(record['evidence']['catalog_note_disagreement']['catalog_value'], 13)
-        self.assertEqual(record['evidence']['full_notes_source'], 'screen_observed')
+        self.assertEqual(record['evidence']['full_notes_source'], 'result_screen_judged_sum')
         with closing(sqlite3.connect(self.db)) as db:
             self.assertEqual(db.execute('SELECT total_notes,notes_source FROM game_difficulties WHERE song_id=? AND difficulty=?',
                                         (self.session['song_id'], 'HARD')).fetchone(), (13, 'official_csv'))
@@ -178,15 +178,14 @@ class ResultAuthorityTests(unittest.TestCase):
         self.assertEqual(automatic_request(self.service, row)[1], [])
         self.assertEqual(self.submit()['evidence']['screen_note_observation']['total_notes'], 11)
 
-    def test_confirmed_screen_catalog_mismatch_keeps_pending(self):
+    def test_official_screen_catalog_mismatch_is_warning(self):
         row = self.temporal_row()
         self.chart(total_notes=13, notes_source='game_screen')
-        self.assertIn('automatic_screen_catalog_notes_conflict', automatic_request(self.service, row)[1])
-        with self.assertRaisesRegex(LibraryError, 'screen_catalog_notes_conflict'):
-            self.submit()
-        self.assertEqual(self.service._read(self.sid)[1]['status'], 'pending_review')
+        self.assertEqual(automatic_request(self.service, row)[1], [])
+        self.assertIn('CHART_NOTES_CHANGED', [w['code'] for w in self.submit()['warnings']])
+        self.assertEqual(self.service._read(self.sid)[1]['status'], 'saved_verified_auto')
         with closing(sqlite3.connect(self.db)) as db:
-            self.assertEqual(db.execute('SELECT count(*) FROM play_records').fetchone()[0], 0)
+            self.assertEqual(db.execute('SELECT count(*) FROM play_records').fetchone()[0], 1)
 
     def test_result_judgments_conflict_with_screen_catalog_even_without_selection_total(self):
         row = self.temporal_row()
@@ -194,17 +193,16 @@ class ResultAuthorityTests(unittest.TestCase):
         self.session = copy.deepcopy(row['locked_session'])
         self.persist(row)
         self.chart(total_notes=13, notes_source='game_screen')
-        self.assertIn('automatic_screen_catalog_notes_conflict', automatic_request(self.service, row)[1])
+        self.assertEqual(automatic_request(self.service, row)[1], [])
 
-    def test_wrong_digit_in_screen_sum_refuses_auto_with_matching_temporal_frames(self):
+    def test_agreed_result_sum_has_authority_over_selection_notes(self):
         row = self.temporal_row()
         row['ocr']['fields']['perfect']['value'] = 11
         row['ocr']['player_rows'][0]['fields']['perfect']['value'] = 11
         self.persist(row)
         self.assertEqual(temporal_issues(row['ocr'], row['locked_session'], self.output/'sessions'/self.sid), [])
-        self.assertIn('automatic_consistency_judgment_sum_selection', automatic_request(self.service, row)[1])
-        with self.assertRaisesRegex(LibraryError, 'judgment_sum_selection'):
-            self.submit()
+        self.assertEqual(automatic_request(self.service, row)[1], [])
+        self.assertIn('CHART_NOTES_CHANGED', [w['code'] for w in self.submit()['warnings']])
 
     def test_wrong_combo_digit_refuses_auto(self):
         row = self.temporal_row()

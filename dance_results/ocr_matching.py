@@ -74,12 +74,10 @@ class ReadOnlyCatalog:
         self.db.close()
 
     def match_official(self, fields, *, source_confirmed=False):
-        """K catalog assistance requires an explicit Official source and chart.
+        """Bind official K charts by title, difficulty and LV.
 
-        A title search alone never binds. Missing optional screen notes can be
-        filled from the catalog. Only screen-derived catalog notes constrain
-        observed notes; imported counts cannot disqualify a chart identity.
-        Unknown metadata on a namesake cannot eliminate it.
+        Notes break fully observed ties; mutable notes and BPM do not reject a
+        unique chart. Missing identity metadata cannot eliminate a namesake.
         """
         def reliable(key):
             item = fields.get(key, {})
@@ -96,17 +94,9 @@ class ReadOnlyCatalog:
             elif gd['game_level'] is None or not gd['level_source']:
                 missing.append('verified_catalog_chart')
             else:
-                for key in ('game_level', 'total_notes'):
-                    if key == 'total_notes' and not screen_catalog(gd):
-                        continue
+                for key in ('game_level',):
                     observed = fields.get(key, {}).get('value')
                     if observed is not None and observed != gd[key]:conflicts.append(key)
-                bpm = fields.get('bpm', {}).get('value')
-                if bpm is not None and src:
-                    from decimal import Decimal, InvalidOperation
-                    try:
-                        if Decimal(str(bpm)) != Decimal(src['bpm_raw']):conflicts.append('bpm')
-                    except (InvalidOperation, ValueError):conflicts.append('bpm')
             if missing:uncertain = True
             entry = dict(song_id=sid, difficulty_id=gd['difficulty_id'] if gd else None,
                          missing=missing, conflicts=conflicts)
@@ -115,12 +105,16 @@ class ReadOnlyCatalog:
         level=fields.get('game_level',{}).get('value')
         required = all(reliable(k) for k in ('title', 'difficulty', 'game_level')) and (
             difficulty in ('EASY','NORMAL','HARD') and type(level) is int and 0<level<=10**7)
-        # A supplied but unreadable optional observation is a conflict to review,
-        # rather than permission to replace pixels with catalog values.
-        optional_ok = all(fields.get(k, {}).get('value') is None or reliable(k) for k in ('total_notes','bpm'))
-        notes=fields.get('total_notes',{}).get('value')
-        optional_ok=optional_ok and (notes is None or type(notes) is int and 0<notes<=10**7)
-        ok = source_confirmed is True and required and optional_ok and not uncertain and len(eligible) == 1
+        # Notes only disambiguate otherwise identical official charts. BPM and
+        # mutable chart counts never disqualify a unique title/difficulty/LV.
+        if (len(eligible) > 1 and reliable('total_notes')
+                and type(fields['total_notes']['value']) is int and fields['total_notes']['value'] > 0
+                and all(self.difficulties[(c['song_id'], difficulty)].get('total_notes') is not None for c in eligible)):
+            tied = [c for c in eligible if self.difficulties[
+                (c['song_id'], difficulty)].get('total_notes') == fields['total_notes']['value']]
+            if len(tied) == 1:
+                eligible = tied
+        ok = source_confirmed is True and required and not uncertain and len(eligible) == 1
         chosen = eligible[0] if ok else None
         return dict(status='confirmed_official_catalog' if ok else 'pending_manual_review',
                     confirmed_song_id=chosen['song_id'] if chosen else None,
@@ -128,7 +122,7 @@ class ReadOnlyCatalog:
                     bound_difficulty_id=chosen['difficulty_id'] if chosen else None,
                     candidate_count=len(candidates), candidates=candidates,
                     reasons=[] if ok else ['official_source_chart_evidence_missing_ambiguous_or_conflicting'],
-                    method='official_k_title_difficulty_level_and_observed_metadata')
+                    method='official_title_difficulty_level_notes_tiebreaker')
 
     def visible_pack_candidates(self, text):
         """A clipped label may suggest a Pack; it does not confirm selection."""
@@ -194,7 +188,7 @@ class ReadOnlyCatalog:
         return dict(status=status, bound_song_id=None, bound_difficulty_id=None,
                     candidate_count=len(candidates), candidates=candidates, reasons=reasons)
 
-    def match_identity(self, fields, pack_id=None, source_type=None):
+    def match_identity(self, fields, pack_id=None, source_type=None, *, candidate_ids=None):
         """Bind one consistent identity without requiring library note verification.
 
         Unknown chart metadata cannot eliminate a namesake. A Pack constraint is
@@ -203,7 +197,22 @@ class ReadOnlyCatalog:
         """
         from .ocr_policy import AUTO_CONFIDENCE, SELECTION_REQUIRED
 
-        match = self.match(fields, source_type=source_type)
+        match = self.match(fields, source_type=source_type, candidate_ids=candidate_ids)
+        unknown_source = source_type not in ('official', 'custom') and pack_id is None
+        if unknown_source:
+            exact = self.exact_official_identity(fields, match)
+            if exact is not None:
+                return exact
+        if (pack_id is None and len(match['candidates']) > 1
+                and all(c['source_type'] == 'custom' for c in match['candidates'])
+                and all(fields.get(k, {}).get('confidence', 0) >= AUTO_CONFIDENCE
+                    and not fields[k].get('reason') for k in ('title', 'difficulty', 'game_level'))):
+            exact = [c for c in match['candidates'] if c.get('difficulty')
+                and all(c['difficulty'].get(k) == fields.get(k, {}).get('value')
+                    for k in ('difficulty', 'game_level'))]
+            if len(exact) == 1:
+                match['candidates'] = exact
+                match['candidate_count'] = 1
         fuzzy = False
         # Confusable matching never searches outside an independently confirmed
         # Pack, and still runs every known chart conflict check below. Unknown
@@ -274,3 +283,57 @@ class ReadOnlyCatalog:
         if fuzzy:
             match.update(method='pack_constrained_stylized_title', review_only=True)
         return match
+
+    def exact_official_identity(self, fields, match):
+        """Title/difficulty/LV resolves uncharted custom title copies.
+
+        A custom chart with the same identity still forces review. Result
+        consistency and temporal storage checks remain independent of binding.
+        """
+        def exact(candidate):
+            gd = candidate.get('difficulty') or {}
+            return all(fields.get(k, {}).get('value') is not None
+                       and fields[k].get('confidence', 0) >= .9
+                       and not fields[k].get('reason')
+                       and (k == 'title' or gd.get(k) == fields[k]['value'])
+                       for k in ('title', 'difficulty', 'game_level'))
+
+        # Difficulty is the chart's own label, not a numeric database field.
+        exact_candidates = [c for c in match['candidates'] if exact(c)]
+        officials = [c for c in exact_candidates if c['source_type'] == 'official']
+        if not officials or any(c['source_type'] == 'custom' for c in exact_candidates):
+            return None
+        official = self.match_official(fields, source_confirmed=True)
+        if official.get('confirmed_song_id') not in {c['song_id'] for c in officials}:
+            return None
+        match.update(status='confirmed_official_catalog', confirmed_song_id=official['confirmed_song_id'],
+                     bound_song_id=official['confirmed_song_id'],
+                     bound_difficulty_id=official['bound_difficulty_id'], reasons=[],
+                     method='unknown_source_exact_official_chart', resolved_source_type='official')
+        return match
+
+
+def result_identity_fields(selection, ocr, playing=None):
+    """Add original result/playing evidence only where selection has no value."""
+    import copy
+    fields = copy.deepcopy(selection.get('ocr_fields', selection.get('fields') or {}))
+    raw = ocr.get('fields') or {}
+    for key in ('title', 'game_level', 'total_notes'):
+        if key == 'game_level' and ocr.get('multiplayer'):
+            continue
+        if fields.get(key, {}).get('value') is None and raw.get(key, {}).get('value') is not None:
+            fields[key] = copy.deepcopy(raw[key])
+    if fields.get('total_notes', {}).get('value') is None:
+        notes = (playing or {}).get('total_notes')
+        if isinstance(notes, dict) and notes.get('value') is not None:
+            fields['total_notes'] = copy.deepcopy(notes)
+        else:
+            judgments = [raw.get(k) or {} for k in ('perfect', 'cool', 'bad', 'miss')]
+            completion = raw.get('completion_status') or {}
+            if (completion.get('value') == 'COMPLETED' and completion.get('confidence', 0) >= .9
+                    and not completion.get('reason') and all(type(f.get('value')) is int
+                    and f['value'] >= 0 and f.get('confidence', 0) >= .9 and not f.get('reason') for f in judgments)):
+                fields['total_notes'] = dict(value=sum(f['value'] for f in judgments),
+                    confidence=min(f['confidence'] for f in judgments), reason=None,
+                    method='completed_result_judgment_sum')
+    return fields

@@ -6,7 +6,7 @@
 
 ## 1. 結論與預計數量
 
-來源：`C:\Users\User\Desktop\song_table.csv`，942,228 bytes，UTF-8 BOM，嚴格解碼成功。38 個欄位、5,052 筆資料，沒有 CSV 欄數錯位。
+來源：使用者提供的 `song_table.csv`，942,228 bytes，UTF-8 BOM，嚴格解碼成功。38 個欄位、5,052 筆資料，沒有 CSV 欄數錯位。
 
 SHA-256：`08c93228726802f7935895eea66649a14ceddbc8964ac23b7b96c4332503b28b`。
 

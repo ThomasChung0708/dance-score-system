@@ -24,7 +24,7 @@
 
 先用 SQLite backup API 建立並驗證備份，再交易替換 difficulty 表。全部使用者資料表逐列雜湊前後完全相同，包含 Song／Pack／Source ID、來源名稱／路徑、舊編碼 bytes、歷次掃描、別名及歷史。唯一新增資料是 migration 4 紀錄。再次開啟不重跑 migration。`integrity_check=ok`、`foreign_key_check=[]`，外鍵 enforcement 已恢復。
 
-備份：`C:\Users\User\Documents\ChatGPT\熱舞online 仿 iidx計分 成績單\data\backups\library.pre-v4.20261022T064109951708Z.c3ccadc0.sqlite3`。
+備份：`data/backups/library.pre-v4.20261022T064109951708Z.c3ccadc0.sqlite3`（本機執行產物，不隨專案分享）。
 
 完整遷移證據：`data/phase3-migration-result.json`。正式庫未寫入任何 GUI 測試用 LV 或音符數。
 

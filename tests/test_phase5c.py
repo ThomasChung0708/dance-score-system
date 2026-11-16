@@ -170,9 +170,9 @@ class Phase5CTests(unittest.TestCase):
         row['ocr']['local_player_status']='UNKNOWN'
         self.assertIn('automatic_local_player_uncertain',automatic_request(self.service,row)[1])
 
-    def test_auto_never_allows_screen_total_difference_or_prior_human_exception(self):
+    def test_official_selection_difference_allowed_but_prior_edit_still_blocks(self):
         row=self.official_auto(notes=13)
-        self.assertIn('automatic_consistency_judgment_sum_selection',automatic_request(self.service,row)[1])
+        self.assertEqual(automatic_request(self.service,row)[1], [])
         row['draft']['note_review']=dict(authorized=True);row['revision']=1
         self.assertTrue(automatic_request(self.service,row)[1])
 
@@ -180,7 +180,8 @@ class Phase5CTests(unittest.TestCase):
         row=self.official_auto()
         for key,value in [('source_type','unknown')]:
             r=copy.deepcopy(row);r['locked_session']['selection'][key]=value
-            self.assertTrue(automatic_request(self.service,r)[1])
+            # Round 3.3: a unique exact official chart now decides unknown source.
+            self.assertEqual(automatic_request(self.service,r)[1], [])
         conflict=copy.deepcopy(row);conflict['locked_session']['result']['state']='GAME_OVER'
         self.assertIn('automatic_completion_session_conflict',automatic_request(self.service,conflict)[1])
         row['ocr']['fields']['game_level']['value']=99

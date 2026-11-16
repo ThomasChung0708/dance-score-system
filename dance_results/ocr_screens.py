@@ -10,6 +10,62 @@ import statistics
 import unicodedata
 
 DIFFICULTIES = ('EASY', 'NORMAL', 'HARD')
+CATEGORIES = ('all', 'random', 'favorite', 'newest', 'jinyue', 'nostalgia')
+CATEGORY_LABELS = dict(zip(('全部', '隨機', '收藏', '最新', '勁樂', '懷舊'), CATEGORIES))
+CATEGORY_ROI = (386, 198, 951, 240)
+CATEGORY_MARGIN = 24
+
+
+def category_label(text):
+    key = compact(text).translate(str.maketrans({'随': '隨', '机': '機', '劲': '勁',
+                                                '乐': '樂', '怀': '懷', '旧': '舊'}))
+    return CATEGORY_LABELS.get(key)
+
+
+def category_tab(tokens, image, region=CATEGORY_ROI, *, geometry=False):
+    """Read the six skin slots below difficulty; sample below the white glyphs.
+
+    Geometry is allowed only by an anchored full selection parser, or by an
+    explicit crop caller. Both native crop and normalized window are fixtures.
+    Require the pink skin, smooth sample bands and a unique green margin.
+    """
+    left, top, right, bottom = region
+    width = (right-left)/6
+    labels = {}
+    for token in in_region(tokens, region):
+        label = category_label(token['text'])
+        if label and token['confidence'] >= .9:
+            slot = int((center(token)[0]-left)/width)
+            if 0 <= slot < 6:
+                labels[slot] = (label, token)
+    result = dict(category=None, category_confidence=0.0,
+                  category_method='category_unreadable', category_evidence=[])
+    if not geometry and len(labels) != 6:
+        return result
+    scores = []
+    for slot in range(6):
+        patch = image.crop((round(left+width*(slot+.12)), round(bottom-(bottom-top)*.22),
+                            round(left+width*(slot+.24)), round(bottom-(bottom-top)*.12)))
+        pixels = list(patch.convert('RGB').getdata())
+        rgb = tuple(statistics.median(p[c] for p in pixels) for c in range(3))
+        smooth = max(max(p[c] for p in pixels)-min(p[c] for p in pixels) for c in range(3)) <= 12
+        if not smooth or not (235 <= rgb[0] <= 255 and 120 <= rgb[1] <= 195 and 110 <= rgb[2] <= 185):
+            return result
+        scores.append((rgb[1], slot))
+    ranked = sorted(scores, reverse=True)
+    margin = ranked[0][0]-ranked[1][0]
+    result['category_evidence'] = dict(region=list(region), green_scores=[s[0] for s in scores],
+                                       margin=margin, required_margin=CATEGORY_MARGIN)
+    if margin <= CATEGORY_MARGIN:
+        return result
+    slot = ranked[0][1]
+    # A recognized label contradicting fixed geometry invalidates the skin.
+    if any(label != CATEGORIES[i] for i, (label, _) in labels.items()):
+        return result
+    result.update(category=CATEGORIES[slot], category_confidence=.95,
+                  category_method='ocr_category_label_and_background' if slot in labels else
+                                  'validated_category_slots_and_background')
+    return result
 
 
 def center(token):
@@ -130,6 +186,7 @@ def parse_selection(tokens, image):
         patch = image.crop((x-3, int(y)-3, x+4, int(y)+4))
         tab_scores.append((statistics.mean(p[1] for p in patch.getdata()), t))
     tab_scores.sort(key=lambda s: s[0], reverse=True)
+    category = category_tab(tokens, image, geometry=len(tabs) == 3)
     if len(tab_scores) == 3 and tab_scores[0][0]-tab_scores[1][0] > 35:
         fields['difficulty'] = value(compact(tab_scores[0][1]['text']), [tab_scores[0][1]],
                                      method='ocr_tab_label_and_active_background')
@@ -186,7 +243,7 @@ def parse_selection(tokens, image):
         current, total = map(int, re.findall(r'\d+', pages[0]['text']))
         if 1 <= current <= total:
             page = dict(current=current, total=total, evidence=pages)
-    return dict(fields=fields, visible_rows=[dict(title=r['title']['text'], game_level=int(r['level']['text']),
+    return dict(**category, fields=fields, visible_rows=[dict(title=r['title']['text'], game_level=int(r['level']['text']),
                 duration_seconds=duration_seconds(r['time']['text']), highlight_score=r['highlight_score']) for r in rows],
                 song_title_tokens=titles, song_page=page,
                 pack_list_visible=overlay, visible_packs=visible_packs,

@@ -3,9 +3,20 @@ __pycache__/
 reports/
 .venv/
 .venv-ocr/
+.venv*/
 .ocr-models/
 .pytest_cache/
 data/
 
 # local test screenshots (not uploaded)
 tests/專案測試圖片/
+
+# Local captures, caches, backups and launch logs (including alternate locations).
+ocr_failures/
+monitor/sessions/
+captures/
+*.sqlite3
+*.sqlite3-*
+*.sqlite
+*.sqlite-*
+*.log

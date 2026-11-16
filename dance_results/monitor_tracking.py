@@ -42,6 +42,10 @@ class Tracker:
         self.pack_observed_at = None
         self.pack_confirmed_at = None
         self.current_source = 'unknown'
+        self.current_category = None
+        self.proposed_category = None
+        self.category_count = 0
+        self.category_seen_at = None
         self.selection = None
         self.selection_candidate = None
         self.playing_candidate = None
@@ -81,6 +85,10 @@ class Tracker:
         self.selection_key = None
         self.selection_count = 0
         if clear_pack:
+            self.current_category = None
+            self.proposed_category = None
+            self.category_count = 0
+            self.category_seen_at = None
             self.current_pack = None
             self.pack_observed_at = None
             self.pack_confirmed_at = None
@@ -164,6 +172,39 @@ class Tracker:
             self.pack_observed_at = now if self.current_pack else None
             self.log('pack_observed', pack=self.current_pack)
 
+    def category_observation(self, category, confidence=0, now=None):
+        """Two observations grant source authority; contradiction revokes it now."""
+        now = time.monotonic() if now is None else now
+        reliable = confidence >= .9 and category in ('all', 'jinyue')
+        if not reliable:
+            self.proposed_category = None
+            self.category_count = 0
+            if (category is not None or self.category_seen_at is not None
+                    and now-self.category_seen_at > self.selection_ttl):
+                self.current_category = None
+                self.current_source = 'custom' if self.current_pack else 'unknown'
+            return
+        self.category_seen_at = now
+        if category == self.proposed_category:
+            self.category_count += 1
+        else:
+            self.proposed_category = category
+            self.category_count = 1
+        if category != self.current_category:
+            self.invalidate_selection('category_changed', clear_pack=False)
+            self.current_category = None
+            self.current_pack = None
+            self.pack_confirmed_at = None
+            self.proposed_pack = None
+            self.pack_count = 0
+            self.current_source = 'unknown'
+        if self.category_count >= self.confirmations:
+            self.current_category = category
+            self.current_source = 'official' if category == 'all' else 'custom'
+            if category == 'all':
+                self.current_pack = None
+                self.pack_candidates = []
+
     def update_selection(self, observation, now):
         # A transition can retain the song-select anchors while its identity is
         # unreadable. It neither changes the song nor refreshes its freshness.
@@ -190,6 +231,7 @@ class Tracker:
         payload = dict(fields=observation['fields'], pack=copy.deepcopy(self.current_pack),
                        source_type=observation.get('source_type', self.current_source),
                        matching=copy.deepcopy(observation['matching']), frame_hash=observation['frame_hash'])
+        payload['category'] = copy.deepcopy(observation.get('category'))
         if 'ocr_fields' in observation:
             payload['ocr_fields'] = copy.deepcopy(observation['ocr_fields'])
         for key in ('raw_ocr_fields','numeric_roi_evidence'):

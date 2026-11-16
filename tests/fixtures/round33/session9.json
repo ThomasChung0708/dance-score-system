@@ -1,0 +1,143 @@
+{
+  "bcdf2f45-3722-4001-94d9-66b8d9d4138d": {
+    "expected_song_id": 4357,
+    "fields": {
+      "title": {
+        "value": "Libera Me",
+        "confidence": 0.97143,
+        "reason": null,
+        "method": "ocr_highlighted_row"
+      },
+      "difficulty": {
+        "value": "HARD",
+        "confidence": 0.99714,
+        "reason": null,
+        "method": "ocr_tab_label_and_active_background"
+      },
+      "game_level": {
+        "value": 40,
+        "confidence": 0.99852,
+        "reason": null,
+        "method": "ocr"
+      },
+      "total_notes": {
+        "value": 1797,
+        "confidence": 0.99458,
+        "reason": null,
+        "method": "ocr"
+      },
+      "bpm": {
+        "value": 165.0,
+        "confidence": 0.96468,
+        "reason": null,
+        "method": "ocr"
+      },
+      "duration_seconds": {
+        "value": 133,
+        "confidence": 0.97431,
+        "reason": null,
+        "method": "ocr"
+      },
+      "artist": {
+        "value": "Cranky",
+        "confidence": 0.95192,
+        "reason": null,
+        "method": "ocr"
+      }
+    }
+  },
+  "d060f0c9-547f-47a6-8008-abc9c571196e": {
+    "expected_song_id": 4341,
+    "fields": {
+      "title": {
+        "value": "Running In The 90's",
+        "confidence": 0.94952,
+        "reason": null,
+        "method": "ocr_highlighted_row"
+      },
+      "difficulty": {
+        "value": "HARD",
+        "confidence": 0.99732,
+        "reason": null,
+        "method": "ocr_tab_label_and_active_background"
+      },
+      "game_level": {
+        "value": 17,
+        "confidence": 0.99922,
+        "reason": null,
+        "method": "ocr"
+      },
+      "total_notes": {
+        "value": 914,
+        "confidence": 0.99325,
+        "reason": null,
+        "method": "ocr"
+      },
+      "bpm": {
+        "value": 158.0,
+        "confidence": 0.96571,
+        "reason": null,
+        "method": "ocr"
+      },
+      "duration_seconds": {
+        "value": 104,
+        "confidence": 0.96515,
+        "reason": null,
+        "method": "ocr"
+      },
+      "artist": {
+        "value": "Initial D",
+        "confidence": 0.94823,
+        "reason": null,
+        "method": "ocr"
+      }
+    }
+  },
+  "f3fd6598-7a40-4a6a-9cd1-5ff93f6d412a": {
+    "expected_song_id": 4350,
+    "fields": {
+      "title": {
+        "value": "Uso",
+        "confidence": 0.97768,
+        "reason": null,
+        "method": "ocr_highlighted_row"
+      },
+      "difficulty": {
+        "value": "HARD",
+        "confidence": 0.9964,
+        "reason": null,
+        "method": "ocr_tab_label_and_active_background"
+      },
+      "game_level": {
+        "value": 13,
+        "confidence": 0.99848,
+        "reason": null,
+        "method": "ocr"
+      },
+      "total_notes": {
+        "value": 777,
+        "confidence": 0.94404,
+        "reason": null,
+        "method": "ocr"
+      },
+      "bpm": {
+        "value": 90.0,
+        "confidence": 0.99685,
+        "reason": null,
+        "method": "numeric_roi_two_views"
+      },
+      "duration_seconds": {
+        "value": 99,
+        "confidence": 0.96256,
+        "reason": null,
+        "method": "ocr"
+      },
+      "artist": {
+        "value": "Full Ietal &lchenist",
+        "confidence": 0.91244,
+        "reason": null,
+        "method": "ocr"
+      }
+    }
+  }
+}

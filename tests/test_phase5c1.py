@@ -134,10 +134,12 @@ class ResultPriorityTests(unittest.TestCase):
         self.assertEqual(r['ex_score'],21);self.assertEqual(r['confirmation_method'],'verified_auto')
         self.assertIsNone(r['max_score']);self.assertIsNone(r['max_basis_notes']);self.assertIsNone(r['lamp_status'])
 
-    def test_auto_discrepancy_still_pending_never_inherits_human_exception(self):
+    def test_official_selection_discrepancy_saves_result_with_warning(self):
         self.official_auto(notes=13)
-        with self.assertRaises(LibraryError):self.auto_store().submit_verified(self.sid)
-        self.assertEqual(self.store().history()['total'],0)
+        record = self.auto_store().submit_verified(self.sid)['record']
+        self.assertEqual(record['evidence']['values']['total_notes'], 11)
+        self.assertIn('CHART_NOTES_CHANGED', [w['code'] for w in record['warnings']])
+        self.assertFalse(record['note_exception']['authorized'])
 
     def test_resave_restart_keeps_source_confirmation_separate_from_max(self):
         b=self.heart();saved=self.service.save(b)

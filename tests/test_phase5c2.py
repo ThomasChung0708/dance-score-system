@@ -138,7 +138,7 @@ class CustomMaxTests(unittest.TestCase):
         for pr in row['ocr']['player_rows']:
             if pr['name']=='TC':pr['fields']['bad']['value']=1
         atomic_json(folder/'result-review.json',row)
-        with self.assertRaisesRegex(LibraryError,'automatic_consistency_judgment_sum_selection'):
+        with self.assertRaisesRegex(LibraryError,'automatic_temporal_field_conflict'):
             self.auto_store().submit_verified(self.sid)
 
     def test_cross_session_conflict_blocks_automatic_even_if_catalog_matches(self):

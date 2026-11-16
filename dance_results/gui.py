@@ -84,9 +84,12 @@ def create_server(database,port=0,monitor_directory=None):
                 parsed=urlsplit(self.path);self._check(parsed.path.startswith('/api/'))
                 if parsed.path in ('/','/monitor','/reviews','/history'):
                     source=(ASSETS/({'/monitor':'monitor.html','/reviews':'reviews.html','/history':'history.html'}.get(parsed.path,'index.html'))).read_text(encoding='utf-8').replace('SESSION_TOKEN',html.escape(token,quote=True))
+                    source=source.replace('PLAYER_NAME_SETTING', html.escape(monitor.player_settings.get(), quote=True))
                     return self._response(200,source.encode('utf-8'),'text/html; charset=utf-8')
                 assets={'/app.js':('app.js','text/javascript; charset=utf-8'),'/monitor.js':('monitor.js','text/javascript; charset=utf-8'),'/reviews.js':('reviews.js','text/javascript; charset=utf-8'),'/reviews.css':('reviews.css','text/css; charset=utf-8'),'/history.js':('history.js','text/javascript; charset=utf-8'),'/history.css':('history.css','text/css; charset=utf-8'),'/style.css':('style.css','text/css; charset=utf-8')}
                 assets.update({'/lamps.js':('lamps.js','text/javascript; charset=utf-8'),'/lamps.css':('lamps.css','text/css; charset=utf-8')})
+                assets['/source-choice.js'] = ('source-choice.js', 'text/javascript; charset=utf-8')
+                assets['/player-settings.js'] = ('player-settings.js', 'text/javascript; charset=utf-8')
                 if parsed.path in assets:
                     file,mime=assets[parsed.path]
                     return self._response(200,(ASSETS/file).read_bytes(),mime)
@@ -97,6 +100,7 @@ def create_server(database,port=0,monitor_directory=None):
                     try:return int(value)
                     except (ValueError,TypeError):raise LibraryError(name+' 必須是整數。')
                 if parsed.path=='/api/bootstrap':result=service.bootstrap()
+                elif parsed.path=='/api/player-settings':result=dict(player_name=monitor.player_settings.get())
                 elif parsed.path=='/api/history':
                     result=submissions.history(song_id=number('song_id'),difficulty=args.get('difficulty',[None])[0],
                         player_name=args.get('player_name',[None])[0],offset=number('offset',0),limit=number('limit',60))
@@ -123,6 +127,7 @@ def create_server(database,port=0,monitor_directory=None):
                 elif parsed.path=='/api/monitor/result':return self._response(200,monitor.result_image(),'image/png')
                 elif parsed.path=='/api/monitor/packs':result=monitor.packs()
                 elif parsed.path=='/api/reviews/storage':result=automatic.status()
+                elif parsed.path=='/api/reviews/source-prompts':result=monitor.reviews.source_prompts()
                 elif parsed.path=='/api/reviews':result=monitor.reviews.list()
                 elif parsed.path=='/api/reviews/detail':result=monitor.reviews.detail(args.get('session_id',[''])[0])
                 elif parsed.path=='/api/reviews/download':
@@ -131,7 +136,7 @@ def create_server(database,port=0,monitor_directory=None):
                     values=None
                     if args.get('session_id'):
                         values=monitor.reviews._read(args['session_id'][0])[1]['draft']['values']
-                    result=monitor.reviews.candidates(args.get('q',[''])[0],args.get('source_type',['custom'])[0],
+                    result=monitor.reviews.candidates(args.get('q',[''])[0],args.get('source_type',['all'])[0],
                         number('offset',0),number('limit',60),values)
                 elif parsed.path=='/api/reviews/scan':
                     result=dict(roots=[r for r in service.bootstrap()['roots'] if r['root_kind']=='filesystem'],scan=service.scan_status())
@@ -160,6 +165,7 @@ def create_server(database,port=0,monitor_directory=None):
                 except (ValueError,UnicodeError):raise LibraryError('JSON 資料不正確。')
                 if not isinstance(body,dict):raise LibraryError('資料格式不正確。')
                 if route=='/api/difficulty':result=service.save_difficulty(body)
+                elif route=='/api/player-settings':result=dict(player_name=monitor.player_settings.set(body.get('player_name')))
                 elif route=='/api/scan':result=service.start_scan(body.get('root_id'))
                 elif route=='/api/official/preview':result=service.official_catalog(body)
                 elif route=='/api/official/import':result=service.official_catalog(body,apply=True)
@@ -168,10 +174,17 @@ def create_server(database,port=0,monitor_directory=None):
                 elif route=='/api/monitor/confirm':result=monitor.confirm(body)
                 elif route=='/api/monitor/confirm-pack':result=monitor.confirm_pack(body)
                 elif route=='/api/reviews/storage':result=automatic.configure(body)
+                elif route=='/api/reviews/source-choice':
+                    result=monitor.reviews.choose_source(body)
+                    if not body.get('dismiss') and automatic.allowed(body.get('session_id')):
+                        try:
+                            result['submission']=submissions.submit_verified(body.get('session_id'))
+                        except LibraryError as error:
+                            result.update(status='pending_review', reason=str(error))
                 elif route=='/api/reviews/retry-auto':
                     if not automatic.allowed(body.get('session_id')):raise LibraryError('此 Session 不在自動儲存範圍；請啟用模式後遊玩新的一首，既有待確認資料仍需人工提交。',409)
                     automatic.enqueue(body.get('session_id'));result=automatic.status()
-                elif route=='/api/reviews/process':result=monitor.reviews.process(body.get('session_id'),body.get('player_name','TC'))
+                elif route=='/api/reviews/process':result=monitor.reviews.process(body.get('session_id'),body.get('player_name'))
                 elif route=='/api/reviews/preview':result=monitor.reviews.preview(body)
                 elif route=='/api/reviews/assist':result=monitor.reviews.assist(body)
                 elif route=='/api/reviews/save':result=monitor.reviews.save(body)

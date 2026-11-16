@@ -11,6 +11,62 @@ async function main() {
     const errors = [];
     page.on('pageerror', e => errors.push(e.message));
     await page.goto(base + '/reviews');
+    if (mode === 'player-setting') {
+      assert.equal(await page.locator('#result-player').inputValue(), 'TC');
+      await page.route('**/api/monitor/windows?**', route => route.fulfill({
+        status: 200, contentType: 'application/json', body: JSON.stringify({windows: []})
+      }));
+      await page.goto(base + '/monitor');
+      const input = page.locator('#monitor-player');
+      assert.equal(await input.inputValue(), 'TC');
+      const saved = page.waitForResponse(r => r.url().endsWith('/api/player-settings') && r.request().method() === 'POST');
+      await input.fill('Friend☆');
+      await input.blur();
+      assert.equal((await saved).status(), 200);
+      await page.goto(base + '/monitor');
+      assert.equal(await page.locator('#monitor-player').inputValue(), 'Friend☆');
+      await page.goto(base + '/reviews');
+      assert.equal(await page.locator('#result-player').inputValue(), 'Friend☆');
+      assert.deepEqual(errors, []);
+      console.log(JSON.stringify({mode, passed: true}));
+      return;
+    }
+    if (mode.startsWith('source-')) {
+      await page.route('**/api/monitor/windows?**', route => route.fulfill({
+        status: 200, contentType: 'application/json', body: JSON.stringify({windows: []})
+      }));
+      await page.goto(base + '/monitor');
+      const prompt = page.locator('#source-choice');
+      await prompt.waitFor({state: 'visible'});
+      if (mode === 'source-folder' || mode === 'source-custom') {
+        if (mode === 'source-custom') await prompt.getByRole('button', {name: '自製譜', exact: true}).click();
+        else assert.match(await prompt.textContent(), /這首是哪個資料夾的譜面？/);
+        assert.equal(await prompt.getByRole('button', {name: /Pack A/}).count(), 2);
+        assert.match(await prompt.textContent(), /HARD \/ LV 17 \/ 11 音符/);
+        const copy = prompt.getByRole('button', {name: /Folder B/});
+        await copy.focus();
+        await page.keyboard.press('Enter');
+      } else if (mode === 'source-dismiss') {
+        await prompt.getByRole('button', {name: '稍後到待確認處理'}).click();
+      } else {
+        assert.match(await prompt.textContent(), /這首是官方譜還是自製譜？/);
+        await prompt.getByRole('button', {name: '官方譜', exact: true}).click();
+      }
+      await prompt.waitFor({state: 'hidden'});
+      await page.waitForTimeout(1800);
+      assert.equal(await prompt.isVisible(), false);
+      await page.goto(base + '/reviews');
+      await page.waitForSelector('#review-inputs:not([disabled])');
+      if (mode === 'source-dismiss') {
+        assert.equal(await page.locator('#source-choice').isVisible(), true);
+      } else {
+        assert.equal(await page.locator('#candidate-source').inputValue(), ['source-folder', 'source-custom'].includes(mode) ? 'custom' : 'official');
+        assert.ok(await page.locator('#review-song').inputValue());
+      }
+      assert.deepEqual(errors, []);
+      console.log(JSON.stringify({mode, passed: true}));
+      return;
+    }
     if (mode === 'chartless') {
       await page.goto(base + '/history');
       await page.waitForSelector('.record-title');

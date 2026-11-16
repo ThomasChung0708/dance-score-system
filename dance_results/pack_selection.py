@@ -207,10 +207,21 @@ def infer_selected_pack(selection, catalog):
     supports = {}
     title_support = {}
     matched = []
+    official_titles = set()
+    readable_titles = set()
+    explicit_custom = (selection.get('category') == 'jinyue'
+                       and selection.get('category_confidence', 0) >= .9)
+    group_visible = selection.get('pack_list_visible', bool(selection.get('visible_packs')))
     for token in selection.get('song_title_tokens', []):
         if token['confidence'] < .9:
             continue
         ids = catalog.index.get(normalize(token['text']), set())
+        readable_titles.add(normalize(token['text']))
+        overlap = any(catalog.songs[sid].get('source_type') == 'official' for sid in ids)
+        if overlap:
+            official_titles.add(normalize(token['text']))
+        if overlap and not (explicit_custom or group_visible):
+            continue
         for sid in ids:
             song = catalog.songs[sid]
             pid = song.get('pack_id')
@@ -224,6 +235,11 @@ def infer_selected_pack(selection, catalog):
                        for row in visible]
     visible_ids = {p['pack_id'] for row in visible_mapping for p in row['candidates']}
     eligible = {pid for pid, songs in supports.items() if len(songs) >= 2 and len(title_support[pid]) >= 2}
+    if (not explicit_custom and not group_visible and readable_titles
+            and len(official_titles) > len(readable_titles)/2):
+        eligible.clear()
+    if selection.get('category') == 'all' and selection.get('category_confidence', 0) >= .9:
+        eligible.clear()
     if visible:
         eligible &= visible_ids
     raw_hint = selection.get('pack_row_hint')
@@ -241,6 +257,7 @@ def infer_selected_pack(selection, catalog):
         chosen = next(iter(eligible & hint_ids))
     pack = next((p for p in catalog.packs if p['pack_id'] == chosen), None)
     evidence = dict(matched_titles=matched, candidate_pack_ids=sorted(eligible),
+                    official_overlap_titles=sorted(official_titles),
                     visible_pack_ids=sorted(visible_ids), row_hint=hint,
                     visible_pack_mapping=visible_mapping,
                     row_edges=selection.get('pack_row_evidence', []),

@@ -63,3 +63,26 @@ api('packs').then(data=>{packs=data.packs;for(const p of packs)el('confirm-pack'
 
 
 function renderDownloads(d){if(!d){el('download-state').textContent='下載追蹤尚未開始';return;}if(d.new_song_count===undefined)d={...d,no_map_detected:d.self_no_map_confirmed,download_tracking:!d.scan_completed&&d.status!=='armed',new_song_count:0,matched_song:null,needs_manual_review:!!d.result_seen,acquisition_uncertain:!!d.scan_completed||!!d.candidates?.length};const lines=[d.no_map_detected?'NO MAP detected':'等待本人 NO MAP',d.progress_observed?'已觀測下載進度（不代表完成）':d.download_tracking?'下載追蹤中':'下載狀態：未確認',d.scanning?'SONG 正在掃描':d.scan_completed?'SONG 本輪掃描已結束':'SONG 等待處理','本次新增歌曲：'+d.new_song_count,'匹配成功：'+(d.matched_song?(d.matched_song.title||'Song #'+d.matched_song.song_id):'0'),'待確認：'+(d.needs_manual_review?'1':'0'),'正式成績：'+(d.formal_saved?'已儲存 #'+d.record_id:d.formal_saved===false?'尚未儲存':'待查核')];if(d.acquisition_uncertain)lines.push('無法確定是否為本次下載；未觀測到的新歌不計入新增');el('download-state').textContent=lines.join('\n');}
+
+let sourcePromptPolling = false, sourcePromptVersion = 0;
+async function pollSourcePrompt() {
+ if (sourcePromptPolling) return;
+ sourcePromptPolling = true;
+ const version = sourcePromptVersion;
+ try {
+  const response = await fetch('/api/reviews/source-prompts', {headers: {'X-Dance-Token': token}});
+  if (!response.ok) throw new Error('來源提示暫時無法讀取，請到待確認處理。');
+  const data = await response.json();
+  if (version !== sourcePromptVersion) return;
+  const prompt = data.prompts[0], root = el('source-choice');
+  if ((prompt?.session_id || '') !== root.dataset.sessionId) {
+   SourceChoice.render(root, prompt, result => {
+    sourcePromptVersion++;
+    message(result.submission ? '已依所選來源自動儲存。' : '已保留於待確認；其他安全檢查仍適用。');
+   });
+  }
+ } catch (error) { message(error.message); }
+ finally { sourcePromptPolling = false; }
+}
+pollSourcePrompt();
+setInterval(pollSourcePrompt, 1500);

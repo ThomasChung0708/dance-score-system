@@ -79,13 +79,22 @@ class SubmissionService:
             if gd and gd['game_level'] is not None and gd['game_level']!=values.get('game_level'):
                 error('verified_catalog_level_conflict','game_level')
         verified=draft.get('notes_verified') is True and values.get('total_notes') is not None
+        from .ocr_matching import ReadOnlyCatalog
+        from .chart_changes import official_context
+        catalog = ReadOnlyCatalog(self.reviews.database)
+        try:
+            official_result = official_context(catalog, row, draft.get('song_id'))
+            from .chart_changes import bpm_evidence
+            bpm = bpm_evidence(row, catalog, draft.get('song_id')) if official_result else None
+        finally:
+            catalog.close()
         notes_source='manual_game_screen' if verified else None
         if gd and gd['notes_verified'] and gd['total_notes'] is not None:
             if values.get('total_notes') is None:
                 values['total_notes']=gd['total_notes']
                 issues=[i for i in issues if i['code']!='verified_catalog_notes_conflict']
             if values['total_notes']!=gd['total_notes']:
-                if screen_catalog(dict(gd)):
+                if not official_result and screen_catalog(dict(gd)):
                     error('verified_catalog_notes_conflict','total_notes')
             else:
                 verified=True;notes_source=gd['notes_source']
@@ -124,7 +133,8 @@ class SubmissionService:
         raw = row['ocr'].get('fields') or {}
         evidence['screen_consistency'] = validate(
             {k: item.get('value') for k, item in raw.items()},
-            screen_totals(raw, session.get('selection') or {}),
+            [(name, item) for name, item in screen_totals(raw, session.get('selection') or {})
+                if not official_result or name == 'result'],
             selection_reference=selection_is_reference(self.reviews.scoring_policy, session.get('selection') or {}))
         for warning in evidence['screen_consistency']['warnings']:
             warnings.append(dict(code=warning, field='total_notes',
@@ -139,7 +149,13 @@ class SubmissionService:
                 evidence['catalog_note_disagreement'] = disagreement
                 warnings.append(dict(disagreement, field='total_notes'))
         if automatic and screen is not None:
-            evidence['full_notes_source'] = 'screen_observed'
+            evidence['full_notes_source'] = 'result_screen_judged_sum' if official_result else 'screen_observed'
+        evidence['notes_source'] = evidence['full_notes_source']
+        if bpm:
+            evidence['official_bpm_comparison'] = bpm
+            if not bpm.get('exact') and not bpm.get('integer_floor_compatible'):
+                warnings.append(dict(code='CHART_BPM_CHANGED', field='bpm', severity='warning', **bpm))
+        evidence['warnings'] = copy.deepcopy(warnings)
         from .download_tracking import session_download
         evidence['download_evidence']=session_download(self.reviews.directory,row['session_id'])
         token_evidence=copy.deepcopy(evidence)
@@ -245,6 +261,11 @@ class SubmissionService:
                         grade=v['grade'],screenshot_path=evidence['screenshot_path'],screenshot_sha256=evidence['screenshot_sha256'],
                         review_id=s['review_id'],review_revision=s['review_revision'],confirmed_at=timestamp,confirmation_method='verified_auto' if automatic else 'manual_note_exception' if evidence['note_exception']['authorized'] else 'manual_review',
                         submission_hash=request_hash,evidence_json=json.dumps(evidence,ensure_ascii=False))
+                    if automatic and basis_is_custom(score) and evidence['full_notes_source'] == 'result_screen_judged_sum':
+                        # Schema 11 encodes screen sums with this constrained
+                        # value; evidence retains the more specific provenance.
+                        record['notes_source'] = 'completed_judgment_sum'
+                        record['total_notes'] = v['total_notes']
                     columns=','.join(record);placeholders=','.join('?'for _ in record)
                     record_id=db.execute('INSERT INTO play_records('+columns+') VALUES('+placeholders+')',tuple(record.values())).lastrowid
                     self._checkpoint('after_record');check_integrity(db);self._checkpoint('before_commit')
@@ -285,6 +306,11 @@ class SubmissionService:
         result['comparison_at_submission']=result.get('comparison')
         result['comparison']=current_comparison
         result['achievement_feedback']=evidence.get('achievement_feedback')
+        result['warnings']=evidence.get('warnings', [])
+        result['full_notes_source']=evidence.get('full_notes_source')
+        if evidence.get('notes_source') == 'result_screen_judged_sum':
+            result['storage_notes_source'] = result['notes_source']
+            result['notes_source'] = evidence['notes_source']
         result['note_exception']=evidence.get('note_exception')
         result['lamp_pending']=result['lamp_status'] is None
         result['played_at_source']=evidence.get('played_at_source')

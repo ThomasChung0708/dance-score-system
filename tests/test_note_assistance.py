@@ -184,16 +184,16 @@ class AssistanceTests(unittest.TestCase):
             self.assertIsNone(catalog.match_official(f,source_confirmed=True)['confirmed_song_id'])
         finally:catalog.close()
 
-    def test_official_low_confidence_notes_abstain_but_csv_difference_can_bind(self):
+    def test_official_notes_are_advisory_for_unique_title_difficulty_level(self):
         self.official();catalog=ReadOnlyCatalog(self.db)
         try:
             f=fields();f['total_notes']['confidence']=.6
-            self.assertIsNone(catalog.match_official(f,source_confirmed=True)['confirmed_song_id'])
+            self.assertIsNotNone(catalog.match_official(f,source_confirmed=True)['confirmed_song_id'])
             f=fields(total_notes=1192)
             self.assertIsNotNone(catalog.match_official(f,source_confirmed=True)['confirmed_song_id'])
             for gd in catalog.difficulties.values():
                 gd['notes_source'] = 'game_screen'
-            self.assertIsNone(catalog.match_official(f,source_confirmed=True)['confirmed_song_id'])
+            self.assertIsNotNone(catalog.match_official(f,source_confirmed=True)['confirmed_song_id'])
         finally:catalog.close()
 
     def test_live_official_selection_retains_original_missing_notes_and_locks_correct_song(self):
@@ -332,13 +332,17 @@ class AssistanceTests(unittest.TestCase):
         atomic_json(path,r)
         self.assertIsNone(self.service.assist(b)['selected_song'])
 
-    def test_invalid_chart_numbers_cannot_identify_an_official_chart(self):
+    def test_invalid_level_cannot_identify_but_optional_notes_do_not_decide_unique_chart(self):
         self.official();c=ReadOnlyCatalog(self.db)
         try:
             for key,number in [('game_level',True),('game_level',0),('game_level','29'),
                                ('total_notes',True),('total_notes',0),('total_notes',1194.0)]:
                 f=fields(**{key:number})
-                self.assertIsNone(c.match_official(f,source_confirmed=True)['confirmed_song_id'])
+                matched = c.match_official(f,source_confirmed=True)['confirmed_song_id']
+                if key == 'game_level':
+                    self.assertIsNone(matched)
+                else:
+                    self.assertIsNotNone(matched)
         finally:c.close()
 
     def test_manual_reference_cannot_override_conflicting_verified_catalog_notes(self):
