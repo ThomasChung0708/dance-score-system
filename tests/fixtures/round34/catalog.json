@@ -1,0 +1,221 @@
+{
+  "provenance": "Compact catalog metadata from Round 3.4 read-only 19:30 snapshot; no OCR labels changed.",
+  "songs": [
+    {
+      "song_id": 662,
+      "root_id": 1,
+      "pack_id": 18,
+      "pack_name": "Blue's 6th step",
+      "source_type": "custom",
+      "saved_title": "Jack o' Lantern",
+      "latest_title": "Jack o' Lantern",
+      "folder_name": "Jack o' Lantern[Blue]",
+      "relative_folder": "Blue's 6th step\\Jack o' Lantern[Blue]"
+    },
+    {
+      "song_id": 679,
+      "root_id": 1,
+      "pack_id": 18,
+      "pack_name": "Blue's 6th step",
+      "source_type": "custom",
+      "saved_title": "ようこそジャパリパークへ けものフレンズOP",
+      "latest_title": "ようこそジャパリパークへ けものフレンズOP",
+      "folder_name": "Youkoso JAPARI PARK[Blue]",
+      "relative_folder": "Blue's 6th step\\Youkoso JAPARI PARK[Blue]"
+    },
+    {
+      "song_id": 1240,
+      "root_id": 1,
+      "pack_id": 34,
+      "pack_name": "TkC-Y2's 1st Renerve Pack",
+      "source_type": "custom",
+      "saved_title": "揺れる恋は波の如く 幽閉カタルシス",
+      "latest_title": "揺れる恋は波の如く 幽閉カタルシス",
+      "folder_name": "11",
+      "relative_folder": "TkC-Y2's 1st Renerve Pack\\11"
+    },
+    {
+      "song_id": 1249,
+      "root_id": 1,
+      "pack_id": 34,
+      "pack_name": "TkC-Y2's 1st Renerve Pack",
+      "source_type": "custom",
+      "saved_title": null,
+      "latest_title": null,
+      "folder_name": "8",
+      "relative_folder": "TkC-Y2's 1st Renerve Pack\\8"
+    },
+    {
+      "song_id": 1515,
+      "root_id": 1,
+      "pack_id": 38,
+      "pack_name": "Zelda-YEH - Special",
+      "source_type": "custom",
+      "saved_title": "揺れる恋は波の如く 艦これボーカル",
+      "latest_title": "揺れる恋は波の如く 艦これボーカル",
+      "folder_name": "[Zelda-YEH - Special - 19] Yureru Koi wa Nami no Gotoku",
+      "relative_folder": "Zelda-YEH - Special\\[Zelda-YEH - Special - 19] Yureru Koi wa Nami no Gotoku"
+    }
+  ],
+  "sources": [
+    {
+      "song_id": 662,
+      "format": "dwi",
+      "saved_title": "Jack o' Lantern",
+      "saved_subtitle": null,
+      "payload": {
+        "title": "Jack o' Lantern",
+        "subtitle": null,
+        "title_fields": {
+          "TITLE": [
+            "Jack o' Lantern"
+          ]
+        },
+        "name_review_required": false
+      }
+    },
+    {
+      "song_id": 662,
+      "format": "sm",
+      "saved_title": "Jack o' Lantern",
+      "saved_subtitle": null,
+      "payload": {
+        "title": "Jack o' Lantern",
+        "subtitle": null,
+        "title_fields": {
+          "SUBTITLE": [
+            ""
+          ],
+          "TITLE": [
+            "Jack o' Lantern"
+          ]
+        },
+        "name_review_required": false
+      }
+    },
+    {
+      "song_id": 679,
+      "format": "dwi",
+      "saved_title": "ようこそジャパリパークへ けものフレンズOP",
+      "saved_subtitle": null,
+      "payload": {
+        "title": "ようこそジャパリパークへ けものフレンズOP",
+        "subtitle": null,
+        "title_fields": {
+          "TITLE": [
+            "ようこそジャパリパークへ けものフレンズOP"
+          ]
+        },
+        "name_review_required": false
+      }
+    },
+    {
+      "song_id": 679,
+      "format": "sm",
+      "saved_title": "ようこそジャパリパークへ",
+      "saved_subtitle": "けものフレンズOP",
+      "payload": {
+        "title": "ようこそジャパリパークへ",
+        "subtitle": "けものフレンズOP",
+        "title_fields": {
+          "SUBTITLE": [
+            "けものフレンズOP"
+          ],
+          "TITLE": [
+            "ようこそジャパリパークへ"
+          ]
+        },
+        "name_review_required": false
+      }
+    },
+    {
+      "song_id": 1240,
+      "format": "dwi",
+      "saved_title": "揺れる恋は波の如く 幽閉カタルシス",
+      "saved_subtitle": null,
+      "payload": {
+        "title": "揺れる恋は波の如く 幽閉カタルシス",
+        "subtitle": null,
+        "title_fields": {
+          "TITLE": [
+            "揺れる恋は波の如く 幽閉カタルシス"
+          ]
+        },
+        "name_review_required": false
+      }
+    },
+    {
+      "song_id": 1240,
+      "format": "sm",
+      "saved_title": "揺れる恋は波の如く",
+      "saved_subtitle": "幽閉カタルシス",
+      "payload": {
+        "title": "揺れる恋は波の如く",
+        "subtitle": "幽閉カタルシス",
+        "title_fields": {
+          "SUBTITLE": [
+            "幽閉カタルシス"
+          ],
+          "TITLE": [
+            "揺れる恋は波の如く"
+          ]
+        },
+        "name_review_required": false
+      }
+    },
+    {
+      "song_id": 1249,
+      "format": "dwi",
+      "saved_title": "キャトられ恋はモ～モク beatmaniaIIDX20 tricoro",
+      "saved_subtitle": null,
+      "payload": {
+        "title": "キャトられ恋はモ～モク beatmaniaIIDX20 tricoro",
+        "subtitle": null,
+        "title_fields": {
+          "TITLE": [
+            "キャトられ恋はモ～モク beatmaniaIIDX20 tricoro"
+          ]
+        },
+        "name_review_required": false
+      }
+    },
+    {
+      "song_id": 1249,
+      "format": "sm",
+      "saved_title": "キャトられ 恋はモ～モク",
+      "saved_subtitle": "beatmaniaIIDX20 tricoro",
+      "payload": {
+        "title": "キャトられ 恋はモ～モク",
+        "subtitle": "beatmaniaIIDX20 tricoro",
+        "title_fields": {
+          "SUBTITLE": [
+            "beatmaniaIIDX20 tricoro"
+          ],
+          "TITLE": [
+            "キャトられ 恋はモ～モク"
+          ]
+        },
+        "name_review_required": false
+      }
+    },
+    {
+      "song_id": 1515,
+      "format": "sm",
+      "saved_title": "揺れる恋は波の如く",
+      "saved_subtitle": "艦これボーカル",
+      "payload": {
+        "title": "揺れる恋は波の如く",
+        "subtitle": "艦これボーカル",
+        "title_fields": {
+          "SUBTITLE": [
+            "艦これボーカル"
+          ],
+          "TITLE": [
+            "揺れる恋は波の如く"
+          ]
+        },
+        "name_review_required": false
+      }
+    }
+  ]
+}

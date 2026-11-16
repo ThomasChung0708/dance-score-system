@@ -6,6 +6,7 @@ PLAYING preview, with confidence zero (no invented OCR confidence). The narrow
 uncharted rule instead requires reliable LV on both original result frames.
 Brave uses its original pre-play selection. Neither original review is edited.
 """
+import argparse
 import copy
 from contextlib import closing
 from datetime import datetime, timezone
@@ -48,9 +49,12 @@ def read(path):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--scratch-root', type=Path, default=ROOT/'data/round32_scratch')
+    args = parser.parse_args()
     digest = hashlib.sha256(SOURCE.read_bytes()).hexdigest()
     stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
-    scratch = ROOT/'data/round32_scratch'/('session8-' + stamp)
+    scratch = args.scratch_root/('session8-' + stamp)
     scratch.mkdir(parents=True)
     database = scratch/'ISOLATED.sqlite3'
     with closing(readonly(SOURCE)) as source, closing(sqlite3.connect(database)) as target:

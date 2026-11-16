@@ -4,6 +4,7 @@ No selection pixels were retained on session 9. Recorded selection OCR fields
 and diagnostic visible titles are replayed unchanged; category all is explicitly
 simulated, never claimed to be a fresh OCR observation. Only scratch copies write.
 """
+import argparse
 import copy
 from contextlib import closing
 from datetime import datetime, timezone
@@ -61,9 +62,14 @@ def title_selection(event):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--scratch-root', type=Path, default=ROOT/'data/round33_scratch')
+    parser.add_argument('--diagnostics', type=Path,
+        default=ROOT/'reports/round33-inputs/realplay9/diagnostics_20261116_session9.jsonl')
+    args = parser.parse_args()
     digest = hashlib.sha256(SOURCE.read_bytes()).hexdigest()
     stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
-    scratch = ROOT/'data/round33_scratch'/('category-'+stamp)
+    scratch = args.scratch_root/('category-'+stamp)
     scratch.mkdir(parents=True)
     database = scratch/'ISOLATED.sqlite3'
     with closing(readonly(SOURCE)) as source, closing(sqlite3.connect(database)) as target:
@@ -71,7 +77,7 @@ def main():
         old_columns, limits, before = projection(source), row_limits(source), audit(source)
     with LibraryDatabase(database) as library:
         migration = library.migration_result
-    diagnostics = ROOT/'reports/round33-inputs/realplay9/diagnostics_20261116_session9.jsonl'
+    diagnostics = args.diagnostics
     events = [json.loads(line) for line in diagnostics.read_text(encoding='utf8').splitlines()]
     events = [e for e in events if e.get('event') == 'pack_observed' and e.get('pack')]
     engine = LocalOCREngine(ROOT/'.ocr-models', low_latency=True)

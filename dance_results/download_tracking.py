@@ -346,7 +346,7 @@ class DownloadTracker:
                         is_new_song=is_new,observed_after_snapshot=observed,
                         source_titles=[song['saved_title'],song['latest_title'],*[r.get('title') for r in source_detail['sources']],
                             *[r[0] for r in catalog.db.execute('SELECT display_title FROM song_title_aliases WHERE song_id=? AND confirmed=1',(song['song_id'],))]],
-                        title_matches=normalize(observed_title) in catalog.index and song['song_id'] in catalog.index.get(normalize(observed_title),set()),
+                        title_matches=song['song_id'] in catalog.title_ids(observed_title),
                         missing=sorted(set(missing)),conflicts=detail.get('conflicts',[]),game_difficulties=source_detail['difficulties'],
                         source_files=[r[0] for r in catalog.db.execute('SELECT relative_path FROM song_sources WHERE song_id=?',(song['song_id'],))],
                         stable_metadata={str(Path(p).relative_to(song['relative_folder'])):meta for p,meta in after[rid]['snapshot']['files'].items() if Path(p).is_relative_to(song['relative_folder'])})

@@ -219,6 +219,9 @@ class Monitor:
         A preview can corroborate a captured title, never supply missing song-
         select fields. An observed newer different song stops the search.
         """
+        # The catalog stays read-only in this monitor worker; the tracker uses
+        # it solely to reject a typo-tolerant comparison naming another song.
+        self.tracker.title_catalog = catalog
         if observation['state'] != 'PLAYING' or self.tracker.session or self.tracker.proposed == 'PLAYING':
             return
         preview = observation.get('playing_preview') or {}
@@ -226,7 +229,7 @@ class Monitor:
             return
         current = self.tracker.selection or self.tracker.fast_selection(sampled)
         if (current and sampled-current['last_seen'] <= self.tracker.selection_ttl
-                and same_song_title_key(current['fields'].get('title', {}).get('value')) == same_song_title_key(preview['title'])):
+                and self.tracker.playing_title_agrees(current, preview['title'], catalog)):
             return
         for captured_at, image in frames.before(sampled):
             recovered = analyzer.analyze(image, 'SONG_SELECT', full=False)
@@ -236,7 +239,9 @@ class Monitor:
             title = fields.get('title') or {}
             if not title.get('value') or title.get('reason'):
                 continue
-            if same_song_title_key(title['value']) != same_song_title_key(preview['title']):
+            compared = dict(fields=fields, pack=self.tracker.current_pack,
+                            source_type=self.tracker.current_source)
+            if not self.tracker.playing_title_agrees(compared, preview['title'], catalog):
                 self.tracker.invalidate_selection('newer_captured_selection_differs_from_playing')
                 break
             from .pack_selection import infer_selected_pack

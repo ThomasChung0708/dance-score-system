@@ -15,12 +15,39 @@ def normalize(value):
 
 
 def same_song_title_key(value):
-    """Compare already observed titles; never broaden catalog retrieval.
+    """Space/tilde-insensitive retrieval and observed-title comparison key.
 
-    Keep punctuation and letters intact, including genuinely different symbols.
-    Removing whitespace also ignores spacing around &, -, ~, :, ・, ! and ?.
+    Long vowels and hyphens remain distinct catalog symbols. Confusables and
+    edit distance belong exclusively to probably_same_title, never this key.
     """
-    return ''.join(unicodedata.normalize('NFKC', value or '').casefold().split())
+    key = ''.join(unicodedata.normalize('NFKC', value or '').casefold().split())
+    return key.translate(str.maketrans({'〜': '~', '〰': '~', '∼': '~'}))
+
+
+def probably_same_title(selected, preview):
+    """Advisory PLAYING check only; never catalog retrieval or binding.
+
+    Explicit visual groups: こ/ニ/に, ロ/口, カ/力, エ/工, ー/一/-,
+    ヘ/へ, ベ/べ, ペ/ぺ, リ/り. One other edit needs >=6 characters
+    on BOTH sides (at least five sixths of either title must survive).
+    """
+    left, right = same_song_title_key(selected), same_song_title_key(preview)
+    groups = ('こニに', 'ロ口', 'カ力', 'エ工', 'ー一-', 'ヘへ', 'ベべ', 'ペぺ', 'リり')
+    mapping = str.maketrans({char: group[0] for group in groups for char in group})
+    a, b = left.translate(mapping), right.translate(mapping)
+    previous = list(range(len(b) + 1))
+    for i, char in enumerate(a, 1):
+        current = [i]
+        for j, other in enumerate(b, 1):
+            current.append(min(current[-1] + 1, previous[j] + 1,
+                               previous[j - 1] + (char != other)))
+        previous = current
+    distance = previous[-1]
+    bound = 1 if min(len(a), len(b)) >= 6 else 0
+    method = 'exact_key' if left == right else 'visual_confusables' if a == b else 'one_edit'
+    return dict(same=bool(left and right and distance <= bound), method=method,
+                selected_key=left, preview_key=right, selected_visual_key=a,
+                preview_visual_key=b, distance=distance, edit_bound=bound)
 
 
 def stylized_title_key(value, *, allow_latin=False):
@@ -29,7 +56,7 @@ def stylized_title_key(value, *, allow_latin=False):
     Preserve unvoiced versus voiced kana; only the b/p marks are confusable.
     This is advisory identity evidence, never automatic title authority.
     """
-    key = normalize(value).replace('〜', '~')
+    key = same_song_title_key(value)
     if not re.search(r'[\u3040-\u30ff\u3400-\u9fff]', key) and not (
             allow_latin and re.search(r'[a-z]', key) and re.fullmatch(r'[a-z0-9ı|\s~♡♥❤]+', key)):
         return None
@@ -49,13 +76,30 @@ class ReadOnlyCatalog:
         self.songs = {r['song_id']: dict(r) for r in self.db.execute('''
             SELECT s.*,p.name AS pack_name FROM songs s LEFT JOIN packs p ON p.pack_id=s.pack_id''')}
         self.index = {}
+        self.retrieval_index = {}
         self.reviews = set()
         for song in self.songs.values():
             for name in [song['saved_title'], song['latest_title']]:
                 self._index(name, song['song_id'])
-        for r in self.db.execute('SELECT song_id,saved_title,payload_json FROM song_sources'):
+        sources = list(self.db.execute('SELECT song_id,format,saved_title,saved_subtitle,payload_json FROM song_sources'))
+        subtitles = {}
+        for r in sources:
+            if r['format'] == 'sm' and r['saved_subtitle']:
+                subtitles.setdefault(r['song_id'], set()).add(r['saved_subtitle'])
+        for r in sources:
             self._index(r['saved_title'], r['song_id'])
             data = json.loads(r['payload_json'])
+            # TITLE is separate from SUBTITLE in SM. Strip a DWI suffix only
+            # when the same song's source metadata explicitly identifies it.
+            current_payload = same_song_title_key(data.get('title')) == same_song_title_key(r['saved_title'])
+            titles = [data.get('title'), *data.get('title_fields', {}).get('TITLE', [])] if current_payload else []
+            for title in titles:
+                self._index(title, r['song_id'])
+                if r['format'] == 'dwi' and title:
+                    for subtitle in subtitles.get(r['song_id'], set()):
+                        full, suffix = normalize(title), normalize(subtitle)
+                        if suffix and full.endswith(' ' + suffix):
+                            self._index(full[:-len(suffix)].rstrip(), r['song_id'])
             if data.get('name_review_required'):
                 self.reviews.add(r['song_id'])
         for r in self.db.execute('SELECT song_id,display_title FROM song_title_aliases WHERE confirmed=1'):
@@ -69,6 +113,17 @@ class ReadOnlyCatalog:
     def _index(self, name, song_id):
         if normalize(name):
             self.index.setdefault(normalize(name), set()).add(song_id)
+            self.retrieval_index.setdefault(same_song_title_key(name), set()).add(normalize(name))
+
+    def title_ids(self, title, pack_id=None, source_type=None):
+        key = same_song_title_key(title)
+        index = getattr(self, 'retrieval_index', None)
+        ids = ({sid for name in index.get(key, set()) for sid in self.index.get(name, set())} if index is not None else
+               {sid for name, songs in self.index.items() if same_song_title_key(name) == key for sid in songs})
+        ids = ids | self.index.get(normalize(title), set())
+        return {sid for sid in ids
+                if (pack_id is None or self.songs[sid]['pack_id'] == pack_id)
+                and (source_type not in ('custom', 'official') or self.songs[sid]['source_type'] == source_type)}
 
     def close(self):
         self.db.close()
@@ -82,7 +137,7 @@ class ReadOnlyCatalog:
         def reliable(key):
             item = fields.get(key, {})
             return item.get('value') is not None and item.get('confidence', 0) >= .9 and not item.get('reason')
-        ids = sorted(i for i in self.index.get(normalize(fields.get('title', {}).get('value')), set())
+        ids = sorted(i for i in self.title_ids(fields.get('title', {}).get('value'))
                      if self.songs[i]['source_type'] == 'official')
         candidates = []; eligible = []; uncertain = False
         difficulty = fields.get('difficulty', {}).get('value')
@@ -135,7 +190,7 @@ class ReadOnlyCatalog:
         title = fields.get('title', {}).get('value')
         difficulty = fields.get('difficulty', {}).get('value')
         # Retrieve all exact-normalized titles, including raw source Title without Subtitle.
-        ids = sorted(self.index.get(normalize(title), set()) if candidate_ids is None else candidate_ids)
+        ids = sorted(self.title_ids(title) if candidate_ids is None else candidate_ids)
         if source_type in ('official', 'custom'):
             ids = [i for i in ids if self.songs[i]['source_type'] == source_type]
         if confirmed_pack_id is not None:
@@ -217,7 +272,9 @@ class ReadOnlyCatalog:
         # Confusable matching never searches outside an independently confirmed
         # Pack, and still runs every known chart conflict check below. Unknown
         # chart metadata cannot eliminate a namesake to manufacture uniqueness.
-        if not match['candidates'] and pack_id is not None:
+        new_key_low_title = (fields.get('title', {}).get('confidence', 0) < AUTO_CONFIDENCE
+                             and normalize(fields.get('title', {}).get('value')) not in self.index)
+        if (not match['candidates'] or new_key_low_title) and pack_id is not None:
             key = stylized_title_key(fields.get('title', {}).get('value'), allow_latin=True)
             title_field = fields.get('title', {})
             chart_readable = all(fields.get(k, {}).get('value') is not None

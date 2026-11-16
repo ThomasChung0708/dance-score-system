@@ -215,7 +215,7 @@ def infer_selected_pack(selection, catalog):
     for token in selection.get('song_title_tokens', []):
         if token['confidence'] < .9:
             continue
-        ids = catalog.index.get(normalize(token['text']), set())
+        ids = catalog.title_ids(token['text'])
         readable_titles.add(normalize(token['text']))
         overlap = any(catalog.songs[sid].get('source_type') == 'official' for sid in ids)
         if overlap:

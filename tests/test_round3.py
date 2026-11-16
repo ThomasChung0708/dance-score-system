@@ -112,11 +112,12 @@ class StickySelectionTests(unittest.TestCase):
         self.play()
         self.assertEqual(self.t.session['selection']['pack']['pack_id'], 39)
 
-    def test_pack_blank_grace_expires(self):
+    def test_pack_blank_in_same_context_does_not_expire(self):
         self.choose()
         self.t.pack_observation(None, now=61)
-        self.assertIsNone(self.t.current_pack)
-        self.assertIsNone(self.t.selection)
+        self.assertEqual(self.t.current_pack['pack_id'], 39)
+        self.assertEqual(self.t.pack_confirmed_at, 0)
+        self.assertIsNotNone(self.t.selection)
 
     def test_genuine_pack_ambiguity_clears_immediately(self):
         self.choose()

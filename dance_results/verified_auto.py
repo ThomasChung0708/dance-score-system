@@ -58,6 +58,17 @@ def automatic_request(reviews,row):
     if len(own)!=1:issues.append('automatic_unique_local_row_required')
     elif any(not reliable_result_field(ocr, k, own[0]['fields'].get(k, {})) or own[0]['fields'][k]['value']!=raw.get(k,{}).get('value') for k in (*NUMERIC,'grade','completion_status')):
         issues.append('automatic_player_row_conflict')
+    from .result_title_binding import bind_result_title, context_selection
+    selected_fields = selection.get('ocr_fields', selection.get('fields') or {})
+    if (not selected_fields.get('title', {}).get('value')
+            and (context_selection(s) or selection.get('scope_authority') == 'session_source_choice')):
+        with_catalog = ReadOnlyCatalog(reviews.database)
+        try:
+            recovered = bind_result_title(with_catalog, s, ocr, selection)
+            if recovered:
+                selection = recovered
+        finally:
+            with_catalog.close()
     fields=copy.deepcopy(selection.get('ocr_fields',selection.get('fields') or {}))
     if same_song_title_key(raw.get('title',{}).get('value'))!=same_song_title_key(fields.get('title',{}).get('value')):issues.append('automatic_result_title_conflict')
     if not ocr.get('multiplayer') and (not reliable(raw.get('game_level')) or raw['game_level']['value']!=fields.get('game_level',{}).get('value')):
@@ -164,6 +175,8 @@ def automatic_request(reviews,row):
             player_row_id=own[0]['row_id'],notes_verified=values['total_notes'] is not None,identity_reviewed=True,player_verified=True,
             duration_verified=bool(fields.get('duration_seconds',{}).get('value')),confirmation_note='',
             play_mode='multiplayer' if ocr['multiplayer'] else 'single',submission_mode='VERIFIED_AUTO')
+        if selection.get('result_title_binding'):
+            body['identity_binding_method'] = selection['result_title_binding']['method']
         return body,[]
     finally:catalog.close()
 

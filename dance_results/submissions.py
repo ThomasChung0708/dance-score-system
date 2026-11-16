@@ -33,6 +33,8 @@ class SubmissionService:
             'root_id','relative_path','player_row_id','notes_verified','identity_reviewed','player_verified',
             'duration_verified','confirmation_note','play_mode','note_review','submission_mode')}
         if body.get('max_basis'):payload['max_basis']=body['max_basis']
+        if body.get('identity_binding_method'):
+            payload['identity_binding_method'] = body['identity_binding_method']
         return fingerprint(payload)
 
     def _existing(self,db,session_id,review_id):
@@ -130,6 +132,8 @@ class SubmissionService:
             automatic=dict(authorized=automatic,method='revalidated_session_ocr_catalog' if automatic else None),
             full_notes_source=notes_source,play_mode=mode,player_row_id=chosen['row_id'] if chosen else None)
         evidence['screen_note_observation'] = observation(values)
+        if automatic and body.get('identity_binding_method'):
+            evidence['automatic']['identity_binding_method'] = body['identity_binding_method']
         raw = row['ocr'].get('fields') or {}
         evidence['screen_consistency'] = validate(
             {k: item.get('value') for k, item in raw.items()},

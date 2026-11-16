@@ -192,7 +192,7 @@ class SelectionGapTests(unittest.TestCase):
                     self.tracker.interrupt(mode)
                 elif mode == 'pack':
                     self.tracker.current_pack = dict(pack_id=1, status='confirmed')
-                    self.tracker.pack_observation(None)
+                    self.tracker.pack_observation(None, uncertain=True)
                 else:
                     self.send(scene(mode))
                 self.assertIsNone(self.tracker.selection)

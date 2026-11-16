@@ -9,7 +9,7 @@ from pathlib import Path
 import time
 from uuid import uuid4
 
-from .ocr_matching import same_song_title_key
+from .ocr_matching import ReadOnlyCatalog, same_song_title_key, probably_same_title
 from .ocr_policy import SELECTION_REQUIRED
 
 
@@ -64,6 +64,8 @@ class Tracker:
         self.pack_count=0
         self.pack_candidates=[]
         self.pack_list_visible=False
+        self.title_catalog = None
+        self.playing_context = None
 
     def log(self, kind, **data):
         event = dict(at=utc(), event=kind, **data)
@@ -79,6 +81,15 @@ class Tracker:
         # Loading fades contain no new identity evidence and do not refresh TTL.
         if reason == 'black_capture':
             return
+        # Preview/role changes describe the selection inside a room, not a
+        # move to another list or room. Independently confirmed local Pack
+        # evidence survives; a guest without that evidence still loses scope.
+        if reason == 'room_preview_changed' or (
+                reason == 'multiplayer_guest_source_not_confirmed'
+                and (self.current_pack or {}).get('status') == 'confirmed'):
+            clear_pack = False
+        previous = self.selection or self.selection_candidate or {}
+        previous_title = previous.get('fields', {}).get('title', {}).get('value')
         self.selection = None
         self.selection_candidate = None
         self.playing_candidate = None
@@ -97,7 +108,40 @@ class Tracker:
             self.pack_count=0
             self.pack_candidates=[]
             self.pack_list_visible=False
-        self.log('selection_invalidated', reason=reason)
+        self.log('selection_invalidated', reason=reason, last_selection_title=previous_title,
+                 last_selection_key=same_song_title_key(previous_title))
+
+    def playing_title_agrees(self, selected, preview, catalog=None):
+        title = selected.get('fields', {}).get('title', {}).get('value')
+        detail = probably_same_title(title, preview)
+        catalog = catalog or self.title_catalog
+        if isinstance(catalog, ReadOnlyCatalog):
+            pack_id = (selected.get('pack') or {}).get('pack_id')
+            source = selected.get('source_type')
+            ids = catalog.title_ids(preview, pack_id, source)
+            selected_id = (selected.get('matching') or {}).get('confirmed_song_id')
+            if selected_id is None:
+                selected_ids = catalog.title_ids(title, pack_id, source)
+                selected_id = next(iter(selected_ids)) if len(selected_ids) == 1 else None
+            detail['preview_exact_song_ids'] = sorted(ids)
+            if selected_id is not None and len(ids) == 1 and selected_id not in ids:
+                detail.update(same=False, method='different_unique_catalog_song')
+        self.log('playing_title_comparison', selection_title=title, preview_title=preview, **detail)
+        return detail['same']
+
+    def identity_context(self, now):
+        """Freeze current context scope at PLAYING, never infer it at RESULT."""
+        pack_age = None if self.pack_confirmed_at is None else now - self.pack_confirmed_at
+        source_age = None if self.category_seen_at is None else now - self.category_seen_at
+        # current_pack is revoked on context changes/contradiction. Its last
+        # observation time is diagnostic, not a lease on an unchanged list.
+        pack = self.current_pack if (self.current_pack or {}).get('status') == 'confirmed' else None
+        source = ('custom' if pack else self.current_source if source_age is not None
+            and 0 <= source_age <= self.selection_ttl else 'unknown')
+        return dict(epoch=self.epoch, pack=copy.deepcopy(pack), source_type=source,
+                    pack_context_current=bool(pack),
+                    pack_age_seconds=pack_age, source_age_seconds=source_age,
+                    max_age_seconds=self.selection_ttl)
 
     def interrupt(self, reason):
         if self.session and self.session['status'] == 'playing':
@@ -156,10 +200,9 @@ class Tracker:
                 self.current_pack=None
                 self.current_source='unknown'
         else:
-            # Absence is not conflicting evidence. Never refresh this bounded
-            # grace period with empty frames, or restore a previously cleared pack.
-            if (not uncertain and self.current_pack and self.pack_confirmed_at is not None
-                    and 0 <= now-self.pack_confirmed_at <= self.selection_ttl):
+            # Empty frames do not change list/room context, refresh timestamps,
+            # or restore a Pack revoked by a real context change/ambiguity.
+            if not pack and not uncertain and self.current_pack:
                 return
             self.current_pack = None
             self.pack_confirmed_at = None
@@ -240,8 +283,9 @@ class Tracker:
         # Optional metadata can alternate while the selected chart stays put
         # (e.g. notes disappearing during a preview animation). Debounce chart
         # identity, not the incidental presence of artist/duration/notes.
-        key = fingerprint(dict(values={k: payload['fields'].get(k, {}).get('value')
-                                       for k in SELECTION_REQUIRED},
+        values = {k: payload['fields'].get(k, {}).get('value') for k in SELECTION_REQUIRED}
+        values['title'] = same_song_title_key(values['title'])
+        key = fingerprint(dict(values=values,
                                pack_id=(self.current_pack or {}).get('pack_id'), source_type=payload['source_type'], epoch=self.epoch))
         manual = (self.selection or {}).get('manual_confirmation')
         if manual and manual['observed_values'] == {k: v.get('value') for k, v in payload['fields'].items()} and (
@@ -251,9 +295,16 @@ class Tracker:
             self.selection_key = key
             self.selection_count = 1
             self.selection = None
-            self.log('selection_changed', observation_id=key)
+            self.log('selection_changed', observation_id=key,
+                     title=fields['title']['value'], title_key=values['title'],
+                     difficulty=values.get('difficulty'), game_level=values.get('game_level'))
         else:
             self.selection_count += 1
+            previous_title = (self.selection_candidate or {}).get('fields', {}).get('title', {}).get('value')
+            if previous_title != fields['title']['value']:
+                self.log('selection_title_variant', title=fields['title']['value'],
+                         previous_title=previous_title, title_key=values['title'],
+                         observation_id=key, confirmation_count=self.selection_count)
         # Preserve even one observed chart before the user immediately starts.
         # It is review evidence, not a substitute for a debounced selection.
         payload.update(observation_id=key, observed_at=utc(), last_seen=now, epoch=self.epoch)
@@ -268,13 +319,17 @@ class Tracker:
 
     def fast_selection(self, now):
         candidate = self.selection_candidate
+        # Extend only while the list itself remains the active context. A blank
+        # room cannot corroborate a lone observation (the older 10s rule stays).
+        grace = self.selection_ttl if self.state == 'SONG_SELECT' else min(10, self.selection_ttl)
         if (not candidate or candidate['epoch'] != self.epoch
-                or not 0 <= now-candidate['last_seen'] <= min(10, self.selection_ttl)):
+                or not 0 <= now-candidate['last_seen'] <= grace):
             return None
         title = candidate['fields'].get('title') or {}
         pack = candidate.get('pack') or {}
         if (not title.get('value') or title.get('reason') or title.get('confidence', 0) < .8
-                or pack.get('status') != 'confirmed'):
+                or pack.get('status') != 'confirmed'
+                or pack.get('pack_id') != (self.current_pack or {}).get('pack_id')):
             return None
         selected = copy.deepcopy(candidate)
         selected.update(handoff='single_observation', observed_frames=self.selection_count)
@@ -313,13 +368,14 @@ class Tracker:
             # blank preview cannot resurrect this selection.
             self.invalidate_selection('room_preview_changed', clear_pack=False)
         if wanted == 'PLAYING' and self.proposed != 'PLAYING':
+            self.playing_context = self.identity_context(now)
             # Check freshness on the first PLAYING sample, before state debounce
             # spends another OCR interval confirming that play really started.
             self.playing_candidate = self.fast_selection(now) if self.selection is None else None
             if self.playing_candidate:
                 preview = observation.get('playing_preview') or {}
                 fields = self.playing_candidate['fields']
-                if ((preview.get('title') and same_song_title_key(preview['title']) != same_song_title_key(fields['title']['value']))
+                if ((preview.get('title') and not self.playing_title_agrees(self.playing_candidate, preview['title']))
                         or (preview.get('game_level') is not None
                             and fields.get('game_level', {}).get('value') is not None
                             and preview['game_level'] != fields['game_level']['value'])):
@@ -382,7 +438,7 @@ class Tracker:
             preview = observation.get('playing_preview', {})
             if selected:
                 fields = selected['fields']
-                if preview.get('title') and same_song_title_key(preview['title']) != same_song_title_key(fields['title']['value']):
+                if preview.get('title') and not self.playing_title_agrees(selected, preview['title']):
                     selected = None
                     reason = 'playing_title_differs_from_selection'
                 elif (preview.get('game_level') is not None and fields.get('game_level', {}).get('value') is not None
@@ -396,6 +452,9 @@ class Tracker:
                 matching_status=binding.get('status', 'pending_manual_review'),
                 pending_reason=reason or ('no_fresh_selection' if not selected else None),
                 generates_play_record=False, result=None)
+            context = copy.deepcopy(self.playing_context or {})
+            context['captured_at'] = self.session['started_at']
+            self.session['identity_context'] = context
             self.best_result = None
             self._save_session()
             self.log('session_started', session_id=self.session['session_id'], song_id=self.session['song_id'])

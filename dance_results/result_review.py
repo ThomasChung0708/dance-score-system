@@ -203,6 +203,17 @@ class ResultReviews:
             if path.exists():
                 return self._read(session['session_id'])[1]
             selection = stored.get('selection') or {}
+            from .result_title_binding import bind_result_title, context_selection
+            if (not selection.get('fields', {}).get('title', {}).get('value')
+                    and context_selection(stored)):
+                selection = {**context_selection(stored), **selection}
+                catalog = ReadOnlyCatalog(self.database)
+                try:
+                    recovered = bind_result_title(catalog, stored, ocr, selection)
+                    if recovered:
+                        selection = recovered
+                finally:
+                    catalog.close()
             selected_fields = selection.get('fields') or {}
             values = {key: ocr['fields'].get(key, {}).get('value') for key in EDITABLE}
             for key in ('difficulty', 'total_notes', 'duration_seconds'):
@@ -214,6 +225,9 @@ class ResultReviews:
                 notes_verified=bool(stored.get('song_id') and binding in ('confirmed_manual', 'confirmed_manual_reference', 'unique_verified_candidate', 'confirmed_official_catalog')),
                 duration_verified=bool(stored.get('song_id') and binding in ('confirmed_manual', 'confirmed_manual_reference', 'unique_verified_candidate') and values.get('duration_seconds')),
                 player_verified=False, identity_reviewed=False)
+            if selection.get('result_title_binding'):
+                draft.update(song_id=selection['result_title_binding']['song_id'],
+                             identity_binding_method=selection['result_title_binding']['method'])
             if draft['song_id'] is None and selected_fields:
                 # A clearer result title can recover a review's song binding.
                 # Keep the original locked selection/confidences intact: this
@@ -288,7 +302,7 @@ class ResultReviews:
                 if source_type!='all' and song['source_type']!=source_type:
                     continue
                 title = song['saved_title'] or song['latest_title']
-                if key and key not in normalize(title) and song['song_id'] not in catalog.index.get(key, set()):
+                if key and key not in normalize(title) and song['song_id'] not in catalog.title_ids(key):
                     continue
                 ids.append(song['song_id'])
             ids.sort(key=lambda i:(normalize(catalog.songs[i]['saved_title'] or catalog.songs[i]['latest_title']),i))

@@ -3,12 +3,18 @@ import copy
 
 from .chart_changes import official_fields
 from .ocr_matching import normalize
+from .result_title_binding import context_selection
 
 
 def effective_selection(row):
     selected = copy.deepcopy(row['locked_session'].get('selection') or {})
+    if not selected.get('fields', {}).get('title', {}).get('value'):
+        for key, value in context_selection(row['locked_session']).items():
+            if not selected.get(key) or selected[key] == 'unknown':
+                selected[key] = value
     choice = row.get('source_choice') or {}
     if choice:
+        selected['scope_authority'] = 'session_source_choice'
         selected['source_type'] = choice['source_type']
         selected['pack'] = (dict(pack_id=choice['pack_id'], status='confirmed',
             source='session_source_choice') if choice.get('pack_id') is not None else None)
@@ -18,14 +24,14 @@ def effective_selection(row):
 def offer(catalog, row):
     if row['status'] != 'pending_review' or row['revision'] != 0 or row.get('source_choice'):
         return None
-    selection = row['locked_session'].get('selection') or {}
+    selection = effective_selection(row)
     # A confirmed source/pack is already authoritative, including manual GROUP.
     source = selection.get('source_type')
     if source == 'official' or (selection.get('pack') or {}).get('status') == 'confirmed':
         return None
     fields = official_fields(selection, row['ocr'])
     title = normalize(fields.get('title', {}).get('value'))
-    ids = sorted(catalog.index.get(title, set()))
+    ids = sorted(catalog.title_ids(title))
     if source == 'custom':
         ids = [i for i in ids if catalog.songs[i]['source_type'] == 'custom']
     if not ids:
