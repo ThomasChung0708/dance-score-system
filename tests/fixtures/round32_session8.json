@@ -1,0 +1,329 @@
+{
+  "a2f67ad5": {
+    "session_id": "a2f67ad5-694b-45b3-bb75-558fe93b5909",
+    "samples": [
+      {
+        "perfect": {
+          "value": 1375,
+          "confidence": 0.99976,
+          "reason": null,
+          "method": "ocr"
+        },
+        "cool": {
+          "value": 6,
+          "confidence": 0.99802,
+          "reason": null,
+          "method": "ocr"
+        },
+        "bad": {
+          "value": 0,
+          "confidence": 0.991,
+          "reason": null,
+          "method": "ocr"
+        },
+        "miss": {
+          "value": 0,
+          "confidence": 0.98797,
+          "reason": null,
+          "method": "ocr"
+        },
+        "max_combo": {
+          "value": 1381,
+          "confidence": 0.99972,
+          "reason": null,
+          "method": "ocr"
+        },
+        "game_score": {
+          "value": 97601,
+          "confidence": 0.99946,
+          "reason": null,
+          "method": "ocr"
+        },
+        "grade": {
+          "value": "A++",
+          "confidence": 0.96197,
+          "reason": null,
+          "method": "two_bounded_orange_grade_views"
+        },
+        "title": {
+          "value": "MAGIC & LOVE",
+          "confidence": 0.97005,
+          "reason": null,
+          "method": "ocr"
+        },
+        "game_level": {
+          "value": 31,
+          "confidence": 0.99734,
+          "reason": null,
+          "method": "numeric_roi_two_views"
+        },
+        "completion_status": {
+          "value": "COMPLETED",
+          "confidence": 0.95541,
+          "reason": null,
+          "method": "local_result_row_without_gameover"
+        },
+        "player_name": {
+          "value": "TC",
+          "confidence": 0.95541,
+          "reason": null,
+          "method": "ocr"
+        }
+      },
+      {
+        "perfect": {
+          "value": 1375,
+          "confidence": 0.99976,
+          "reason": null,
+          "method": "ocr"
+        },
+        "cool": {
+          "value": 6,
+          "confidence": 0.99802,
+          "reason": null,
+          "method": "ocr"
+        },
+        "bad": {
+          "value": 0,
+          "confidence": 0.991,
+          "reason": null,
+          "method": "ocr"
+        },
+        "miss": {
+          "value": 0,
+          "confidence": 0.98797,
+          "reason": null,
+          "method": "ocr"
+        },
+        "max_combo": {
+          "value": 1381,
+          "confidence": 0.99957,
+          "reason": null,
+          "method": "ocr"
+        },
+        "game_score": {
+          "value": 97601,
+          "confidence": 0.99946,
+          "reason": null,
+          "method": "ocr"
+        },
+        "grade": {
+          "value": "A++",
+          "confidence": 0.96197,
+          "reason": null,
+          "method": "two_bounded_orange_grade_views"
+        },
+        "title": {
+          "value": "MAGIC & LOVE",
+          "confidence": 0.9366,
+          "reason": null,
+          "method": "ocr"
+        },
+        "game_level": {
+          "value": 31,
+          "confidence": 0.99734,
+          "reason": null,
+          "method": "numeric_roi_two_views"
+        },
+        "completion_status": {
+          "value": "COMPLETED",
+          "confidence": 0.95541,
+          "reason": null,
+          "method": "local_result_row_without_gameover"
+        },
+        "player_name": {
+          "value": "TC",
+          "confidence": 0.95541,
+          "reason": null,
+          "method": "ocr"
+        }
+      }
+    ],
+    "selection": {}
+  },
+  "0216118f": {
+    "session_id": "0216118f-4ed3-4bf6-8d17-ec6a93878a2d",
+    "samples": [
+      {
+        "perfect": {
+          "value": 1186,
+          "confidence": 0.9997,
+          "reason": null,
+          "method": "ocr"
+        },
+        "cool": {
+          "value": 2,
+          "confidence": 0.99769,
+          "reason": null,
+          "method": "ocr"
+        },
+        "bad": {
+          "value": 0,
+          "confidence": 0.98889,
+          "reason": null,
+          "method": "ocr"
+        },
+        "miss": {
+          "value": 0,
+          "confidence": 0.98807,
+          "reason": null,
+          "method": "ocr"
+        },
+        "max_combo": {
+          "value": 1188,
+          "confidence": 0.99966,
+          "reason": null,
+          "method": "ocr"
+        },
+        "game_score": {
+          "value": 83994,
+          "confidence": 0.99936,
+          "reason": null,
+          "method": "ocr"
+        },
+        "grade": {
+          "value": "A+",
+          "confidence": 0.91327,
+          "reason": null,
+          "method": "full_height_grade_cell_recognition"
+        },
+        "title": {
+          "value": "Brave My Soul",
+          "confidence": 0.98822,
+          "reason": null,
+          "method": "ocr"
+        },
+        "game_level": {
+          "value": 23,
+          "confidence": 0.97493,
+          "reason": null,
+          "method": "ocr"
+        },
+        "completion_status": {
+          "value": "COMPLETED",
+          "confidence": 0.98403,
+          "reason": null,
+          "method": "local_result_row_without_gameover"
+        },
+        "player_name": {
+          "value": "TC",
+          "confidence": 0.98403,
+          "reason": null,
+          "method": "ocr"
+        }
+      },
+      {
+        "perfect": {
+          "value": 1186,
+          "confidence": 0.99952,
+          "reason": null,
+          "method": "ocr"
+        },
+        "cool": {
+          "value": 2,
+          "confidence": 0.99734,
+          "reason": null,
+          "method": "ocr"
+        },
+        "bad": {
+          "value": 0,
+          "confidence": 0.991,
+          "reason": null,
+          "method": "ocr"
+        },
+        "miss": {
+          "value": 0,
+          "confidence": 0.98797,
+          "reason": null,
+          "method": "ocr"
+        },
+        "max_combo": {
+          "value": 1188,
+          "confidence": 0.99948,
+          "reason": null,
+          "method": "ocr"
+        },
+        "game_score": {
+          "value": 83994,
+          "confidence": 0.99904,
+          "reason": null,
+          "method": "ocr"
+        },
+        "grade": {
+          "value": "A++",
+          "confidence": 0.96197,
+          "reason": null,
+          "method": "two_bounded_orange_grade_views"
+        },
+        "title": {
+          "value": "Brave My Soul",
+          "confidence": 0.99125,
+          "reason": null,
+          "method": "ocr"
+        },
+        "game_level": {
+          "value": 23,
+          "confidence": 0.97444,
+          "reason": null,
+          "method": "ocr"
+        },
+        "completion_status": {
+          "value": "COMPLETED",
+          "confidence": 0.95667,
+          "reason": null,
+          "method": "local_result_row_without_gameover"
+        },
+        "player_name": {
+          "value": "TC",
+          "confidence": 0.95667,
+          "reason": null,
+          "method": "ocr"
+        }
+      }
+    ],
+    "selection": {
+      "title": {
+        "value": "Brave My Soul",
+        "confidence": 0.9744,
+        "reason": null,
+        "method": "ocr_highlighted_row"
+      },
+      "difficulty": {
+        "value": "HARD",
+        "confidence": 0.99746,
+        "reason": null,
+        "method": "ocr_tab_label_and_active_background"
+      },
+      "game_level": {
+        "value": 23,
+        "confidence": 0.99912,
+        "reason": null,
+        "method": "ocr"
+      },
+      "total_notes": {
+        "value": 1188,
+        "confidence": 0.99318,
+        "reason": null,
+        "method": "ocr"
+      },
+      "bpm": {
+        "value": 164.0,
+        "confidence": 0.99815,
+        "reason": null,
+        "method": "numeric_roi_two_views"
+      },
+      "duration_seconds": {
+        "value": 120,
+        "confidence": 0.95364,
+        "reason": null,
+        "method": "ocr"
+      },
+      "artist": {
+        "value": "a feat.",
+        "confidence": 0.91225,
+        "reason": null,
+        "method": "ocr"
+      }
+    }
+  }
+}

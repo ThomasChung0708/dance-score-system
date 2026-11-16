@@ -6,6 +6,10 @@ import shutil
 import subprocess
 import threading
 import unittest
+import copy
+from uuid import uuid4
+
+from dance_results.monitor_tracking import atomic_json
 
 from dance_results.gui import create_server
 import test_result_review as fixture
@@ -56,6 +60,32 @@ class ReviewDOMTests(unittest.TestCase):
 
     def test_all_pages_fit_phone_and_tablet_viewports(self):
         self.run_browser('responsive')
+
+    def test_dirty_switch_poll_focus_and_late_draft_response(self):
+        sid = str(uuid4())
+        folder = self.output/'sessions'/sid
+        shutil.copytree(self.output/'sessions'/self.sid, folder)
+        session = copy.deepcopy(self.session)
+        session['session_id'] = sid
+        atomic_json(folder/'session.json', session)
+        row = copy.deepcopy(self.row)
+        row.update(session_id=sid, review_id=str(uuid4()), locked_session=session)
+        atomic_json(folder/'result-review.json', row)
+        self.run_browser('safety')
+
+    def test_confirmed_chartless_history_renders_unknown_difficulty(self):
+        from dance_results.library_service import LibraryService
+        from dance_results.submissions import SubmissionService
+        self.service.scoring_policy = 'custom-judged-v1'
+        body = fixture.ReviewPersistenceTests.body(self)
+        body['values'].update(difficulty=None, total_notes=None)
+        body.pop('max_basis', None)
+        saved = self.service.save(body)
+        body.update(revision=saved['revision'], play_mode='single')
+        store = SubmissionService(LibraryService(self.db), self.service)
+        preview = store.prepare(body)
+        store.submit(dict(body, submission_token=preview['submission_token'], submit_acknowledge=True))
+        self.run_browser('chartless')
 
 
 if __name__ == '__main__':

@@ -152,7 +152,7 @@ class SubmissionService:
             source_type=song['source_type'] if song else None,play_mode=mode,played_at=played_at,
             values=values,score=score,full_notes_verified=verified,
             max_status='confirmed' if score['max_score'] is not None else 'unconfirmed',
-            player_row_id=evidence['player_row_id'],creates_game_difficulty=bool(song and not gd))
+            player_row_id=evidence['player_row_id'],creates_game_difficulty=False, chart_metadata_missing=bool(song and not gd))
         unique={(i['code'],i['field']):i for i in issues}
         return dict(can_submit=not unique,issues=list(unique.values()),warnings=warnings,summary=summary,
                     submission_token=token,existing_record=None),evidence
@@ -218,34 +218,26 @@ class SubmissionService:
                     if not checked['can_submit'] or checked['submission_token']!=prepared['submission_token']:
                         raise LibraryError('備份期間確認資料已變更，未寫入成績。',409)
                     s=checked['summary'];v=s['values'];score=s['score'];song=evidence['song'];gd=evidence['difficulty']
-                    if gd is None:
-                        # A per-result custom MAX is not verified chart metadata.
-                        # A differing select counter stays in immutable evidence;
-                        # do not turn the result's judged sum into a catalog fact.
-                        chart_notes=v['total_notes']
-                        notes_verified=s['full_notes_verified']
-                        if automatic and evidence['screen_consistency']['warnings']:
-                            chart_notes=None
-                            notes_verified=False
-                        gd_id=db.execute('INSERT INTO game_difficulties(song_id,difficulty,game_level,level_source,total_notes,notes_source,notes_verified) VALUES(?,?,?,?,?,?,?)',
-                            (song['song_id'],v['difficulty'],v['game_level'],'game_screen' if automatic else 'manual',chart_notes,
-                             'game_screen' if evidence['screen_note_observation'] and
-                             evidence['screen_note_observation']['total_notes'] == chart_notes else
-                             'manual' if notes_verified else None,int(notes_verified))).lastrowid
-                    else:gd_id=gd['difficulty_id']
+                    # An observed result is not reusable catalog metadata.
+                    gd_id = gd['difficulty_id'] if gd else None
                     self._checkpoint('after_difficulty')
                     from .bests_policy import EX_POLICY
                     timestamp=utc();evidence.update(submitted_at=timestamp,backup_path=backup,request_hash=request_hash,ex_comparison_policy=EX_POLICY,scoring_version='custom-judged-v1' if basis_is_custom(score) else 'iidx-v2-independent-max')
-                    previous=next(p for p in progress_for_songs(db,[song['song_id']])[song['song_id']] if p['difficulty']==v['difficulty'])
+                    previous = next((p for p in progress_for_songs(db, [song['song_id']])[song['song_id']]
+                        if p['difficulty'] == v['difficulty']), None)
+                    if previous is None:
+                        from .achievements import empty_progress
+                        previous = empty_progress(v['difficulty'])
                     evidence['achievement_feedback']=feedback(previous,ex_score=score['ex_score'],
-                        lamp=score['lamp_preview'],completion=v['completion_status'],comparison_paused=evidence['comparison']['ranking_paused'],new_policy=basis_is_custom(score))
+                        lamp=score['lamp_preview'],completion=v['completion_status'],comparison_paused=v['difficulty'] is None or evidence['comparison']['ranking_paused'],new_policy=basis_is_custom(score))
                     db.execute('INSERT INTO play_sessions(session_id,player_name,play_mode,source_type,local_difficulty,local_game_level,host_result_level,display_song_title,display_pack_name,room_status,player_status,evidence_json) VALUES(?,?,?,?,?,?,?,?,?,\'result\',?,?)',
                         (s['session_id'],v['player_name'],s['play_mode'],song['source_type'],v['difficulty'],v['game_level'],
                          evidence['review']['ocr']['fields']['game_level']['value'] if s['play_mode']=='multiplayer' else None,
                          s['title'],s['pack_name'],'failed' if v['completion_status']=='FAILED' else 'completed',
                          json.dumps(dict(original_session=evidence['session'],review_id=s['review_id'],player_row_id=evidence['player_row_id']),ensure_ascii=False)))
                     self._checkpoint('after_session')
-                    record=dict(session_id=s['session_id'],difficulty_id=gd_id,played_at=s['played_at'],
+                    record=dict(session_id=s['session_id'],difficulty_id=gd_id,
+                        song_id=song['song_id'] if gd_id is None else None,played_at=s['played_at'],
                         completion_status=v['completion_status'],perfect=v['perfect'],cool=v['cool'],bad=v['bad'],miss=v['miss'],
                         ex_score=score['ex_score'],max_score=score['max_score'],max_difference=score['difference'],percentage=score['percentage'],
                         lamp_status=score['lamp_preview'],total_notes=score['max_basis_notes'],notes_source='completed_judgment_sum' if basis_is_custom(score) else 'game_screen' if score['max_score'] is not None else None,
@@ -265,11 +257,12 @@ class SubmissionService:
 
     @staticmethod
     def _record(db,record_id,*,include_evidence=True):
-        row=db.execute('SELECT r.*,d.song_id,d.difficulty,s.saved_title,s.latest_title,s.relative_folder,s.source_type,p.name AS pack_name,ps.player_name,ps.play_mode,ps.display_song_title '
+        row=db.execute('SELECT r.*,COALESCE(r.song_id,d.song_id) AS bound_song_id,COALESCE(d.difficulty,ps.local_difficulty) AS difficulty,s.saved_title,s.latest_title,s.relative_folder,s.source_type,p.name AS pack_name,ps.player_name,ps.play_mode,ps.display_song_title '
             'FROM play_records r JOIN play_sessions ps ON ps.session_id=r.session_id LEFT JOIN game_difficulties d ON d.difficulty_id=r.difficulty_id '
-            'LEFT JOIN songs s ON s.song_id=d.song_id LEFT JOIN packs p ON p.pack_id=s.pack_id WHERE r.record_id=?',(record_id,)).fetchone()
+            'LEFT JOIN songs s ON s.song_id=COALESCE(r.song_id,d.song_id) LEFT JOIN packs p ON p.pack_id=s.pack_id WHERE r.record_id=?',(record_id,)).fetchone()
         if row is None:raise LibraryError('找不到成績。',404)
         result=dict(row);evidence=json.loads(result.pop('evidence_json'))
+        result['song_id'] = result.pop('bound_song_id')
         result['title'] = record_display_title(
             db, evidence, (evidence.get('song') or {}).get('song_id') or result['song_id'],
             result.pop('display_song_title'))
@@ -312,7 +305,7 @@ class SubmissionService:
         if difficulty is not None and difficulty not in ('EASY','NORMAL','HARD'):raise LibraryError('難度不正確。')
         if player_name is not None and (not isinstance(player_name,str) or len(player_name)>64):raise LibraryError('暱稱不正確。')
         where=[];args=[]
-        for sql,value in [('d.song_id=?',song_id),('d.difficulty=?',difficulty),('p.player_name=?',player_name)]:
+        for sql,value in [('COALESCE(r.song_id,d.song_id)=?',song_id),('COALESCE(d.difficulty,p.local_difficulty)=?',difficulty),('p.player_name=?',player_name)]:
             if value is not None:where.append(sql);args.append(value)
         suffix=(' WHERE '+' AND '.join(where)) if where else ''
         joins=' FROM play_records r LEFT JOIN game_difficulties d ON d.difficulty_id=r.difficulty_id JOIN play_sessions p ON p.session_id=r.session_id'
@@ -325,6 +318,11 @@ class SubmissionService:
                 # Separate provenance for the highest verified EX and first best lamp.
                 bests=[dict(r)for r in db.execute('SELECT * FROM difficulty_bests WHERE song_id=?'+(' AND difficulty=?' if difficulty else '')+' ORDER BY difficulty_id',(song_id,difficulty) if difficulty else (song_id,))]
                 progress=progress_for_songs(db,[song_id])[song_id]
+                known = {item['difficulty'] for item in bests}
+                for p in progress:
+                    if p['difficulty'] not in known and p['record_count'] and (difficulty is None or difficulty == p['difficulty']):
+                        bests.append(dict(difficulty_id=None, song_id=song_id, difficulty=p['difficulty'],
+                            highest_ex_score=p['best_ex_score'], best_clear_lamp=p['best_lamp']))
                 for item in bests:
                     p=next(x for x in progress if x['difficulty']==item['difficulty'])
                     item.update(comparison_paused=p.get('comparison_paused',False),my_best_score=p['best_score_record'],best_lamp_record=p['best_lamp_record'],comparison_scope=p.get('comparison_scope'))

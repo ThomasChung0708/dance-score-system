@@ -7,6 +7,7 @@ from pathlib import Path
 import shutil
 import sqlite3
 from unittest.mock import patch
+import argparse
 from PIL import Image
 from dance_results.library_service import LibraryService,LibraryError
 from dance_results.monitor_ocr import Analyzer,apply_selection
@@ -21,13 +22,28 @@ from dance_results.verified_auto import automatic_request
 ROOT=Path(__file__).resolve().parents[1];OUT=ROOT/'reports/phase5f/recorded-replay-v2';BASE=OUT.parent/'baseline.sqlite3';DB=OUT/'ISOLATED.sqlite3';MON=OUT/'monitor'
 
 
-def read(path):return sqlite3.connect(path.resolve().as_uri()+'?mode=ro',uri=True)
+def read(path):
+    connection = sqlite3.connect(path.resolve().as_uri()+'?mode=ro',uri=True)
+    connection.execute('PRAGMA query_only=ON')
+    return connection
 
 
 def main():
+    global OUT, DB, MON
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--output', type=Path, default=OUT)
+    args = parser.parse_args()
+    OUT = args.output.resolve()
+    if not OUT.is_relative_to((ROOT/'reports/phase5f').resolve()):
+        raise ValueError('Replay output must remain under reports/phase5f.')
+    DB = OUT/'ISOLATED.sqlite3'
+    MON = OUT/'monitor'
     if DB.exists():raise ValueError('Existing replay is preserved.')
     OUT.mkdir(parents=True,exist_ok=True)
     with closing(read(BASE)) as src,closing(sqlite3.connect(DB)) as dst:src.backup(dst)
+    from dance_results.database import LibraryDatabase
+    with LibraryDatabase(DB):
+        pass
     MON.mkdir(exist_ok=True);refs=ROOT/'data/monitor/manual-references.json'
     if refs.exists():shutil.copyfile(refs,MON/refs.name)
     analyzer=Analyzer(LocalOCREngine(ROOT/'.ocr-models',low_latency=True));cases=[]

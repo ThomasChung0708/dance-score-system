@@ -30,7 +30,7 @@ function renderPacks(){
     const section=node('div','pack-group');section.append(collectionButton(label,data.categories[key],null,key,icon));
     const packs=data.packs.filter(p=>key==='download'?p.pack_type==='multiplayer_download':p.categories[key]>0);
     for(const pack of packs)section.append(collectionButton(pack.name,pack.categories[key],pack.pack_id,key,icon));
-    if(!packs.length)section.append(node('p','empty-category',key==='official'?(data.categories.official?'官方鍵盤歌單 · K':'尚未匯入官方歌曲'):'目前沒有歌曲'));
+    if(!packs.length)section.append(node('p','empty-category',key==='official'?(data.categories.official?'熱舞官方譜面':'尚未匯入官方歌曲'):'目前沒有歌曲'));
     nav.append(section);
   }
   // Empty Packs must remain visible, even without songs in any category.
@@ -118,7 +118,7 @@ function buildProgressPanel(song,update=null){
 function renderDetail(song,update=null){
   const target=$('details');target.replaceChildren();const top=node('div','detail-top'),reload=node('button','','重新載入');reload.type='button';reload.setAttribute('aria-label','重新載入歌曲資訊');reload.addEventListener('click',()=>{if(mayLeave())selectSong(song.song_id,true).catch(reportError);});top.append(node('span','eyebrow','SONG DETAILS'),reload);
   target.append(top,node('h2','detail-title',song.display_title),node('p','artist-list',song.artists.length?song.artists.join(' / '):'Artist 未設定'));
-  const meta=node('dl','metadata');metadataLine(meta,'Song ID',song.song_id);metadataLine(meta,'Pack',song.official?'不適用 · 官方歌單':(song.pack_name||'未歸類')+(song.pack_type==='multiplayer_download'?' · 多人下載':''));metadataLine(meta,'SongFolder',song.official?'不適用':song.folder_name);metadataLine(meta,'來源格式',song.official?'官方 CSV':song.formats.map(f=>f.toUpperCase()).join(' / '));
+  const meta=node('dl','metadata');metadataLine(meta,'Song ID',song.song_id);metadataLine(meta,'Pack',song.official?'不適用 · 熱舞官方譜面':(song.pack_name||'未歸類')+(song.pack_type==='multiplayer_download'?' · 多人下載':''));metadataLine(meta,'SongFolder',song.official?'不適用':song.folder_name);metadataLine(meta,'來源格式',song.official?'官方 CSV':song.formats.map(f=>f.toUpperCase()).join(' / '));
   if(song.official){metadataLine(meta,'fileId',song.official.file_id);metadataLine(meta,'mode',song.official.mode);metadataLine(meta,'BPM',song.official.bpm_raw);metadataLine(meta,'gn',song.official.gn);}
   if(song.latest_title!==song.saved_title&&song.saved_title)metadataLine(meta,'顯示名稱','沿用上次可確認名稱；原始候選保留於來源資訊');target.append(meta,node('div','full-path',song.official?'來源 CSV：'+song.official.source_name+' · 記錄 '+song.official.csv_record_number:song.original_path));
   const warnings=song.diagnostics.filter(d=>d.severity!=='info');if(warnings.length){const list=node('ul','detail-diagnostics');for(const d of warnings)list.append(node('li','',d.message));target.append(list);}
@@ -153,7 +153,7 @@ function setScanning(value){state.scanning=value;$('scan-button').disabled=value
 function setImporting(value){state.importing=value;$('official-button').disabled=value||state.scanning;$('scan-button').disabled=value||state.scanning||!state.canScan;$('official-confirm').disabled=value;$('official-cancel').disabled=value;for(const form of document.querySelectorAll('.difficulty-card'))refreshCard(form);}
 function setupRoots(roots){
   const current=roots.find(r=>r.root_id===state.rootId)||roots[0];$('root').replaceChildren();
-  for(const root of roots){const option=node('option','',root.root_kind==='official_catalog'?'官方歌單（K）':root.path);option.value=String(root.root_id);option.dataset.kind=root.root_kind;$('root').append(option);}
+  for(const root of roots){const option=node('option','',root.root_kind==='official_catalog'?'熱舞官方譜面':root.path);option.value=String(root.root_id);option.dataset.kind=root.root_kind;$('root').append(option);}
   state.rootId=current?current.root_id:null;state.canScan=!!current&&current.root_kind==='filesystem';if(current)$('root').value=String(current.root_id);setScanning(state.scanning);
 }
 async function pollScan(){
@@ -194,7 +194,7 @@ $('official-confirm').addEventListener('click',async()=>{
     const result=await api('/api/official/import',officialUpload);$('official-dialog').close();officialUpload=null;
     clearDetail();state.packId=null;state.category='official';state.label='官方歌曲';state.query='';$('search').value='';state.offset=0;
     const bootstrap=await api('/api/bootstrap');setupRoots(bootstrap.roots);await loadPacks();await loadSongs();
-    message('官方 K 歌單匯入完成 · 新增歌曲 '+result.changes.new_songs+' · 新增難度 '+result.changes.new_difficulties+' · 相同歌曲 '+result.changes.unchanged_songs,'success');
+    message('熱舞官方譜面匯入完成 · 新增歌曲 '+result.changes.new_songs+' · 新增難度 '+result.changes.new_difficulties+' · 相同歌曲 '+result.changes.unchanged_songs,'success');
   }catch(error){$('official-error').textContent=error.message;$('official-error').hidden=false;}
   finally{setImporting(false);}
 });

@@ -10,7 +10,12 @@ function cell(tr,label,cls){const td=element('td',cls);td.dataset.label=label;tr
 function row(record){
  const r=record,tr=element('tr','record-row');tr.dataset.recordId=r.record_id;tr.dataset.updateKind=r.update_summary.kind;
  let td=cell(tr,'遊玩日期 / Record','record-date');td.append(element('time','',localTime(r.played_at_verified===false?null:r.played_at)),element('span','record-number','RECORD #'+r.record_id));
- td=cell(tr,'歌曲 / 難度','record-song');const title=element('a','record-title',r.title||'歌曲待確認');title.href='/history?'+new URLSearchParams({song_id:r.song_id,difficulty:r.difficulty});td.append(title,element('span','difficulty-chip difficulty-'+r.difficulty.toLowerCase(),r.difficulty+' / LV '+text(r.game_level)));
+ td = cell(tr, '歌曲 / 難度', 'record-song');
+ const title = element('a', 'record-title', r.title || '歌曲待確認');
+ title.href = '/history?' + new URLSearchParams({song_id: r.song_id,
+   ...(r.difficulty ? {difficulty: r.difficulty} : {})});
+ td.append(title, element('span', 'difficulty-chip difficulty-' + (r.difficulty || 'unknown').toLowerCase(),
+   (r.difficulty || '難度未設定') + ' / LV ' + text(r.game_level)));
  const source=element('details','row-source'),summary=element('summary','','來源資訊');source.append(summary,element('p','', (r.source_type==='official'?'Official / K':text(r.pack_name))+' · Song '+r.song_id+' · '+text(r.player_name)),element('p','',r.relative_folder||'來源路徑未設定'));td.append(source);
  td=cell(tr,'CLEAR STATUS','record-clear');td.append(DanceFX.lamp(r.lamp_status,{compact:true}),element('span','status-caption','當次結果'));
  td=cell(tr,'SCORE STATUS','record-score');td.append(DanceFX.scorePanel(r));
@@ -28,7 +33,7 @@ async function load(){
 }
 async function detail(id){
  const version=++detailVersion;try{const r=await api('/detail?record_id='+id);if(version!==detailVersion)return;
- $('history-detail').hidden=false;$('history-detail-title').textContent=r.title+' · '+r.difficulty+' / Record #'+r.record_id;$('history-detail-score').replaceChildren(DanceFX.lamp(r.lamp_status),DanceFX.scorePanel(r),DanceFX.updateSummary(r.update_summary));$('history-metadata').replaceChildren();
+ $('history-detail').hidden=false;$('history-detail-title').textContent=r.title+' · '+(r.difficulty || '難度未設定')+' / Record #'+r.record_id;$('history-detail-score').replaceChildren(DanceFX.lamp(r.lamp_status),DanceFX.scorePanel(r),DanceFX.updateSummary(r.update_summary));$('history-metadata').replaceChildren();
  for(const [label,value]of [['Song ID',r.song_id],['Pack',r.source_type==='official'?'Official / K':r.pack_name],['SongFolder',r.relative_folder],['難度',r.difficulty],['歌曲 LV',r.game_level],['本人暱稱',r.player_name],['遊玩模式',r.play_mode],['完成狀態',r.completion_status],['Perfect / Cool / Bad / Miss',[r.perfect,r.cool,r.bad,r.miss].map(text).join(' / ')],['最高連擊',r.max_combo],['原始總積分',r.game_score],['成績評級',r.grade],['原存 EX / MAX',r.ex_score+' / '+text(r.max_score)],['原存差值 / 百分比',text(r.max_difference)+' / '+text(r.percentage)],['MAX 計分制度',r.max_label],['跨場次比較',r.comparison?.ranking_paused?'基準衝突，比較暫停':'無已知衝突／舊紀錄'],['MAX 驗證狀態',r.max_status==='confirmed'?'已驗證當次基礎':r.max_status==='legacy_basis_unreviewed'?'歷史原值保留，基礎待稽核':'未知'],['catalog_total_notes',r.catalog_total_notes],['judged_total',r.judged_total],['max_basis_notes',r.max_basis_notes],['燈號依據',r.lamp_verification?.source==='system_result_judgments'?'本系統結算判定':'歷史／遊戲證據'],['Session',r.session_id],['Review',r.review_id],['遊玩時間',localTime(r.played_at_verified===false?null:r.played_at)],['時間來源',r.played_at_source],['確認時間',localTime(r.confirmed_at)],['確認方法',r.confirmation_method],['更新證據來源',r.update_summary.source]]){$('history-metadata').append(element('dt','',label),element('dd','',text(value)));}
  $('history-evidence').textContent=JSON.stringify(r.evidence,null,2);$('history-image').hidden=true;$('history-image-error').textContent='';if(imageUrl){URL.revokeObjectURL(imageUrl);imageUrl=null;}
  $('history-detail').scrollIntoView({block:'start',behavior:'instant'});

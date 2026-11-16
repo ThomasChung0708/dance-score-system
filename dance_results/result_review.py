@@ -1,4 +1,4 @@
-"""Persistent human result review. The catalog is read-only; no PlayRecord writes."""
+"""Persistent human result review. The catalog is read-only; final records use SubmissionService."""
 from __future__ import annotations
 
 import copy
@@ -405,7 +405,8 @@ class ResultReviews:
                 issues.append(dict(field='song_id', code='song_identity_not_confirmed'))
             elif not known_identity:
                 issues.append(dict(field='song_id', code='song_identity_requires_manual_review'))
-            if values.get('difficulty') not in ('EASY', 'NORMAL', 'HARD'):
+            uncharted = bool(song and song['source_type'] == 'custom' and not song['difficulties'])
+            if values.get('difficulty') not in ('EASY', 'NORMAL', 'HARD') and not (uncharted and values.get('difficulty') is None):
                 issues.append(dict(field='difficulty', code='game_difficulty_required'))
             if values.get('game_level') is None:
                 issues.append(dict(field='game_level', code='local_game_level_required'))

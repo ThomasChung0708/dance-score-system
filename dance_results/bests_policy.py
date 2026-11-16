@@ -12,9 +12,12 @@ PROOF="""r.review_id IS NOT NULL AND length(r.screenshot_sha256)=64 AND
  json_extract(r.evidence_json,'$.values.cool')=r.cool AND
  json_extract(r.evidence_json,'$.values.bad')=r.bad AND
  json_extract(r.evidence_json,'$.values.miss')=r.miss AND
- EXISTS(SELECT 1 FROM game_difficulties identity_chart WHERE identity_chart.difficulty_id=r.difficulty_id
+ (EXISTS(SELECT 1 FROM game_difficulties identity_chart WHERE identity_chart.difficulty_id=r.difficulty_id
   AND json_extract(r.evidence_json,'$.song.song_id')=identity_chart.song_id
-  AND json_extract(r.evidence_json,'$.values.difficulty')=identity_chart.difficulty) AND
+  AND json_extract(r.evidence_json,'$.values.difficulty')=identity_chart.difficulty) OR (r.difficulty_id IS NULL AND
+ EXISTS(SELECT 1 FROM songs identity_song WHERE identity_song.song_id=json_extract(r.evidence_json,'$.song.song_id')
+  AND identity_song.source_type='custom') AND
+ json_extract(r.evidence_json,'$.values.difficulty') IN ('EASY','NORMAL','HARD'))) AND
  (json_extract(r.evidence_json,'$.result_verification.confirmed') IS 1 OR
   (json_extract(r.evidence_json,'$.review.identity_confirmation.source')='explicit_user_review' AND
    json_extract(r.evidence_json,'$.review.draft.identity_reviewed') IS 1 AND

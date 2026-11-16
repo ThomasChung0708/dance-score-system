@@ -188,7 +188,7 @@ def main(argv=None):
         print(json.dumps({k:v for k,v in result.items() if k not in ('before','after','migrations')},ensure_ascii=False,indent=2))
         return 0
     except (OSError,ValueError,sqlite3.Error) as error:
-        print('官方歌單未完成匯入：'+str(error));return 2
+        print('熱舞官方譜面未完成匯入：'+str(error));return 2
 
 
 if __name__=='__main__':raise SystemExit(main())

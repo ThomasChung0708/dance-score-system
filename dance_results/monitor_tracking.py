@@ -9,7 +9,7 @@ from pathlib import Path
 import time
 from uuid import uuid4
 
-from .ocr_matching import normalize
+from .ocr_matching import same_song_title_key
 from .ocr_policy import SELECTION_REQUIRED
 
 
@@ -177,7 +177,7 @@ class Tracker:
             incoming = fields.get('title', {}).get('value')
             previous = self.selection or self.selection_candidate or {}
             previous_title = previous.get('fields', {}).get('title', {}).get('value')
-            if incoming and previous_title and normalize(incoming) != normalize(previous_title):
+            if incoming and previous_title and same_song_title_key(incoming) != same_song_title_key(previous_title):
                 self.invalidate_selection('unreliable_new_selection_title', clear_pack=False)
             return
         if any(unreadable(key) for key in SELECTION_REQUIRED):
@@ -185,7 +185,7 @@ class Tracker:
             # shows the same title. A readable different title still replaces or
             # invalidates the old selection, so a stale song is never kept.
             current = ((self.selection or {}).get('fields') or {}).get('title') or {}
-            if normalize(current.get('value')) == normalize(fields['title']['value']):
+            if same_song_title_key(current.get('value')) == same_song_title_key(fields['title']['value']):
                 return
         payload = dict(fields=observation['fields'], pack=copy.deepcopy(self.current_pack),
                        source_type=observation.get('source_type', self.current_source),
@@ -240,8 +240,8 @@ class Tracker:
 
     def room_title_agrees(self, preview):
         selected = self.selection or self.selection_candidate or {}
-        title = normalize(selected.get('fields', {}).get('title', {}).get('value'))
-        room_title = normalize(preview.get('title'))
+        title = same_song_title_key(selected.get('fields', {}).get('title', {}).get('value'))
+        room_title = same_song_title_key(preview.get('title'))
         return (not room_title or room_title == title or
                 (len(room_title) >= 8 and title.startswith(room_title)))
 
@@ -277,7 +277,7 @@ class Tracker:
             if self.playing_candidate:
                 preview = observation.get('playing_preview') or {}
                 fields = self.playing_candidate['fields']
-                if ((preview.get('title') and normalize(preview['title']) != normalize(fields['title']['value']))
+                if ((preview.get('title') and same_song_title_key(preview['title']) != same_song_title_key(fields['title']['value']))
                         or (preview.get('game_level') is not None
                             and fields.get('game_level', {}).get('value') is not None
                             and preview['game_level'] != fields['game_level']['value'])):
@@ -310,8 +310,8 @@ class Tracker:
             # local player's chart. Only a different title breaks local identity.
             # The narrow room title ROI may clip a long title at its right edge;
             # PLAYING still has to agree with the full selected title below.
-            room_title = normalize(preview.get('title'))
-            selected_title = normalize((current_selection or {}).get('fields', {}).get('title', {}).get('value'))
+            room_title = same_song_title_key(preview.get('title'))
+            selected_title = same_song_title_key((current_selection or {}).get('fields', {}).get('title', {}).get('value'))
             if current_selection and not self.room_title_agrees(preview):
                 self.invalidate_selection('room_preview_changed',clear_pack=False)
             elif (self.selection is None and current_selection and role is True
@@ -340,7 +340,7 @@ class Tracker:
             preview = observation.get('playing_preview', {})
             if selected:
                 fields = selected['fields']
-                if preview.get('title') and normalize(preview['title']) != normalize(fields['title']['value']):
+                if preview.get('title') and same_song_title_key(preview['title']) != same_song_title_key(fields['title']['value']):
                     selected = None
                     reason = 'playing_title_differs_from_selection'
                 elif (preview.get('game_level') is not None and fields.get('game_level', {}).get('value') is not None

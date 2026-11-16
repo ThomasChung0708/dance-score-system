@@ -11,6 +11,18 @@ async function main() {
     const errors = [];
     page.on('pageerror', e => errors.push(e.message));
     await page.goto(base + '/reviews');
+    if (mode === 'chartless') {
+      await page.goto(base + '/history');
+      await page.waitForSelector('.record-title');
+      assert.match(await page.locator('.difficulty-chip').textContent(), /難度未設定/);
+      assert.ok(!(await page.locator('.record-title').getAttribute('href')).includes('difficulty=null'));
+      await page.locator('.record-table button').first().click();
+      await page.waitForSelector('#history-detail:not([hidden])');
+      assert.match(await page.locator('#history-detail-title').textContent(), /難度未設定/);
+      assert.deepEqual(errors, []);
+      console.log(JSON.stringify({mode, passed: true}));
+      return;
+    }
     if (mode === 'title-bound' || mode === 'title-fallback') {
       await page.waitForSelector('#review-inputs:not([disabled])');
       const summary = await page.locator('#bound-summary').textContent();
@@ -74,6 +86,58 @@ async function main() {
       return;
     }
     await page.waitForSelector('#review-inputs:not([disabled])');
+    if (mode === 'safety') {
+      const items = page.locator('.review-item');
+      assert.equal(await items.count(), 2);
+      const selected = await page.locator('.review-item.selected').getAttribute('data-session-id');
+      const other = page.locator('.review-item:not(.selected)');
+      const otherId = await other.getAttribute('data-session-id');
+      await items.first().focus();
+      // Compare actual node identity inside the page, including a poll whose
+      // payload changes. The button itself must survive both updates.
+      assert.equal(await page.evaluate(async () => {
+        const before = document.activeElement;
+        await reload();
+        return before === document.activeElement && before.isConnected;
+      }), true);
+      await page.locator('#value-editor summary').click();
+      await page.locator('#review-perfect').fill('9');
+      assert.equal(await page.evaluate(() => {
+        const event = new Event('beforeunload', {cancelable: true});
+        window.dispatchEvent(event);
+        return event.defaultPrevented;
+      }), true);
+      page.once('dialog', dialog => dialog.dismiss());
+      await other.click();
+      assert.match(await page.locator('#review-identity').textContent(), new RegExp(selected));
+      assert.equal(await page.locator('#review-perfect').inputValue(), '9');
+      let release;
+      const gate = new Promise(resolve => { release = resolve; });
+      let started;
+      const requested = new Promise(resolve => { started = resolve; });
+      await page.route('**/api/reviews/save', async route => {
+        started();
+        await gate;
+        await route.continue();
+      });
+      await page.locator('#advanced-tools summary').first().click();
+      await page.locator('#save-review-draft').click();
+      await requested;
+      page.once('dialog', dialog => dialog.accept());
+      await other.click();
+      await page.waitForFunction(id => document.querySelector('#review-identity').textContent.includes(id)
+        && !document.querySelector('#review-inputs').disabled, otherId);
+      const response = page.waitForResponse('**/api/reviews/save');
+      release();
+      await response;
+      await page.waitForFunction(() => !busy);
+      assert.match(await page.locator('#review-identity').textContent(), new RegExp(otherId));
+      assert.equal(await page.locator('#review-perfect').inputValue(), '10');
+      assert.equal(await page.evaluate(() => dirty), false);
+      assert.deepEqual(errors, []);
+      console.log(JSON.stringify({mode, passed: true}));
+      return;
+    }
     assert.equal(await page.locator('.review-item').count(), 1);
     assert.equal(await page.locator('#selected-card').isVisible(), true);
     assert.equal(await page.locator('#review-image').isVisible(), true);

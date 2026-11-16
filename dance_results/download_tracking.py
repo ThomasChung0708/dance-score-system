@@ -70,8 +70,8 @@ def download_receipt(database,sid):
         db.row_factory=sqlite3.Row
         db.execute('PRAGMA query_only=ON')
         r = db.execute(
-            'SELECT r.record_id,d.song_id,r.evidence_json,ps.display_song_title '
-            'FROM play_records r JOIN game_difficulties d ON d.difficulty_id=r.difficulty_id '
+            "SELECT r.record_id,COALESCE(d.song_id,json_extract(r.evidence_json,'$.song.song_id')) AS song_id,r.evidence_json,ps.display_song_title "
+            'FROM play_records r LEFT JOIN game_difficulties d ON d.difficulty_id=r.difficulty_id '
             'JOIN play_sessions ps ON ps.session_id=r.session_id WHERE r.session_id=?', (sid,)).fetchone()
         if r is None:
             return None

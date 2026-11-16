@@ -203,7 +203,7 @@ class LibraryService:
     def start_scan(self,root_id,*,defer_not_ready=False):
         with self.open() as library:
             record=self._root(library.connection,root_id)
-            if record['root_kind']!='filesystem':raise LibraryError('官方歌單使用 CSV 匯入，不執行歌曲資料夾掃描。')
+            if record['root_kind']!='filesystem':raise LibraryError('熱舞官方譜面使用 CSV 匯入，不執行歌曲資料夾掃描。')
             root=Path(record['path'])
         if not root.is_dir():raise LibraryError('SONG 路徑目前不存在；既有資料保留，沒有執行掃描。')
         if not self._write_lock.acquire(blocking=False):raise LibraryError('已有更新作業進行中。',409)

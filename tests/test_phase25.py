@@ -43,7 +43,7 @@ class MigrationTests(unittest.TestCase):
             self.assertEqual(library.migration_results[1]['before'],library.migration_results[1]['after'])
             self.assertEqual(result['before'], result['after'])
             self.assertEqual(identity_audit(library.connection, migrated=True), self.before)
-            self.assertEqual(library.connection.execute('PRAGMA user_version').fetchone()[0], 10)
+            self.assertEqual(library.connection.execute('PRAGMA user_version').fetchone()[0], 11)
             row = library.connection.execute('SELECT difficulty_id,game_level,total_notes,notes_verified,level_source FROM game_difficulties').fetchone()
             self.assertEqual(tuple(row), (41,25,153,0,None))
             self.assertEqual(library.connection.execute('PRAGMA foreign_key_check').fetchall(), [])
@@ -54,8 +54,8 @@ class MigrationTests(unittest.TestCase):
                 self.assertEqual(identity_audit(backup), self.before)
         with LibraryDatabase(self.path) as reopened:
             self.assertIsNone(reopened.migration_result)
-            self.assertEqual(reopened.connection.execute('SELECT count(*) FROM schema_migrations').fetchone()[0], 9)
-        self.assertEqual(len(list(self.path.parent.glob('backups/*.sqlite3'))), 9)
+            self.assertEqual(reopened.connection.execute('SELECT count(*) FROM schema_migrations').fetchone()[0], 10)
+        self.assertEqual(len(list(self.path.parent.glob('backups/*.sqlite3'))), 10)
 
     def test_failure_rolls_back_all_ddl_and_keeps_backup(self):
         with patch('dance_results.migrations.V2_SQL', V2_SQL + '\nCREATE TABLE songs(bad TEXT);\n'):

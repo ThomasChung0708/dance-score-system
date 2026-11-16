@@ -27,7 +27,8 @@ def audit_v3(db, pack_ids, connect_ids):
     for table in ('library_roots','packs','songs','song_sources','scan_runs','game_difficulties',
                   'song_title_aliases','source_raw_snapshots','play_sessions','play_records','schema_migrations'):
         columns = [r[1] for r in db.execute('PRAGMA table_info('+table+')')
-                   if (table,r[1]) not in {('packs','pack_type'),('song_sources','saved_artist'),('library_roots','root_kind')}]
+                   if (table,r[1]) not in {('packs','pack_type'),('song_sources','saved_artist'),
+                       ('library_roots','root_kind'),('play_records','song_id')}]
         if table=='play_records':
             # This audit projects the pre-v3 layout, even after later additive
             # formal-submission columns are installed.

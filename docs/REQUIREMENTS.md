@@ -81,7 +81,7 @@ Phase 2.5 最後修正：補上 connect Pack；舊 39 Pack／1859 Song／2930 So
 - 未來 GUI 顯示全部候選的 Song ID、Pack、SongFolder 及各難度數值，人工選擇後保存 difficulty_id、確認方式及證據；不改 Song ID、不合併來源、不把單次人工決策變成同名歌曲的全域對應。
 - 多人本人／HOST 資料分離、非 HOST Pack 未知、connect 管理 Pack 與原始來源不等價、失敗／退出／等待結算規則全部繼續適用。
 
-## Phase 3.5 已授權：官方 K 歌單獨立匯入
+## Phase 3.5 已授權：熱舞官方譜面獨立匯入
 
 使用者已要求先完成 song_table.csv 的 K 模式匯入，不與自製 OCR／時間匹配規格互相阻塞。v0.5.0 使用 schema 5，獨立 CLI 與 GUI 預覽／匯入，只建立 mode=K，T／空白排除。fileId 保留原值，K 內不同 gn 的重複 fileId 保持獨立，不合併、不覆蓋。官方來源與自製／connect 分開，既有 40 Pack、1,859 Song 及 2,930 檔案來源 ID 保留。
 

@@ -164,7 +164,7 @@ class MinorFrameTests(unittest.TestCase):
             self.assertIn('conflicting_'+key, b['result_ocr']['temporal_validation']['reasons'])
 
     def test_low_confidence_score_and_identity_fields_still_block(self):
-        for key in ('perfect', 'cool', 'bad', 'miss', 'max_combo', 'game_score', 'grade', 'title', 'game_level'):
+        for key in ('perfect', 'cool', 'bad', 'miss', 'max_combo', 'game_score', 'grade', 'game_level'):
             _, b = self.pair({key: dict(confidence=.944)})
             self.assertIn('unreliable_'+key, b['result_ocr']['temporal_validation']['reasons'])
 

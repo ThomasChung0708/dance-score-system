@@ -59,7 +59,7 @@ class ConnectFinalTests(unittest.TestCase):
     def test_schema3_migration_preserves_ids_names_paths_history_and_backup(self):
         with LibraryDatabase(self.path) as library:
             db=library.connection; result=library.migration_results[0]
-            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0],10)
+            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0],11)
             self.assertEqual(result['before'],result['after'])
             self.assertEqual(audit_v3(db,{11},{101}),self.before)
             self.assertEqual(tuple(db.execute('SELECT pack_id,name,pack_type FROM packs WHERE pack_id=11').fetchone()),(11,'Original Pack','normal'))

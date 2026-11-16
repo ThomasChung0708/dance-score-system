@@ -1,0 +1,20 @@
+{
+  "image": "round32/magic-and-love-result.png",
+  "sha256": "35529d8f445a4efdad81d19d83fafc04097ce4a4ef2437b06abfb2966ed005db",
+  "screen_type": "results",
+  "local_player_status": "completed_observed",
+  "fields": {
+    "perfect": 1375,
+    "cool": 6,
+    "bad": 0,
+    "miss": 0,
+    "max_combo": 1381,
+    "game_score": 97601,
+    "grade": "A++",
+    "completion_status": "COMPLETED",
+    "player_name": "TC",
+    "title": "MAGIC & LOVE",
+    "game_level": 31
+  },
+  "annotation": "Session 8 result screen ground truth supplied and independently replayed; difficulty is not displayed and is not labelled."
+}

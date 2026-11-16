@@ -14,6 +14,15 @@ def normalize(value):
     return ' '.join(unicodedata.normalize('NFKC', value or '').casefold().split())
 
 
+def same_song_title_key(value):
+    """Compare already observed titles; never broaden catalog retrieval.
+
+    Keep punctuation and letters intact, including genuinely different symbols.
+    Removing whitespace also ignores spacing around &, -, ~, :, ・, ! and ?.
+    """
+    return ''.join(unicodedata.normalize('NFKC', value or '').casefold().split())
+
+
 def stylized_title_key(value, *, allow_latin=False):
     """Confusable key for pack-constrained Japanese/mixed title retrieval.
 
@@ -236,11 +245,19 @@ class ReadOnlyCatalog:
         if pack_id is not None:
             match['candidates'] = [c for c in match['candidates'] if c['pack_id'] == pack_id]
             match['candidate_count'] = len(match['candidates'])
+        uncharted = (not fuzzy and pack_id is not None and source_type == 'custom'
+            and len(constrained) == 1
+            and not any(sid == constrained[0]['song_id'] for sid, _ in self.difficulties)
+            and fields.get('difficulty', {}).get('value') is None)
+        # With no chart rows, LV cannot disambiguate catalog candidates. Bind
+        # only the exact unique title in a confirmed pack; result-side temporal
+        # LV evidence remains mandatory for automatic storage.
+        required = ('title',) if uncharted else SELECTION_REQUIRED
         reliable = all(fields.get(k, {}).get('value') is not None
                        and fields[k].get('confidence', 0) >= (.8 if fuzzy and k == 'title' else AUTO_CONFIDENCE)
-                       and not fields[k].get('reason') for k in SELECTION_REQUIRED)
+                       and not fields[k].get('reason') for k in required)
         level = fields.get('game_level', {}).get('value')
-        reliable = (reliable and fields.get('difficulty', {}).get('value') in ('EASY', 'NORMAL', 'HARD')
+        reliable = (reliable and (uncharted or fields.get('difficulty', {}).get('value') in ('EASY', 'NORMAL', 'HARD'))
                     and type(level) is int and 0 < level <= 10**7)
         if not reliable or uncertain_conflict or len(constrained) != 1:
             match['reasons'] = ['identity_missing_ambiguous_or_pack_conflicting']

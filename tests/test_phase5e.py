@@ -147,7 +147,7 @@ class ProgressIntegrationTests(unittest.TestCase):
         for order in ('asc','desc'):self.store().progress_history(song_id=1,order=order)
         self.store().history(song_id=1);self.recent()
         with closing(sqlite3.connect(self.db)) as db:
-            self.assertEqual(before,audit(db));self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0],10)
+            self.assertEqual(before,audit(db));self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0],11)
 
     def test_recent_double_update_keeps_one_difficulty_entry(self):
         self.sequence();r=self.recent()

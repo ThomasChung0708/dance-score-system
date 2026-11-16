@@ -188,7 +188,7 @@ class OfficialMigrationTests(unittest.TestCase):
         self.assertEqual(result['migrations'][0]['from_version'],4)
         with LibraryDatabase(self.path) as library:
             db=library.connection
-            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0],10)
+            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0],11)
             self.assertEqual(db.execute('SELECT * FROM user_difficulties WHERE difficulty_id=301').fetchone()[0],301)
             self.assertEqual(db.execute('SELECT difficulty_id FROM extra_history').fetchone()[0],301)
             self.assertEqual(db.execute('SELECT difficulty_id FROM play_records WHERE record_id=401').fetchone()[0],301)

@@ -73,7 +73,7 @@ class MatchingSafetyTests(unittest.TestCase):
         for _ in range(2):
             self.catalog.match(observation(), self.pack_a)
         self.assertEqual(audit(self.catalog.db), before)
-        self.assertEqual(self.catalog.db.execute('PRAGMA user_version').fetchone()[0], 10)
+        self.assertEqual(self.catalog.db.execute('PRAGMA user_version').fetchone()[0], 11)
 
     def test_level_notes_and_duration_must_agree_without_tolerance(self):
         # Future duration fields are represented in memory only, not added to any SQLite schema.

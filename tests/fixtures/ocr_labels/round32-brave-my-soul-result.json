@@ -1,0 +1,20 @@
+{
+  "image": "round32/brave-my-soul-result.png",
+  "sha256": "b3e3004d0b15daf7672d1c012406f3f9e14b1324f2428c742b1284dfcf5c0baa",
+  "screen_type": "results",
+  "local_player_status": "completed_observed",
+  "fields": {
+    "perfect": 1186,
+    "cool": 2,
+    "bad": 0,
+    "miss": 0,
+    "max_combo": 1188,
+    "game_score": 83994,
+    "grade": "A++",
+    "completion_status": "COMPLETED",
+    "player_name": "TC",
+    "title": "Brave My Soul",
+    "game_level": 23
+  },
+  "annotation": "Session 8 result screen ground truth supplied and independently replayed; difficulty is not displayed and is not labelled."
+}

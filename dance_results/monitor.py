@@ -14,7 +14,7 @@ import time
 from .library_service import LibraryError
 from .monitor_tracking import Tracker, ManualReferences, utc
 from .monitor_ocr import Analyzer, SelectionFrameBuffer, apply_selection, change_signature, change_amount, black_or_loading_frame
-from .ocr_matching import ReadOnlyCatalog, normalize
+from .ocr_matching import ReadOnlyCatalog, same_song_title_key
 from .window_capture import Windows, WGCCapture, CaptureError
 from .ocr_failures import FailureCapture
 from .songs import catalog_display_title
@@ -225,7 +225,7 @@ class Monitor:
             return
         current = self.tracker.selection or self.tracker.fast_selection(sampled)
         if (current and sampled-current['last_seen'] <= self.tracker.selection_ttl
-                and normalize(current['fields'].get('title', {}).get('value')) == normalize(preview['title'])):
+                and same_song_title_key(current['fields'].get('title', {}).get('value')) == same_song_title_key(preview['title'])):
             return
         for captured_at, image in frames.before(sampled):
             recovered = analyzer.analyze(image, 'SONG_SELECT', full=False)
@@ -235,7 +235,7 @@ class Monitor:
             title = fields.get('title') or {}
             if not title.get('value') or title.get('reason'):
                 continue
-            if normalize(title['value']) != normalize(preview['title']):
+            if same_song_title_key(title['value']) != same_song_title_key(preview['title']):
                 self.tracker.invalidate_selection('newer_captured_selection_differs_from_playing')
                 break
             from .pack_selection import infer_selected_pack

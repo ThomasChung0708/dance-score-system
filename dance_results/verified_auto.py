@@ -7,7 +7,7 @@ import threading
 
 from .library_service import LibraryError
 from .monitor_tracking import atomic_json,utc,ManualReferences
-from .ocr_matching import ReadOnlyCatalog,normalize
+from .ocr_matching import ReadOnlyCatalog,normalize,same_song_title_key
 from .note_review import result_time
 from .result_ocr import NUMERIC
 from .result_consistency import screen_catalog, screen_totals, validate, selection_is_reference
@@ -16,7 +16,7 @@ from .ocr_policy import (
     RESULT_NONFATAL_ERRORS,
 )
 
-STORAGE_POLICY = 'round29-screen-v1'
+STORAGE_POLICY = 'round32-screen-v1'
 
 
 def reliable(field):
@@ -61,9 +61,7 @@ def automatic_request(reviews,row):
     elif any(not reliable_result_field(ocr, k, own[0]['fields'].get(k, {})) or own[0]['fields'][k]['value']!=raw.get(k,{}).get('value') for k in (*NUMERIC,'grade','completion_status')):
         issues.append('automatic_player_row_conflict')
     fields=copy.deepcopy(selection.get('ocr_fields',selection.get('fields') or {}))
-    for key in SELECTION_REQUIRED:
-        if not reliable(fields.get(key)):issues.append('automatic_selection_'+key+'_required')
-    if normalize(raw.get('title',{}).get('value'))!=normalize(fields.get('title',{}).get('value')):issues.append('automatic_result_title_conflict')
+    if same_song_title_key(raw.get('title',{}).get('value'))!=same_song_title_key(fields.get('title',{}).get('value')):issues.append('automatic_result_title_conflict')
     if not ocr.get('multiplayer') and (not reliable(raw.get('game_level')) or raw['game_level']['value']!=fields.get('game_level',{}).get('value')):
         issues.append('automatic_result_level_conflict')
     catalog=ReadOnlyCatalog(reviews.database)
@@ -88,6 +86,29 @@ def automatic_request(reviews,row):
                 song=reviews._song(catalog,sid)
                 gd=next((d for d in song['difficulties'] if d['difficulty']==fields.get('difficulty',{}).get('value')),None)
         else:issues.append('automatic_source_unconfirmed')
+        uncharted = bool(sid and source == 'custom'
+            and not any(song_id == sid for song_id, _ in catalog.difficulties))
+        for key in SELECTION_REQUIRED:
+            if uncharted and key == 'difficulty' and fields.get(key, {}).get('value') is None:
+                continue
+            if uncharted and key == 'game_level' and reliable(raw.get(key)):
+                continue
+            if not reliable(fields.get(key)):
+                issues.append('automatic_selection_' + key + '_required')
+        # Temporal title agreement grants authority only inside the bound source
+        # and confirmed pack; every namesake remains a candidate.
+        title_key = same_song_title_key(raw.get('title', {}).get('value'))
+        title_ids = {i for name, ids in catalog.index.items()
+            if title_key and same_song_title_key(name) == title_key for i in ids
+            if catalog.songs[i]['source_type'] == source
+            and (source != 'custom' or (selection.get('pack') or {}).get('pack_id') is None or catalog.songs[i]['pack_id'] == (selection.get('pack') or {}).get('pack_id'))}
+        title_relaxed = any(not reliable(sample.get('fields', {}).get('title'))
+            for sample in (ocr.get('temporal_validation') or {}).get('samples', []))
+        if title_relaxed and title_ids != {sid}:
+            issues.append('automatic_unique_result_title_required')
+        if uncharted and (ocr.get('multiplayer') or screen_values.get('completion_status') != 'COMPLETED'
+                or consistency['judged_total'] != screen_values.get('max_combo')):
+            issues.append('automatic_uncharted_complete_combo_required')
         if sid is None:issues.append('automatic_unique_verified_identity_required')
         if selection.get('handoff') == 'single_observation' and (
                 source != 'custom' or (selection.get('pack') or {}).get('status') != 'confirmed'
@@ -100,7 +121,7 @@ def automatic_request(reviews,row):
         if issues:return None,sorted(set(issues))
         song=catalog.songs[sid]
         values={k:copy.deepcopy(raw.get(k,{}).get('value')) for k in (*NUMERIC,'grade','completion_status','player_name','game_level')}
-        values.update(difficulty=fields['difficulty']['value'],game_level=fields['game_level']['value'],
+        values.update(difficulty=fields.get('difficulty', {}).get('value'),game_level=fields['game_level']['value'],
             total_notes=consistency['judged_total'] if screen_values.get('completion_status') == 'COMPLETED' else None,
             duration_seconds=fields.get('duration_seconds',{}).get('value'))
         if values['completion_status'] not in ('COMPLETED','FAILED'):issues.append('automatic_completion_unknown')

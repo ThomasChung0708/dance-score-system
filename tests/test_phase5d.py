@@ -316,7 +316,7 @@ class RecentTests(unittest.TestCase):
     def test_pending_scan_do_not_make_recent_but_valid_failed_score_does(self):
         self.approved();self.assertEqual(self.recent()['updates'],[]);self.next()
         r=self.commit(self.approved(completion_status='FAILED'))['record'];self.assertEqual(self.recent()['updates'][0]['lamp_status'],'FAILED')
-        with self.store().library.open() as lib:self.assertEqual(lib.connection.execute('PRAGMA user_version').fetchone()[0],10)
+        with self.store().library.open() as lib:self.assertEqual(lib.connection.execute('PRAGMA user_version').fetchone()[0],11)
 
     def test_cross_session_conflict_suppresses_uncomparable_chart(self):
         self.save_score(1005,10);self.next()

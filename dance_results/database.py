@@ -9,6 +9,7 @@ from typing import Any
 
 from .models import Diagnostic, ParsedFile, ScanReport, SongEntry
 from .migrations import SCHEMA_VERSION, migrate_v1
+from .migrations_v11 import migrate_v10
 from .migrations_v3 import migrate_v2
 from .migrations_v4 import migrate_v3
 from .migrations_v5 import migrate_v4
@@ -155,7 +156,7 @@ class LibraryDatabase:
                     f"\nPRAGMA application_id={APPLICATION_ID};\nPRAGMA user_version=1;\nCOMMIT;"
                 )
                 version, app_id = 1, APPLICATION_ID
-            if app_id != APPLICATION_ID or version not in (1,2,3,4,5,6,7,8,9,SCHEMA_VERSION):
+            if app_id != APPLICATION_ID or version not in (1,2,3,4,5,6,7,8,9,10,SCHEMA_VERSION):
                 raise ValueError("資料庫不是本程式的支援版本，未覆寫或自動重建。")
             if version != SCHEMA_VERSION and read_only:
                 raise ValueError(f"資料庫需要 schema {version}→{SCHEMA_VERSION} migration；請先以一般掃描入口執行，程式會先備份。唯讀入口未修改資料。")
@@ -182,7 +183,11 @@ class LibraryDatabase:
             if version == 7:version = 8
             if version == 8:
                 self.migration_results.append(migrate_v8(self.connection,self.path,new_database=new_database));version=9
-            if version == 9:self.migration_results.append(migrate_v9(self.connection,self.path,new_database=new_database))
+            if version == 9:
+                self.migration_results.append(migrate_v9(self.connection,self.path,new_database=new_database))
+                version = 10
+            if version == 10:
+                self.migration_results.append(migrate_v10(self.connection,self.path,new_database=new_database))
             self.migration_result = self.migration_results[-1] if self.migration_results else None
         except BaseException:
             self.connection.close()

@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path, PureWindowsPath
 from uuid import uuid4
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 V2_SQL = """
 ALTER TABLE charts RENAME TO game_difficulties;

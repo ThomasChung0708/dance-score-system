@@ -423,14 +423,14 @@ class AutomaticReceiptTests(unittest.TestCase):
         self.assertEqual(self.service._read(self.sid)[1]['status'], 'pending_review')
         self.assertEqual(len(self.service.list()['results']), 1)
 
-    def test_unique_custom_song_without_any_chart_metadata_creates_difficulty(self):
+    def test_unique_custom_song_without_any_chart_metadata_keeps_catalog_empty(self):
         row, sid = self.custom_without_chart()
         body, issues = automatic_request(self.service, row)
         self.assertEqual(issues, [])
         self.assertEqual(body['song_id'], sid)
         record = self.submit()['record']
         self.assertEqual((record['song_id'], record['difficulty'], record['game_level']), (sid, 'HARD', 17))
-        self.assertIsNotNone(record['difficulty_id'])
+        self.assertIsNone(record['difficulty_id'])
 
     def custom_without_chart(self, notes=11):
         row = self.temporal_row()
@@ -458,7 +458,7 @@ class AutomaticReceiptTests(unittest.TestCase):
         self.assertEqual(record['evidence']['session']['selection']['fields']['total_notes']['value'], 14)
         self.assertEqual(record['evidence']['screen_consistency']['warnings'], ['custom_selection_judgment_count_difference'])
         with closing(sqlite3.connect(self.db)) as db:
-            self.assertEqual(db.execute('SELECT total_notes,notes_verified,level_source FROM game_difficulties WHERE song_id=?', (sid,)).fetchone(), (None, 0, 'game_screen'))
+            self.assertIsNone(db.execute('SELECT total_notes,notes_verified,level_source FROM game_difficulties WHERE song_id=?', (sid,)).fetchone())
 
     def test_independent_max_keeps_selection_sum_difference_mandatory(self):
         row, _ = self.custom_without_chart(notes=14)

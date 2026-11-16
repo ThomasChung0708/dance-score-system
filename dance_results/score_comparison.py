@@ -14,7 +14,7 @@ def total(values):
 def comparison(db,song_id,difficulty,judged_total=None,*,directory=None,session_id=None,max_basis_notes=None,max_basis_policy=None,confirmed_only=False):
     observations={}
     full_bases={}
-    for r in db.execute("SELECT r.session_id,r.record_id,r.completion_status,r.perfect,r.cool,r.bad,r.miss,r.evidence_json,r.confirmation_method FROM play_records r JOIN game_difficulties d ON d.difficulty_id=r.difficulty_id WHERE d.song_id=? AND d.difficulty=? AND r.match_status='confirmed'",(song_id,difficulty)):
+    for r in db.execute("SELECT r.session_id,r.record_id,r.completion_status,r.perfect,r.cool,r.bad,r.miss,r.evidence_json,r.confirmation_method FROM play_records r LEFT JOIN game_difficulties d ON d.difficulty_id=r.difficulty_id WHERE COALESCE(r.song_id,d.song_id)=? AND COALESCE(d.difficulty,json_extract(r.evidence_json,'$.values.difficulty')) IS ? AND r.match_status='confirmed'",(song_id,difficulty)):
         if confirmed_only and r['confirmation_method'] not in ('manual_review', 'manual_note_exception', 'verified_auto'):
             continue
         sid=r['session_id']

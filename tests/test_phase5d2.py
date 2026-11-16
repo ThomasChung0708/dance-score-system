@@ -168,7 +168,8 @@ class SnapshotMigrationTests(unittest.TestCase):
     def test_actual_zhou_records_same_identity_keep_3174_and_record7_lamp(self):
         with closing(sqlite3.connect(self.path)) as db:before=audit(db)
         with LibraryDatabase(self.path) as lib:
-            m=lib.migration_results[-1];self.assertEqual(m['before'],m['after'])
+            m = next(m for m in lib.migration_results if m['from_version'] == 9)
+            self.assertEqual(m['before'],m['after'])
             self.assertEqual(m['from_version'],9);self.assertTrue(Path(m['backup_path']).exists())
             p=next(p for p in progress_for_songs(lib.connection,[2726])[2726] if p['difficulty']=='HARD')
             self.assertEqual(p['best_ex_score'],3174);self.assertEqual(p['best_score_record']['record_id'],7)

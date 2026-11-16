@@ -10,15 +10,15 @@ from .songs import record_display_title
 
 def recent_updates(db,limit=30):
     rows = db.execute(
-        'SELECT r.*,d.song_id,d.difficulty,s.saved_title,s.latest_title,s.source_type,'
+        'SELECT r.*,COALESCE(r.song_id,d.song_id) AS bound_song_id,COALESCE(d.difficulty,ps.local_difficulty) AS difficulty,s.saved_title,s.latest_title,s.source_type,'
         's.relative_folder,p.name AS pack_name,ps.display_song_title FROM play_records r '
         'JOIN play_sessions ps ON ps.session_id=r.session_id '
-        'JOIN game_difficulties d ON d.difficulty_id=r.difficulty_id '
-        'JOIN songs s ON s.song_id=d.song_id LEFT JOIN packs p ON p.pack_id=s.pack_id '
+        'LEFT JOIN game_difficulties d ON d.difficulty_id=r.difficulty_id '
+        'JOIN songs s ON s.song_id=COALESCE(r.song_id,d.song_id) LEFT JOIN packs p ON p.pack_id=s.pack_id '
         'WHERE ('+VERIFIED_EX+') ORDER BY r.record_id').fetchall()
     bests={};latest={};blocked={};skipped=0
     for row in rows:
-        r=dict(row);e=json.loads(r['evidence_json']);f=e.get('achievement_feedback') or {};policy=e.get('scoring_version')
+        r=dict(row);r['song_id']=r.pop('bound_song_id');e=json.loads(r['evidence_json']);f=e.get('achievement_feedback') or {};policy=e.get('scoring_version')
         chart=(r['song_id'],r['difficulty']);key=(*chart,EX_POLICY)
         if chart not in blocked:blocked[chart]=comparison(db,*chart)['ranking_paused']
         previous=bests.get(key);ex=r['ex_score'];basis=r['total_notes']

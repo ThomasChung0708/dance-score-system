@@ -304,7 +304,7 @@ class SubmissionMigrationTests(unittest.TestCase):
     def test_schema6_preserves_nonempty_history_external_fks_views_and_backup(self):
         with LibraryDatabase(self.path) as library:
             db=library.connection;migration=library.migration_results[0]
-            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0],10)
+            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0],11)
             self.assertEqual(audit(db,self.columns)['play_records'],self.before['play_records'])
             self.assertEqual(db.execute('SELECT * FROM user_difficulties WHERE difficulty_id=301').fetchone()[0],301)
             self.assertEqual(db.execute('SELECT difficulty_id FROM extra_history').fetchone()[0],301)

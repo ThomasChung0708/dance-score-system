@@ -164,7 +164,7 @@ class ResultAuthorityTests(unittest.TestCase):
         with closing(sqlite3.connect(self.db)) as db:
             self.assertEqual(db.execute('SELECT total_notes,notes_source FROM game_difficulties WHERE song_id=? AND difficulty=?',
                                         (self.session['song_id'], 'HARD')).fetchone(), (13, 'official_csv'))
-            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], 10)
+            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], 11)
 
     def test_manual_catalog_mismatch_does_not_block_screen(self):
         row = self.temporal_row()

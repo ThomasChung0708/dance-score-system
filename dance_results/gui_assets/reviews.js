@@ -26,7 +26,7 @@ const reasons = {
   cross_session_basis_conflict: '同一譜面不同場次判定合計矛盾；當次自訂 MAX 保留，燈號 PENDING、排名與最佳刷新暫停',
   max_basis_unverified: 'MAX 的遊戲定義尚未另行驗證；EX 可確認，MAX／百分比保留未知',
   note_source_difference_requires_review: '譜面參考數與結算判定有來源差異，請核對並確認差異（不代表 OCR 錯誤）',
-  official_difficulty_not_in_catalog: '官方 K 歌單未提供此難度',
+  official_difficulty_not_in_catalog: '熱舞官方譜面未提供此難度',
   gameover_cannot_be_clear: '本人 GAME OVER 必須為 FAILED',
   local_player_name_required: '請確認本人暱稱',
   invalid_nonnegative_integer: '必須為非負整數',
@@ -61,6 +61,25 @@ let selectedId = null,
   previewSequence = 0,
   busy = false,
   polling = false;
+let dirty = false,
+  editVersion = 0,
+  selectionVersion = 0;
+function markDirty() {
+  if (!current) return;
+  dirty = true;
+  editVersion++;
+  $('review-save-state').textContent = '有未保存修改・未存入成績';
+}
+window.addEventListener('beforeunload', event => {
+  if (!dirty) return;
+  event.preventDefault();
+  event.returnValue = '';
+});
+function reviewStatus(row) {
+  return row.record_id ? '已存入成績 #' + row.record_id
+    : row.status === 'draft' ? '草稿・未存入成績'
+    : '待確認・未存入成績';
+}
 let candidateOffset = 0,
   candidateCount = 0,
   scanJob = null,
@@ -211,15 +230,15 @@ function renderPreview(p) {
 }
 async function preview() {
   if (!current) return;
-  const seq = ++previewSequence;
+  const seq = ++previewSequence, version = selectionVersion;
   try {
     const p = await api('/preview', body());
-    if (seq === previewSequence) {
+    if (seq === previewSequence && version === selectionVersion) {
       renderPreview(p);
       await refreshSubmission();
     }
   } catch (e) {
-    if (seq === previewSequence) {
+    if (seq === previewSequence && version === selectionVersion) {
       message(e.message);
       $('open-submission').disabled = true;
     }
@@ -232,17 +251,27 @@ function schedulePreview() {
 }
 async function searchCandidates(keep = true) {
   if (!current) return;
+  const version = selectionVersion;
   const chosen = keep && song() ? song().song_id : null;
   const data = await api('/candidates?q=' + encodeURIComponent($('review-search').value) + '&source_type=' + $('candidate-source').value + '&offset=' + candidateOffset + '&limit=60&session_id=' + encodeURIComponent(selectedId));
+  if (version !== selectionVersion) return data;
   renderCandidates(data.candidates, chosen, data.count);
   schedulePreview();
   return data;
 }
 async function show(sessionId) {
-  if (formalSaving) return;
+  if (formalSaving || (sessionId === selectedId && current)) return;
+  if (dirty && !window.confirm('本次有未保存修改。要捨棄修改並切換結算嗎？')) return;
+  dirty = false;
+  const version = ++selectionVersion;
+  formalSequence++;
+  clearTimeout(previewTimer);
   $('storage-status').textContent = '正在核對此 Session 的儲存狀態…';
   selectedId = sessionId;
   current = null;
+  for (const item of $('review-list').children) {
+    item.classList.toggle('selected', item.dataset.sessionId === sessionId);
+  }
   $('selected-card').hidden = false;
   $('review-empty').hidden = true;
   previewSequence++;
@@ -266,13 +295,13 @@ async function show(sessionId) {
     });
     if (!response.ok) throw new Error('結算原圖無法讀取');
     const blob = await response.blob();
-    if (selectedId !== sessionId) return;
+    if (selectedId !== sessionId || version !== selectionVersion) return;
     if (imageUrl) URL.revokeObjectURL(imageUrl);
     imageUrl = URL.createObjectURL(blob);
     $('review-image').src = imageUrl;
     $('review-image').hidden = false;
     const r = await api('/detail?session_id=' + encodeURIComponent(sessionId));
-    if (selectedId !== sessionId) return;
+    if (selectedId !== sessionId || version !== selectionVersion) return;
     current = r;
     if (r.download_evidence && r.download_evidence.new_song_count === undefined) {
       r.download_evidence = legacyDownloadView(r.download_evidence);
@@ -351,7 +380,7 @@ async function show(sessionId) {
     await scanStatus();
     await refreshSubmission();
   } catch (e) {
-    if (selectedId === sessionId) {
+    if (selectedId === sessionId && version === selectionVersion) {
       $('process-panel').hidden = false;
       $('review-reason').textContent = '尚未完成辨識，請先辨識此結算；也可捨棄這次遊玩。';
       message(e.message);
@@ -363,10 +392,31 @@ async function reload() {
   polling = true;
   try {
     const data = await api('');
-    $('review-list').replaceChildren();
+    const list = $('review-list');
+    const existing = new Map([...list.children].map(button => [button.dataset.sessionId, button]));
+    const ids = new Set(data.results.map(row => row.session_id));
+    for (const [id, button] of existing) {
+      if (ids.has(id)) continue;
+      button.remove();
+      const cached = thumbnails.get(id);
+      if (cached) cached.then(url => URL.revokeObjectURL(url)).catch(() => {});
+      thumbnails.delete(id);
+    }
+    let position = list.firstElementChild;
     $('pending-count').textContent = data.results.length;
     for (const row of data.results) {
-      const button = document.createElement('button');
+      let button = existing.get(row.session_id);
+      if (!button) {
+        button = document.createElement('button');
+        button.addEventListener('click', () => show(row.session_id));
+      }
+      button.classList.toggle('selected', row.session_id === selectedId);
+      if (button !== position) list.insertBefore(button, position);
+      position = button.nextElementSibling;
+      const signature = JSON.stringify(row);
+      if (button.dataset.signature === signature) continue;
+      button.dataset.signature = signature;
+      button.replaceChildren();
       button.type = 'button';
       button.className = 'review-item' + (row.session_id === selectedId ? ' selected' : '');
       button.dataset.sessionId = row.session_id;
@@ -385,11 +435,10 @@ async function reload() {
         + ' · ' + text(v.grade) + ' · LV ' + text(v.game_level)
         + ' · 分數 ' + text(v.game_score) + ' · Combo ' + text(v.max_combo);
       reason.className = 'card-reason';
-      reason.textContent = (row.review_reasons || ['原始證據需要檢查。']).join(' ');
+      reason.textContent = reviewStatus(row) + ' · ' + (row.review_reasons || ['原始證據需要檢查。']).join(' ');
       time.textContent = localTime(row.started_at);
       button.append(image, title, pack, values, reason, time);
-      button.addEventListener('click', () => show(row.session_id));
-      $('review-list').append(button);
+
       thumbnail(row.session_id).then(url => {
         image.src = url;
       }).catch(() => {
@@ -397,8 +446,8 @@ async function reload() {
       });
     }
     const remains = data.results.some(r => r.session_id === selectedId);
-    if (!remains) clearSelection();
-    $('review-empty').hidden = data.results.length !== 0;
+    if (!remains && !dirty) clearSelection();
+    $('review-empty').hidden = data.results.length !== 0 || dirty;
     if (!selectedId && data.results.length) await show(data.results[0].session_id);else if (selectedId && !current && remains) await show(selectedId);
     await refreshDownloadEvidence();
     await scanStatus();
@@ -447,19 +496,24 @@ async function scanStatus() {
 async function saveDraft() {
   if (!current || busy) return;
   busy = true;
+  const id = selectedId,
+    version = selectionVersion,
+    edits = editVersion,
+    request = body();
   try {
-    const r = await api('/save', {
-      ...body(),
-      confirm: false
-    });
+    const r = await api('/save', {...request, confirm: false});
+    if (id !== selectedId || version !== selectionVersion) return;
     current = r;
-    $('review-save-state').textContent = '草稿已保存 · 版本 ' + r.revision;
-    message('草稿已保存，可稍後繼續核對。');
+    dirty = edits !== editVersion;
+    $('review-save-state').textContent = dirty
+      ? '草稿已保存，仍有未保存修改・未存入成績'
+      : '草稿已保存・草稿・未存入成績 · 版本 ' + r.revision;
+    message('草稿・未存入成績。要存入歷史成績，請使用「確認並儲存成績」。');
   } catch (e) {
-    message(e.message);
+    if (id === selectedId && version === selectionVersion) message(e.message);
   } finally {
     busy = false;
-    await preview();
+    if (id === selectedId && version === selectionVersion) await preview();
   }
 }
 $('review-form').addEventListener('submit', e => {
@@ -468,13 +522,17 @@ $('review-form').addEventListener('submit', e => {
 });
 $('save-review-draft').addEventListener('click', saveDraft);
 $('review-form').addEventListener('input', e => {
+  markDirty();
   if (e.target.id.startsWith('max-basis-') && e.target.id !== 'max-basis-verified') $('max-basis-verified').checked = false;
   if (!e.target.id.startsWith('note-review-') && !e.target.id.startsWith('max-basis-') && !['review-ack', 'review-confirmation-note'].includes(e.target.id)) {
     for (const k of ['judgments', 'identity', 'source_confirmed', 'difference']) $('note-review-' + k).checked = false;
   }
   schedulePreview();
 });
-$('review-form').addEventListener('change', schedulePreview);
+$('review-form').addEventListener('change', () => {
+  markDirty();
+  schedulePreview();
+});
 $('review-difficulty').addEventListener('change', () => {
   candidatePath();
   if (song()) assistCatalog().catch(e => message(e.message));
@@ -579,10 +637,53 @@ function formalBody() {
     play_mode: $('submit-play-mode').value
   };
 }
+function focusReviewField(id) {
+  const field = $(id);
+  if (!field) return;
+  for (let parent = field.parentElement; parent; parent = parent.parentElement) {
+    if (parent.tagName === 'DETAILS') parent.open = true;
+  }
+  field.focus();
+}
+function renderFieldIssues(issues) {
+  document.querySelectorAll('.field-blocker').forEach(node => node.remove());
+  document.querySelectorAll('[aria-invalid="true"]').forEach(node => {
+    node.removeAttribute('aria-invalid');
+    node.removeAttribute('aria-describedby');
+  });
+  const root = $('submission-blockers');
+  root.replaceChildren();
+  const seen = new Set();
+  for (const issue of issues) {
+    const id = {song_id: 'review-song', play_mode: 'submit-play-mode',
+      player_row_id: 'review-player-row'}[issue.field] || 'review-' + issue.field;
+    const field = $(id);
+    const label = submissionReasons[issue.code] || reasons[issue.code] || '請核對此欄位';
+    if (seen.has(id + label)) continue;
+    seen.add(id + label);
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = (names[issue.field] || '成績資料') + '：' + label;
+    button.addEventListener('click', () => focusReviewField(id));
+    root.append(button);
+    if (field && !field.hasAttribute('aria-invalid')) {
+      const hint = document.createElement('span');
+      hint.id = id + '-error';
+      hint.className = 'field-blocker';
+      hint.textContent = label;
+      field.after(hint);
+      field.setAttribute('aria-invalid', 'true');
+      field.setAttribute('aria-describedby', hint.id);
+    }
+  }
+  root.hidden = issues.length === 0;
+}
 function renderSubmission(p) {
   $('review-issues').replaceChildren();
   const issues = (p.issues || []).filter(i => !['save_confirmed_review_first', 'saved_confirmation_time_required'].includes(i.code));
   const preview = current?.preview || {};
+  const blocking = [...issues, ...(preview.issues || [])];
+  renderFieldIssues(blocking);
   const allIssues = [...issues, ...(preview.issues || []), ...(preview.warnings || [])];
   const seen = new Set();
   for (const i of allIssues) {
@@ -606,12 +707,12 @@ async function refreshSubmission() {
     $('open-submission').disabled = true;
     return;
   }
-  const seq = ++formalSequence;
+  const seq = ++formalSequence, version = selectionVersion;
   try {
     const p = await api('/submission-preview', formalBody());
-    if (seq === formalSequence) renderSubmission(p);
+    if (seq === formalSequence && version === selectionVersion) renderSubmission(p);
   } catch (e) {
-    if (seq === formalSequence) {
+    if (seq === formalSequence && version === selectionVersion) {
       $('open-submission').disabled = true;
       $('submission-state').textContent = e.message;
     }
@@ -619,11 +720,17 @@ async function refreshSubmission() {
 }
 $('submit-play-mode').addEventListener('change', refreshSubmission);
 async function openSubmission() {
+  const version = selectionVersion;
   try {
     const request = formalBody(),
       p = await api('/submission-preview', request);
+    if (version !== selectionVersion) return;
     renderSubmission(p);
-    if ($('open-submission').disabled) return;
+    if ($('open-submission').disabled) {
+      const first = document.querySelector('#submission-blockers button');
+      if (first) first.click();
+      return;
+    }
     formalRequest = {
       ...request,
       submission_token: p.submission_token
@@ -666,7 +773,7 @@ async function openSubmission() {
     $('submission-error').textContent = '';
     $('submission-dialog').showModal();
   } catch (e) {
-    message(e.message);
+    if (version === selectionVersion) message(e.message);
   }
 }
 $('submission-final-ack').addEventListener('change', () => {
@@ -712,7 +819,7 @@ $('commit-submission').addEventListener('click', async () => {
       idempotent: result.idempotent
     });
     clearSelection();
-    message('已儲存成績 #' + result.record.record_id + '，可至歷史成績查看。');
+    message('已存入成績 #' + result.record.record_id + '，可至歷史成績查看。');
   } catch (e) {
     // A response can be lost after SQLite committed. Consult the receipt before
     // restoring an editable draft or reporting that storage failed.
@@ -725,7 +832,7 @@ $('commit-submission').addEventListener('click', async () => {
         $('submission-dialog').close();
         const record = checked.existing_record;
         clearSelection();
-        message('已確認儲存成績 #' + record.record_id + '，可至歷史成績查看。');
+        message('已存入成績 #' + record.record_id + '，可至歷史成績查看。');
         return;
       }
     } catch (_) {
@@ -781,6 +888,7 @@ function renderNoteSources(p) {
   $('conditional-score').textContent = (p.max_policy === 'custom-judged-v1' ? [] : n.conditional_previews || []).map(c => (c.source === 'catalog' ? '譜面參考數假設' : '本次判定合計假設') + ' ' + c.total_notes + ' → MAX ' + c.max_score + ' / ' + (c.display || 'EX 超過此假設 MAX') + '（未驗證，不是正式理論值）').join('；');
 }
 function applyAssistance(a) {
+  const previous = current ? JSON.stringify(body()) : null;
   const c = a.selected_song;
   if (!c) {
     $('assist-status').textContent = '無法唯一確認來源與譜面，請選擇正確 Song ID 或補齊必要畫面資訊。';
@@ -803,6 +911,7 @@ function applyAssistance(a) {
   const src = c.official_source;
   $('assist-status').textContent = '已核對 Song #' + c.song_id + ' / ' + c.title + ' / ' + (src ? '官方 K · fileId ' + src.file_id + ' · Artist ' + text(c.artist) + ' · BPM ' + text(src.bpm_raw) : c.pack_name + ' / ' + c.relative_path) + '。僅填入空白欄位；本人列與人工確認狀態需自行核對。';
   candidatePath();
+  if (current && previous !== JSON.stringify(body())) markDirty();
 }
 async function assistCatalog() {
   if (!current) return;
@@ -973,6 +1082,8 @@ async function thumbnail(id) {
   return thumbnails.get(id);
 }
 function clearSelection() {
+  dirty = false;
+  selectionVersion++;
   selectedId = null;
   current = null;
   formalRequest = null;
