@@ -393,6 +393,39 @@ class CharacterChoiceTests(unittest.TestCase):
         self.fixture.sync.run_once()
         self.assertEqual(['Eithwa', '淡藍x'], self.players())
 
+    def test_saving_runs_one_pass_and_says_what_it_did(self):
+        status = self.fixture.sync.sync_now()
+        self.assertEqual(1, status['last_run']['imported'])
+        status = self.fixture.sync.sync_now()
+        self.assertEqual(0, status['last_run']['imported'], '第二次按:沒有新成績')
+
+    def test_the_click_counts_results_a_background_pass_stored_first(self):
+        # 按下「儲存並同步」的瞬間,背景那一輪剛好先跑完、把成績存掉了:回報仍要算進去,不能說「沒有新成績」。
+        sync = self.fixture.sync
+        configure = sync.configure
+
+        def configure_then_background_pass(*args, **kwargs):
+            result = configure(*args, **kwargs)
+            sync.run_once()
+            return result
+
+        with patch.object(sync, 'configure', configure_then_background_pass):
+            status = sync.save_and_sync(str(self.fixture.game))
+        self.assertEqual(1, status['last_run']['imported'])
+        self.assertTrue(status['last_run']['catalog_changed'])
+
+    def test_switching_to_another_game_clears_what_was_shown_for_the_old_one(self):
+        self.fixture.sync.sync_now()
+        other = GameFixture(Path(self.temp.name) / 'second')
+        status = self.fixture.sync.save_and_sync(str(other.game))
+        self.assertEqual([], status['last_imported'])
+        self.assertEqual(0, status['last_run']['imported'])
+
+    def test_saving_the_same_folder_keeps_the_chosen_character(self):
+        self.fixture.sync.configure(str(self.fixture.game), '00000001')
+        status = self.fixture.sync.configure(str(self.fixture.game))
+        self.assertEqual('00000001', status['character'])
+
     def test_an_unknown_character_is_refused(self):
         with self.assertRaisesRegex(GameFolderError, '沒有這個角色'):
             self.fixture.sync.configure(str(self.fixture.game), 'accounts/acc/nobody')

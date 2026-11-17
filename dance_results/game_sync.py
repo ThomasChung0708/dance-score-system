@@ -559,7 +559,7 @@ class GameSync:
         self._thread = None
         self._status = {
             'state': 'idle', 'last_sync_at': None, 'last_error': None, 'imported_total': 0,
-            'last_imported': [], 'pending': [], 'rejected': [], 'catalog': None, 'characters': [],
+            'last_imported': [], 'pending': [], 'rejected': [], 'catalog': None, 'characters': [], 'last_run': None,
         }
 
     # -- settings
@@ -576,7 +576,7 @@ class GameSync:
         value = self._settings().get('character')
         return value if isinstance(value, str) else ''
 
-    def configure(self, game_dir: str, character: str | None = None) -> dict:
+    def configure(self, game_dir: str, character: str | None = None, *, wake: bool = True) -> dict:
         """Save the game folder and whose results to follow (default: the most recently played)."""
         folder = resolve(game_dir)
         characters = folder.characters()
@@ -592,8 +592,29 @@ class GameSync:
             chosen = picked.key if picked else ''
         _write_json(self.settings_path, {'game_dir': str(folder.game_dir), 'character': chosen})
         self._set(characters=self._character_list(characters, chosen))
-        self.trigger()
+        if wake:
+            self.trigger()
         return self.status()
+
+    def save_and_sync(self, game_dir: str, character: str | None = None) -> dict:
+        """Save, run a pass, and report everything that arrived since the click: a background pass
+        that happens to run first still counts, instead of the click reporting "nothing new"."""
+        folder = resolve(game_dir)
+        if self.game_dir() != str(folder.game_dir):
+            # Another game: what was shown for the previous one no longer applies.
+            self._set(imported_total=0, last_imported=[], rejected=[], pending=[], catalog=None, last_run=None)
+        with self._lock:
+            imported_before = self._status['imported_total']
+            catalog_before = (self._status['catalog'] or {}).get('synced_at')
+        self.configure(game_dir, character, wake=False)
+        status = self.sync_now()
+        if status.get('last_run') is not None:
+            status['last_run'] = dict(
+                status['last_run'],
+                imported=status['imported_total'] - imported_before,
+                catalog_changed=(status.get('catalog') or {}).get('synced_at') != catalog_before,
+            )
+        return status
 
     @staticmethod
     def _character_list(characters: list[CharacterResults], chosen: str) -> list[dict]:
@@ -628,6 +649,14 @@ class GameSync:
 
     def trigger(self) -> None:
         self._wake.set()
+
+    def sync_now(self) -> dict:
+        """Run one pass right away (waiting for a background pass in progress) and report it."""
+        try:
+            return self.run_once()
+        except Exception as error:  # shown to the user, like the background loop does
+            self._set(state='error', last_error=str(error))
+            return self.status()
 
     def _loop(self) -> None:
         while not self._stop.is_set():
@@ -709,6 +738,10 @@ class GameSync:
                 if catalog_stats is not None:
                     self._status['catalog'] = catalog_stats
                 self._status['characters'] = self._character_list(folder.characters(), self.character())
+                self._status['last_run'] = {
+                    'imported': len(imported), 'rejected': len(rejected), 'pending': len(state['pending']),
+                    'catalog_changed': catalog_stats is not None,
+                }
                 self._status.update(state='watching', last_sync_at=utc_now(), last_error=catalog_error)
             return self.status()
 

@@ -7,6 +7,7 @@
   const dialog = $('game-dialog');
   const bar = $('game-status');
   let lastImported = null;
+  let lastCatalog;
 
   async function api(path, body) {
     const options = {headers: {'X-Dance-Token': token}};
@@ -36,7 +37,8 @@
   }
 
   function summary(status) {
-    if (!status.game_dir) return '尚未設定遊戲資料夾：設定後會自動讀取每一首的成績。';
+    if (!status.game_dir) return '尚未設定遊戲資料夾：按右上「遊戲資料夾」選有 dance.exe 的資料夾，之後每一首的成績會自動存進來。';
+    if (status.state === 'syncing' && !status.last_sync_at) return '正在讀取遊戲的歌單與成績…（第一次要幾秒鐘）';
     if (status.state === 'error') return '遊戲同步失敗：' + (status.last_error || '');
     const parts = ['已連結遊戲：' + status.game_dir];
     parts.push(status.character_label ? '角色 ' + status.character_label : '這個遊戲還沒有角色');
@@ -86,7 +88,7 @@
     status.characters.forEach((c) => {
       const option = document.createElement('option');
       option.value = c.key;
-      option.textContent = c.label + (c.has_results ? '' : ' · 還沒有成績');
+      option.textContent = c.label + (c.has_results ? '' : ' · 還沒有成績紀錄');
       option.selected = c.selected;
       select.append(option);
     });
@@ -108,6 +110,12 @@
       document.dispatchEvent(new CustomEvent('game-results-imported', {detail: status}));
     }
     lastImported = status.imported_total;
+    const catalogAt = status.catalog ? status.catalog.synced_at : null;
+    if (lastCatalog !== undefined && catalogAt && catalogAt !== lastCatalog) {
+      // The song list just changed (e.g. the first sync after choosing the game folder).
+      document.dispatchEvent(new CustomEvent('game-catalog-updated', {detail: status}));
+    }
+    lastCatalog = catalogAt;
   }
 
   async function refresh() {
@@ -118,6 +126,51 @@
         bar.textContent = error.message;
         bar.hidden = false;
       }
+    }
+  }
+
+  function showResult(status) {
+    const box = $('game-result');
+    if (!box) return;
+    if (status.state === 'error') {
+      box.hidden = true;
+      showError(status.last_error || '同步失敗');
+      return;
+    }
+    const run = status.last_run || {};
+    const parts = ['已同步 ' + time(status.last_sync_at)];
+    parts.push(run.imported ? '新增 ' + run.imported + ' 筆成績' : '沒有新成績');
+    if (run.catalog_changed) parts.push('歌單已更新');
+    if (run.pending) parts.push(run.pending + ' 筆等歌單更新後再存');
+    if (run.rejected) parts.push(run.rejected + ' 筆格式不正確未存');
+    let text = parts.join(' · ');
+    const selected = status.characters.find((c) => c.selected);
+    if (selected && !selected.has_results) {
+      text += '。這個角色還沒有成績紀錄檔：用會寫成績紀錄的新版遊戲打完一首歌後，就會自動出現。';
+    }
+    box.textContent = text;
+    box.hidden = false;
+  }
+
+  async function saveAndSync(body) {
+    const save = $('game-save');
+    const select = $('game-character');
+    showError('');
+    $('game-result').hidden = true;
+    save.disabled = true;
+    select.disabled = true;
+    const label = save.textContent;
+    save.textContent = '同步中…';
+    try {
+      const status = await api('/api/game/settings', body);
+      render(status);
+      showResult(status);
+    } catch (error) {
+      showError(error.message);
+    } finally {
+      save.disabled = false;
+      save.textContent = label;
+      select.disabled = select.options.length === 0 || !select.value;
     }
   }
 
@@ -134,6 +187,7 @@
       try {
         const status = await api('/api/game');
         $('game-dir').value = status.game_dir || '';
+        $('game-result').hidden = true;
         render(status);
       } catch (error) {
         showError(error.message);
@@ -141,30 +195,11 @@
       dialog.showModal();
     });
     $('game-cancel').addEventListener('click', () => dialog.close());
-    $('game-save').addEventListener('click', async () => {
-      showError('');
-      try {
-        render(await api('/api/game/settings', {game_dir: $('game-dir').value}));
-      } catch (error) {
-        showError(error.message);
-      }
-    });
-    $('game-character').addEventListener('change', async (event) => {
-      showError('');
-      try {
-        const current = await api('/api/game');
-        render(await api('/api/game/settings', {game_dir: current.game_dir, character: event.target.value}));
-      } catch (error) {
-        showError(error.message);
-      }
-    });
-    $('game-sync-now').addEventListener('click', async () => {
-      showError('');
-      try {
-        render(await api('/api/game/sync', {}));
-      } catch (error) {
-        showError(error.message);
-      }
+    // Saving always runs one sync and reports it. No character here: the same folder keeps the
+    // current one, another folder starts with its most recently played character.
+    $('game-save').addEventListener('click', () => saveAndSync({game_dir: $('game-dir').value}));
+    $('game-character').addEventListener('change', (event) => {
+      saveAndSync({game_dir: $('game-dir').value, character: event.target.value});
     });
   }
 

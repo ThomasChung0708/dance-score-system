@@ -4,6 +4,7 @@ const sessionToken=document.querySelector('meta[name="dance-token"]').content;
 const state={rootId:null,packId:null,category:'all',label:'全部歌曲',query:'',order:'asc',offset:0,total:0,limit:60,selectedId:null,song:null,packs:null,scanning:false,importing:false,canScan:false};
 let listRequest=null,detailRequest=null,searchTimer=null,scanTimer=null;
 let officialUpload=null,progressRefreshing=false,lastProgressRefresh=0,databasePath='';
+const EMPTY_LIBRARY='歌曲庫目前是空的：遊戲資料夾設定好之後，官方歌與外部歌會自動匯入（也可以按「匯入官方 CSV」）。';
 const lampAnimations=new Map();
 function node(tag,className,text){const e=document.createElement(tag);if(className)e.className=className;if(text!==undefined)e.textContent=text;return e;}
 function text(value){return value===null||value===undefined||value===''?'未設定':String(value);}
@@ -202,12 +203,20 @@ async function start(){
   const bootstrap=await api('/api/bootstrap');databasePath=bootstrap.database;$('database-path').textContent=bootstrap.database;$('database-path').title=bootstrap.database;
   setupRoots(bootstrap.roots);
   const requestedRoot=Number(new URLSearchParams(location.search).get('root_id'));if(bootstrap.roots.some(r=>r.root_id===requestedRoot)){state.rootId=requestedRoot;$('root').value=String(requestedRoot);}
-  if(!bootstrap.roots.length){message('可先匯入官方 CSV，或使用 Start.cmd 建立自製歌曲庫。');return;}
+  if(!bootstrap.roots.length){$('totals').textContent='歌曲庫是空的';message(EMPTY_LIBRARY);return;}
   await Promise.all([loadPacks(),loadSongs()]);
   const requested=Number(new URLSearchParams(location.search).get('song_id'));if(Number.isSafeInteger(requested)&&requested>0)await selectSong(requested);
   const scan=await api('/api/scan');if(scan.status==='running')await pollScan();
 }
 start().catch(error=>{reportError(error);$('scan-button').disabled=true;});
+// 遊戲資料夾模式：歌單在背景同步，進來了就直接載入；新成績進來就刷新燈號。
+async function reloadLibrary(){
+  const bootstrap=await api('/api/bootstrap');setupRoots(bootstrap.roots);if(!bootstrap.roots.length)return;
+  if($('message').textContent===EMPTY_LIBRARY)message('');
+  await Promise.all([loadPacks(),loadSongs()]);
+}
+document.addEventListener('game-catalog-updated',()=>{if(!state.scanning&&!state.importing)reloadLibrary().catch(reportError);});
+document.addEventListener('game-results-imported',()=>refreshProgress());
 
 async function refreshProgress(update){if(!state.rootId||progressRefreshing||state.scanning||state.importing)return;if(update&&update.database&&update.database!==databasePath)return;progressRefreshing=true;try{const scroll=$('song-list').scrollTop;await loadSongs();$('song-list').scrollTop=scroll;if(state.selectedId){if(!dirty())await selectSong(state.selectedId,true,update);else{const id=state.selectedId,root=state.rootId;const fresh=await api('/api/songs/'+id+'?root_id='+root);if(id===state.selectedId&&root===state.rootId&&state.song){state.song.progress=fresh.progress;const panel=$('details').querySelector('.song-result-panel');if(panel)panel.replaceWith(buildProgressPanel(fresh,update));}}}lastProgressRefresh=Date.now();}catch(e){reportError(e);}finally{progressRefreshing=false;}}
 window.addEventListener('storage',e=>{if(e.key==='dance-record-update'&&e.newValue){try{refreshProgress(JSON.parse(e.newValue));}catch(_e){}}});

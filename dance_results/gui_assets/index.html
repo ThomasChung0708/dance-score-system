@@ -20,9 +20,9 @@
 <p class="game-help">選有 <code>dance.exe</code> 的那一層。設定好之後，每打完一首歌，成績會自動存進來；官方歌與外部歌（含 StepMania／osu 資料夾）的歌單也跟遊戲同步。</p>
 <label class="game-dir-label" for="game-dir">資料夾路徑</label><input id="game-dir" type="text" autocomplete="off" spellcheck="false" placeholder="例如 D:\Dance v2.0.0">
 <label class="game-dir-label" for="game-character">角色（只存這個角色的成績）</label><select id="game-character" disabled><option>先儲存遊戲資料夾</option></select>
-<p id="game-error" class="game-error" role="alert" hidden></p>
+<p id="game-error" class="game-error" role="alert" hidden></p><p id="game-result" class="game-result" role="status" hidden></p>
 <div id="game-detail" class="game-detail"></div>
-<div class="dialog-actions"><button id="game-sync-now">立即同步</button><button id="game-cancel">關閉</button><button id="game-save" class="primary">儲存並同步</button></div></dialog>
+<div class="dialog-actions"><button id="game-cancel">關閉</button><button id="game-save" class="primary">儲存並同步</button></div></dialog>
 <main class="workspace">
   <aside class="packs-panel" aria-label="Pack 瀏覽"><div class="panel-heading"><span class="eyebrow">COLLECTIONS</span><h2>音樂收藏</h2></div><nav id="pack-list" aria-label="Pack 清單"></nav><div class="aside-note">同名歌曲依 Pack 與資料夾分別保存。</div></aside>
   <section class="songs-panel" aria-label="歌曲清單"><div class="list-heading"><div><span class="eyebrow">SONGS</span><h2 id="list-title">全部歌曲</h2></div><span id="result-count" class="count-pill">—</span></div>

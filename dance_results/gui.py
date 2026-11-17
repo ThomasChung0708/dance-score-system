@@ -176,12 +176,13 @@ def create_server(database,port=0,monitor_directory=None,*,game_sync=True):
                 except (ValueError,UnicodeError):raise LibraryError('JSON 資料不正確。')
                 if not isinstance(body,dict):raise LibraryError('資料格式不正確。')
                 if route=='/api/game/settings':
-                    try:result=dict(game.configure(body.get('game_dir'),body.get('character')),ocr_available=ocr)
+                    # Answer only after a pass ran, so the button can say what happened.
+                    try:result=dict(game.save_and_sync(body.get('game_dir'),body.get('character')),ocr_available=ocr)
                     except GameFolderError as error:raise LibraryError(str(error))
                     # The chosen character is "me" everywhere, including the OCR monitor's player name.
                     if result.get('character_name'):monitor.player_settings.set(result['character_name'])
                 elif route=='/api/game/sync':
-                    game.trigger();result=dict(game.status(),ocr_available=ocr)
+                    result=dict(game.sync_now(),ocr_available=ocr)
                 elif route=='/api/difficulty':result=service.save_difficulty(body)
                 elif route=='/api/player-settings':result=dict(player_name=monitor.player_settings.set(body.get('player_name')))
                 elif route=='/api/scan':result=service.start_scan(body.get('root_id'))
