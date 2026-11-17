@@ -254,6 +254,22 @@ class GameSyncTests(unittest.TestCase):
         evidence = json.loads(record['evidence_json'])
         self.assertEqual('FIRST AC', evidence['achievement_feedback']['primary'])
 
+    def test_results_show_up_in_recent_update(self):
+        # 遊戲來的成績沒有 OCR 審核:Recent Update 用那一行自己的時間核對,不能因此全部跳過。
+        from dance_results.recent_updates import recent_updates
+        self.fixture.append(
+            official_line(at='2026-11-17T12:00:00Z', perfect=700, cool=47),
+            official_line(at='2026-11-17T12:10:00Z', perfect=735, cool=12),
+            official_line(at='2026-11-17T12:20:00Z', perfect=600, cool=147),
+        )
+        self.fixture.sync.run_once()
+        with self.fixture.db() as db:
+            db.row_factory = sqlite3.Row
+            result = recent_updates(db)
+        self.assertEqual(1, result['skipped_unproven_records'], '只有第三局(比較低)不算刷新')
+        [update] = result['updates']  # one row per chart: its latest improvement
+        self.assertEqual(('NEW SCORE', 1447, 1482), (update['update_type'], update['previous_best_ex'], update['new_best_ex']))
+
     def test_each_line_is_imported_once(self):
         self.fixture.append(official_line())
         self.fixture.sync.run_once()
