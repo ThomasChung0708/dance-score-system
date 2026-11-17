@@ -8,6 +8,7 @@ import shutil
 import sqlite3
 from unittest.mock import patch
 import argparse
+from datetime import datetime, timezone
 from PIL import Image
 from dance_results.library_service import LibraryService,LibraryError
 from dance_results.monitor_ocr import Analyzer,apply_selection
@@ -36,8 +37,10 @@ def main():
     OUT = args.output.resolve()
     if not OUT.is_relative_to((ROOT/'reports/phase5f').resolve()):
         raise ValueError('Replay output must remain under reports/phase5f.')
-    DB = OUT/'ISOLATED.sqlite3'
-    MON = OUT/'monitor'
+    scratch = ROOT/'data/round35_scratch'/('phase5f-'+datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ'))
+    scratch.mkdir(parents=True)
+    DB = scratch/'ISOLATED.sqlite3'
+    MON = scratch/'monitor'
     if DB.exists():raise ValueError('Existing replay is preserved.')
     OUT.mkdir(parents=True,exist_ok=True)
     with closing(read(BASE)) as src,closing(sqlite3.connect(DB)) as dst:src.backup(dst)
@@ -89,7 +92,7 @@ def main():
     with closing(read(BASE)) as baseline,closing(read(DB)) as db:
         unchanged=audit(db,projection(baseline),row_limits(baseline))==audit(baseline)
         assert unchanged;check_integrity(db)
-    atomic_json(OUT/'results.json',dict(scope='original selection and result PNG model OCR, original pre-play context, explicitly simulated PLAYING and recorded clock; isolated writes only',old_rows_unchanged=unchanged,cases=cases))
+    atomic_json(OUT/'results.json',dict(scope='original selection and result PNG model OCR, original pre-play context, explicitly simulated PLAYING and recorded clock; isolated writes only',scratch_database=str(DB),old_rows_unchanged=unchanged,cases=cases))
 
 
 if __name__=='__main__':main()

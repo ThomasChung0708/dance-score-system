@@ -197,6 +197,8 @@ class Analyzer:
             self.calls += 1
             screen, anchors = classify(tokens)
         observation = self.from_tokens(tokens, normalized, screen, anchors, roi_mode)
+        # Tokens use normalized coordinates, including any non-client title bar.
+        observation['capture_size'] = list(image.size)
         if roi_mode and screen == 'song_select' and any(observation['selection']['fields'][k]['value'] is None
                 for k in ['title','difficulty','game_level','duration_seconds']):
             fallback=self.analyze(image,state,full=True)
@@ -231,8 +233,19 @@ class Analyzer:
                     observation['selection']['numeric_roi_evidence']={'bpm':views}
                     self.calls+=sum('view_sha256' in view for view in views)
         if screen == 'waiting_room':
-            from .lobby_download_ocr import lobby_download
-            observation['download_lobby']=lobby_download(tokens,normalized,self.player_name)
+            from .lobby_download_ocr import (lobby_download, reread_own_badge, badge_ocr_calls,
+                                             own_badge_crop, badge_text_mask)
+            before_badge_calls = badge_ocr_calls(self.engine)
+            badge_tokens = reread_own_badge(self.engine, normalized, tokens, self.player_name)
+            self.calls += badge_ocr_calls(self.engine)-before_badge_calls
+            observation['download_lobby'] = lobby_download(tokens, normalized, self.player_name, badge_tokens)
+            lobby = observation['download_lobby']
+            if lobby['local_player_status'] == 'CONFIRMED' and lobby['self_no_map'] is not None:
+                # Share a reliable full-page/line result only while the sampled
+                # badge still has the same white-text mask. No names are stored.
+                x, y = center(lobby['evidence'][0])
+                badge, _ = own_badge_crop(normalized, x, y)
+                lobby['badge_text_mask'] = badge_text_mask(badge).tolist()
         if screen == 'results':
             from .result_ocr import recognize_result
             observation['result_ocr'] = recognize_result(normalized, self.engine, self.player_name, tokens=tokens)

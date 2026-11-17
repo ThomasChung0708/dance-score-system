@@ -29,7 +29,7 @@ def atomic_json(path, data):
 
 
 class Tracker:
-    def __init__(self, directory, confirmations=2, selection_ttl=60):
+    def __init__(self, directory, confirmations=2, selection_ttl=60, room_min_samples=4):
         self.directory = Path(directory)
         self.directory.mkdir(parents=True, exist_ok=True)
         self.confirmations = confirmations
@@ -70,6 +70,12 @@ class Tracker:
         self.room_key = None
         self.room_entry_at = None
         self.non_host_reads = 0
+        self.room_min_samples = room_min_samples
+        self.room_visit_at = None
+        self.room_last_ocr_at = None
+        self.room_title_candidate = None
+        self.room_title_cutoff_at = None
+        self.room_coverage = {}
 
     def clear_room(self):
         self.room_preview = None
@@ -78,33 +84,66 @@ class Tracker:
         self.room_custom = []
         self.last_room_role = None
         self.non_host_reads = 0
+        self.room_visit_at = None
+        self.room_last_ocr_at = None
+        self.room_title_candidate = None
+        self.room_title_cutoff_at = None
+        self.room_coverage = {}
 
-    def observe_room(self, observation):
+    def observe_room(self, observation, observed_at=None):
+        observed_at = time.monotonic() if observed_at is None else observed_at
+        if self.room_visit_at is None:
+            self.room_visit_at = utc()
         preview = observation.get('room_preview') or {}
         title = same_song_title_key(preview.get('title'))
         if title:
             key = (title, preview.get('difficulty'))
-            changed = (self.room_key is None or title != self.room_key[0]
-                       or key[1] is not None and self.room_key[1] is not None and key[1] != self.room_key[1])
+            changed = self.room_key is None
+            if self.room_key and title != self.room_key[0]:
+                pending = self.room_title_candidate
+                if pending and pending['title'] == title:
+                    changed = True
+                else:
+                    self.room_title_candidate = dict(title=title, cutoff=self.room_last_ocr_at,
+                                                     entry_at=utc())
+                    lobby = observation.get('download_lobby') or {}
+                    if lobby.get('local_player_status') == 'CONFIRMED' and lobby.get('self_no_map'):
+                        self.custom_cue('self_no_map', lobby.get('slot'), 1, observed_at)
+                    return
             if changed:
-                self.room_custom = []
-                self.room_entry_at = utc()
+                pending = self.room_title_candidate or {}
+                cutoff = pending.get('cutoff')
+                self.room_title_cutoff_at = cutoff
+                self.room_custom = [c for c in self.room_custom
+                                    if cutoff is not None and c['observed_at'] > cutoff]
+                self.room_entry_at = pending.get('entry_at') or utc()
+                self.room_coverage = dict(slot_confirmed=False, sampled_frames=0,
+                    minimum_frames=self.room_min_samples, baseline_at=None,
+                    baseline_before_entry=False)
+            self.room_title_candidate = None
             if key[1] is None and self.room_key and title == self.room_key[0]:
                 key = self.room_key
             self.room_key = key
+            self.room_last_ocr_at = observed_at
             if any(preview.get(k) != (self.room_preview or {}).get(k) for k in ('title', 'game_level', 'difficulty')):
                 self.log('room_preview', preview=preview, epoch=self.epoch)
             self.room_preview = copy.deepcopy(preview)
+        else:
+            self.room_title_candidate = None
         lobby = observation.get('download_lobby') or {}
         if lobby.get('local_player_status') == 'CONFIRMED':
             if lobby.get('self_no_map'):
-                self.custom_cue('self_no_map', lobby.get('slot'), 1)
+                self.custom_cue('self_no_map', lobby.get('slot'), 1, observed_at)
 
-    def custom_cue(self, cue, slot=None, frames=2):
+    def custom_cue(self, cue, slot=None, frames=2, observed_at=None):
         if not self.room_key:
             return
-        item = dict(cue=cue, slot=slot, frames=frames)
-        if item not in self.room_custom:
+        item = dict(cue=cue, slot=slot, frames=frames,
+                    observed_at=time.monotonic() if observed_at is None else observed_at)
+        previous = next((c for c in self.room_custom if c['cue'] == cue and c['slot'] == slot), None)
+        if previous is not None:
+            previous.update(item)
+        else:
             self.room_custom.append(item)
             self.log('room_custom_cue', **item, room_key=self.room_key, epoch=self.epoch)
 
@@ -186,7 +225,8 @@ class Tracker:
         if self.room_preview and self.room_key:
             room = copy.deepcopy(self.room_preview)
             room.update(custom=bool(self.room_custom), source_evidence=copy.deepcopy(self.room_custom),
-                        room_key=list(self.room_key), room_entry_at=self.room_entry_at)
+                        room_key=list(self.room_key), room_entry_at=self.room_entry_at,
+                        room_visit_at=self.room_visit_at, coverage=copy.deepcopy(self.room_coverage))
             context['guest_room'] = room
             if self.room_custom:
                 context.update(source_type='custom', source_evidence=copy.deepcopy(self.room_custom))
@@ -399,7 +439,7 @@ class Tracker:
         self.last_sample = sample_id
         wanted = observation['state']
         if wanted == 'WAITING_ROOM':
-            self.observe_room(observation)
+            self.observe_room(observation, sample_id if sample_id is not None else now)
             role = observation.get('context', {}).get('local_is_host')
             self.non_host_reads = self.non_host_reads + 1 if role is False else 0
             if self.non_host_reads == 2:

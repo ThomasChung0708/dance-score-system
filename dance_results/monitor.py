@@ -73,6 +73,7 @@ class Monitor:
                 return value
             self.config = dict(capture_hz=number('capture_hz', 2, .2, 10),
                                room_capture_hz=number('room_capture_hz', 4, .2, 10),
+                               room_min_samples=int(number('room_min_samples', 4, 2, 40)),
                                ocr_interval=number('ocr_interval', 2, .5, 30),
                                confirmations=int(number('confirmations', 2, 2, 5)),
                                selection_ttl=number('selection_ttl', 60, 5, 600),
@@ -94,7 +95,8 @@ class Monitor:
             else:
                 from .monitor_tracking import atomic_json
                 atomic_json(marker,dict(database_path=str(self.database.resolve())))
-            self.tracker = Tracker(self.directory, self.config['confirmations'], self.config['selection_ttl'])
+            self.tracker = Tracker(self.directory, self.config['confirmations'], self.config['selection_ttl'],
+                                   self.config['room_min_samples'])
             # Recover unfinished sessions from a prior process crash without inventing results.
             sessions = []
             for path in (self.directory/'sessions').glob('*/session.json'):
@@ -285,6 +287,7 @@ class Monitor:
                 process = None
             durations = []
             from .room_sampler import RoomSampler
+            from .lobby_download_ocr import badge_ocr_calls
             room_sampler = RoomSampler()
             catalog_generation=0
             last_ocr = -1e9
@@ -379,13 +382,16 @@ class Monitor:
                 recent = capture.take_recent() if hasattr(capture, 'take_recent') else [frame]
                 if not isinstance(recent, (list, tuple)):
                     recent = [frame]
-                if room_sampling:
-                    costs = [room_sampler.sample(pixels, self.tracker, analyzer.engine, stamp)
-                             for stamp, pixels in recent]
-                    if costs:
-                        self.metrics['room_sampler_ms'] = round(statistics.mean(costs), 3)
-                if self.downloads:
-                    self.downloads.room_tick(self.tracker)
+                with self.lock:
+                    if room_sampling:
+                        costs = [room_sampler.sample(pixels, self.tracker, analyzer.engine, stamp)
+                                 for stamp, pixels in recent]
+                        costs = [cost for cost in costs if cost is not None]
+                        if costs:
+                            self.metrics['room_sampler_ms'] = round(statistics.mean(costs), 3)
+                        self.metrics['badge_ocr_calls'] = badge_ocr_calls(analyzer.engine)
+                    if self.downloads:
+                        self.downloads.room_tick(self.tracker)
                 selection_frames.observe(recent, time.monotonic())
                 last_native = now
                 if black_or_loading_frame(image):
@@ -432,8 +438,7 @@ class Monitor:
                     self._capture_ocr_failure(image, observation)
                     self.latest_image = image
                     self._consume_observation(observation, last_ocr, image, sampled, result_consistency)
-                    if observation['state'] == 'WAITING_ROOM':
-                        room_sampler.configure(self.tracker, observation)
+                    room_sampler.configure(self.tracker, observation, sample_id=sampled)
                     if self.downloads:self.downloads.observe(observation,self.tracker)
                     self.metrics.update(analyzed_frames=self.metrics['analyzed_frames']+1, ocr_calls=analyzer.calls,
                         ocr_ms=round(elapsed, 2), ocr_p50_ms=round(statistics.median(durations), 2),
@@ -446,7 +451,9 @@ class Monitor:
                                             logical_cpu_count=cores,cpu_machine_percent=round(cpu/cores,2),rss_mb=round(rss, 1),
                                             peak_rss_mb=round(max(rss, self.metrics['peak_rss_mb'] or 0), 1))
                     self.tracker.log('recognition', state=observation['state'], frame_hash=observation['frame_hash'],
-                                     ocr_ms=round(elapsed, 2), roi_mode=observation['roi_mode'])
+                                     ocr_ms=round(elapsed, 2), roi_mode=observation['roi_mode'],
+                                     room_sampler_ms=self.metrics.get('room_sampler_ms'),
+                                     badge_ocr_calls=badge_ocr_calls(analyzer.engine))
         except Exception as error:
             self._connection('error', f'{type(error).__name__}: {error}')
         finally:

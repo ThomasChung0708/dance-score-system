@@ -15,7 +15,7 @@ from pathlib import Path
 import shutil
 import sqlite3
 import statistics
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from PIL import Image, ImageDraw
 
@@ -39,9 +39,22 @@ from .round34_jp_replay import readonly, read, seconds
 
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT/'reports/round35'
+OUT = ROOT/'reports/round35/fix'
 SOURCE = ROOT/'data/library-live-1617.sqlite3'
 CASES = [('d7c35757', 4381), ('6b7dd400', 1982), ('c5dbf34f', 4280), ('7026885e', None)]
+
+
+def sampler_control(size):
+    """Stipulated anonymized tokens, never recorded roster evidence."""
+    def token(text, x, y):
+        return dict(text=text, confidence=.99,
+                    box=[[x-10, y-8], [x+10, y-8], [x+10, y+8], [x-10, y+8]])
+
+    own = token('TC', 446.5, 203.5)
+    host = token('HOST', 291.5, 159)
+    return dict(state='WAITING_ROOM', capture_size=list(size), tokens=[own, host],
+                download_lobby=dict(local_player_status='CONFIRMED', slot=2,
+                                    player_name='TC', evidence=[own]))
 
 
 def room(title, level):
@@ -69,7 +82,7 @@ def outcome(database, monitor, row):
     body, blockers = automatic_request(monitor.reviews, row)
     catalog = ReadOnlyCatalog(database)
     try:
-        prompt = offer(catalog, row, verified_download_binding(monitor.reviews, row))
+        prompt = offer(catalog, row, verified_download_binding(monitor.reviews, row), directory=monitor.directory)
     finally:
         catalog.close()
     result = dict(bound_song_id=row['draft']['song_id'], binding_method=row['draft'].get('identity_binding_method'),
@@ -125,13 +138,31 @@ def replay_case(database, scratch, original, expected, events, fresh):
         consume(tracker, dict(state='WAITING_ROOM', frame_hash=event['frame_hash'],
             room_preview=room(title, level), context=dict(local_is_host=role)),
             1000+seconds(event['at'])-start, event['at'])
+    # These frames and the baseline acknowledgement are explicit CONDITIONAL
+    # controls. The logs retain OCR timestamps, not room pixels, roster slots,
+    # sampler history, or a proven pre-entry file baseline.
+    sampler = RoomSampler()
+    neutral = Image.new('RGB', (1024, 774), 'gray')
+    # Generated pixels, not a recovered historical card or real-player roster.
+    draw = ImageDraw.Draw(neutral)
+    draw.rectangle((387, 187, 507, 207), fill=(100, 60, 160))
+    draw.text((441, 192), 'TC', fill='white')
+    sampler.configure(tracker, sampler_control(neutral.size))
+    badge_engine = Mock()
+    badge_engine.recognize_line.return_value = []
+    for index in range(4):
+        sampler.sample(neutral, tracker, badge_engine, sample_id=999+index*.25)
+    baseline_at = datetime.fromtimestamp(seconds(room_events[0]['at'])-1, timezone.utc).isoformat()
+    tracker.room_coverage.update(baseline_at=baseline_at, baseline_before_entry=True)
+    reconstructed.append('Coverage CONTROL: stipulated confirmed TC name-token geometry/slot 2 plus a generated purple nameplate and white TC glyphs, four generated room crops at 4 Hz under the final title with a stub badge engine returning no NO MAP, and stipulated pre-entry file-baseline acknowledgement. No recorded room pixels, name anchor, or measured no-cue coverage survive; this is not historical proof of coverage.')
     playing = dict(state='PLAYING', frame_hash='recorded-playing-transition', playing_preview=original['playing_preview'])
     for now in (1000, 1001):
         consume(tracker, playing, now, original['started_at'])
     locked = copy.deepcopy(tracker.session)
     result = dict(original_session_id=original['session_id'], expected_song_id=expected,
         identity_context=locked['identity_context'], selected_at_play=bool(locked['selection']),
-        recorded_room_frames=len(room_events), reconstruction=reconstructed,
+        recorded_room_ocr_timestamps=len(room_events), recorded_room_pixel_frames=0,
+        reconstructed_sampler_frames=4, reconstruction=reconstructed,
         evidence_grade='conditional_controls_missing_preplay_pixels', no_new_live_gameplay=True)
     if not original.get('result'):
         for now in (1100, 1101):
@@ -140,6 +171,10 @@ def replay_case(database, scratch, original, expected, events, fresh):
             interruption_reason=tracker.last_session['interruption_reason'], picker=None)
     else:
         row = finish(monitor, original, fresh)
+        if not host:
+            without_coverage = copy.deepcopy(row)
+            without_coverage['locked_session']['identity_context']['guest_room'].pop('coverage', None)
+            result['without_reconstructed_coverage_blockers'] = automatic_request(monitor.reviews, without_coverage)[1]
         result.update(outcome(database, monitor, row))
         result['fresh_result_fields'] = [ocr['fields'] for _, ocr in fresh]
     result['passed'] = result['bound_song_id'] == expected and result['saved'] == (expected is not None) and not result.get('picker')
@@ -224,15 +259,27 @@ def sampler_benchmark(engine):
     tracker = Tracker(OUT/'sampler-diagnostics')
     tracker.observe_room(dict(room_preview=room('Genjitsu Escape', 24)))
     sampler = RoomSampler()
-    sampler.key = (tracker.epoch, tracker.room_key)
-    sampler.slot, sampler.host_slot = 2, 1
     with Image.open(ROOT/'tests/fixtures/round35/room-nomap-anon.png') as image:
+        sampler.configure(tracker, sampler_control(image.size))
         costs = [sampler.sample(image, tracker, sample_id=i) for i in range(200)]
-        sampler.badge_hash = None
+        sampler.badge_mask = None
         ocr_cost = sampler.sample(image, tracker, engine, 201)
         sampler.sample(image, tracker, engine, 202)
+        moving = RoomSampler()
+        moving.configure(tracker, sampler_control(image.size))
+        animated_costs = []
+        badge = image.crop((382, 138, 511, 166))
+        for index in range(200):
+            animated = image.copy()
+            ImageDraw.Draw(animated).rectangle((382, 138, 511, 166), fill=(20+index % 80, 30, 50))
+            animated.paste(badge, (382+(index % 9)-4, 138))
+            animated_costs.append(moving.sample(animated, tracker, engine, 300+index/4))
     return dict(frames=len(costs), pixel_mean_ms=statistics.mean(costs),
         pixel_p95_ms=sorted(costs)[189], changed_badge_with_line_ocr_ms=ocr_cost,
+        animated_frames=len(animated_costs), animated_mean_ms=statistics.mean(animated_costs),
+        animated_p95_ms=sorted(animated_costs)[189], badge_ocr_calls=moving.badge_ocr_calls,
+        simulated_room_seconds=50, badge_ocr_calls_per_second=moving.badge_ocr_calls/50,
+        animation_provenance='Synthetic badge translations/background changes at simulated 4 Hz; real LocalOCREngine calls, not a live capture benchmark.',
         cues=tracker.room_custom, engine='fresh local recognize_line on anonymized fixture')
 
 

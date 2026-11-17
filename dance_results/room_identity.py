@@ -19,7 +19,8 @@ def guest_context(session):
 def agreeing_room(session, ocr):
     room = guest_context(session)
     temporal = ocr.get('temporal_validation') or {}
-    if (not room or not room.get('title') or temporal.get('status') != 'confirmed'
+    if (ocr.get('multiplayer') is not True
+            or not room or not room.get('title') or temporal.get('status') != 'confirmed'
             or len(temporal.get('samples', [])) < 2 or not reliable_result_field(ocr, 'title')):
         return None
     result = ocr.get('fields', {}).get('title', {}).get('value')
@@ -42,6 +43,12 @@ def field(value, method, confidence=1):
 def bind_guest_official(catalog, session, ocr):
     room = agreeing_room(session, ocr)
     if not room or room.get('custom'):
+        return None
+    coverage = room.get('coverage') or {}
+    if (coverage.get('slot_confirmed') is not True
+            or coverage.get('sampled_frames', 0) < max(1, coverage.get('minimum_frames', 4))
+            or coverage.get('baseline_before_entry') is not True
+            or not coverage.get('baseline_at')):
         return None
     raw = ocr.get('fields') or {}
     if not reliable_result_field(ocr, 'completion_status') or raw['completion_status']['value'] != 'COMPLETED':

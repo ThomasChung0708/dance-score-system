@@ -550,7 +550,7 @@ class ResultReviews:
             catalog = ReadOnlyCatalog(self.database)
             try:
                 from .download_tracking import verified_download_binding
-                result['source_prompt'] = offer(catalog, row, verified_download_binding(self, row))
+                result['source_prompt'] = offer(catalog, row, verified_download_binding(self, row), directory=self.directory)
             finally:
                 catalog.close()
             return result
@@ -567,7 +567,7 @@ class ResultReviews:
                 try:
                     from .download_tracking import verified_download_binding
                     row = self._read(item['session_id'])[1]
-                    prompt = offer(catalog, row, verified_download_binding(self, row))
+                    prompt = offer(catalog, row, verified_download_binding(self, row), directory=self.directory)
                     if prompt and not prompt['dismissed']:
                         prompts.append(prompt)
                 except LibraryError:
@@ -589,7 +589,7 @@ class ResultReviews:
                 raise LibraryError('此 Session 已選擇來源，請到待確認核對。', 409)
             catalog = ReadOnlyCatalog(self.database)
             try:
-                prompt = offer(catalog, row)
+                prompt = offer(catalog, row, directory=self.directory)
                 if not prompt:
                     raise LibraryError('此結算已無需選擇來源，請重新載入。', 409)
                 if body.get('dismiss') is True:

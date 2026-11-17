@@ -29,14 +29,15 @@ def automatic_request(reviews,row):
     issues=[];s=row['locked_session'];selection=effective_selection(row)
     from .ocr_temporal import issues as temporal_issues
     issues.extend(temporal_issues(row['ocr'],s,reviews.directory/'sessions'/s['session_id']))
-    from .download_tracking import verified_download_binding
+    from .download_tracking import verified_download_binding, session_download
     binding=verified_download_binding(reviews,row)
     if binding:selection=binding['selection']
     from .room_identity import guest_context, bind_guest_official
     if guest_context(s) and not row.get('source_choice') and not binding:
+        download = session_download(reviews.directory, s['session_id'])
         guest_catalog = ReadOnlyCatalog(reviews.database)
         try:
-            guest = bind_guest_official(guest_catalog, s, row['ocr'])
+            guest = bind_guest_official(guest_catalog, s, row['ocr']) if download is None else None
         finally:
             guest_catalog.close()
         if guest:

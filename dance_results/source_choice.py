@@ -21,7 +21,7 @@ def effective_selection(row):
     return selected
 
 
-def offer(catalog, row, download_binding=None):
+def offer(catalog, row, download_binding=None, *, directory=None):
     if row['status'] != 'pending_review' or row['revision'] != 0 or row.get('source_choice'):
         return None
     if download_binding:
@@ -29,11 +29,14 @@ def offer(catalog, row, download_binding=None):
     selection = effective_selection(row)
     from .room_identity import guest_context, bind_guest_official
     guest = guest_context(row['locked_session'])
-    if guest and bind_guest_official(catalog, row['locked_session'], row['ocr']):
+    from .download_tracking import session_download
+    download = session_download(directory, row['session_id']) if directory is not None else None
+    if (guest and directory is not None and download is None
+            and bind_guest_official(catalog, row['locked_session'], row['ocr'])):
         return None
     # A confirmed source/pack is already authoritative, including manual GROUP.
     source = selection.get('source_type')
-    if source == 'official' or (selection.get('pack') or {}).get('status') == 'confirmed':
+    if not guest and (source == 'official' or (selection.get('pack') or {}).get('status') == 'confirmed'):
         return None
     fields = official_fields(selection, row['ocr'])
     title = normalize(guest['title'] if guest else fields.get('title', {}).get('value'))
