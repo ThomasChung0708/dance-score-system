@@ -95,8 +95,16 @@
     select.disabled = false;
   }
 
+  function hideManualImports(status) {
+    // With a game folder the song folders are followed automatically; a manual SONG rescan
+    // would only do the same thing by hand.
+    const scan = $('scan-button');
+    if (scan) scan.hidden = Boolean(status.game_dir);
+  }
+
   function render(status) {
     hideOcrPages(status);
+    hideManualImports(status);
     renderCharacters(status);
     if (bar) {
       bar.textContent = summary(status);

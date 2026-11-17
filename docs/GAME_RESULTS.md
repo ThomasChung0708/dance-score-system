@@ -14,6 +14,10 @@
 
 外部歌快取不是 JSON（檔名是歷史遺留），而是遊戲的二進位格式；讀取程式在 `dance_results/song_cache.py`，只接受已知的版本（目前 35）。遊戲改了格式時，工具會明確說「版本尚未支援」，不會亂讀。
 
+網頁不再有「匯入官方 CSV」：遊戲資料夾已經跟著 song_table.csv 走（手動匯入遇到資料不同會整批停止，不適合常改的 CSV；需要時仍可用 `python -m dance_results.official_import`）。設定了遊戲資料夾後，「↻ 更新歌曲庫」也會隱藏：背景每 3 秒就會檢查歌單與成績。
+
+歌曲清單不分位置：官方歌、`DATA\ADDON\SONG`、StepMania、osu 的歌一起列出、一起搜尋。左側「自製歌曲」依來源分組（遊戲 ADDON／StepMania3.9／osu!…），可以展開到各歌包。多人房自動下載的 `connect` 就是遊戲 ADDON 底下的一般歌包。
+
 ## 角色
 
 下拉選單列出 `PROFILE` 裡的每個角色（名字來自各自的 `profile.json`），單機角色標「單機」、線上角色標帳號。
