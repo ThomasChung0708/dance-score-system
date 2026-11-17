@@ -29,6 +29,9 @@ class LobbyImageTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):cls.cache=json.loads((BASE/'fixtures/phase5d_lobby_tokens.json').read_text(encoding='utf8'))
 
+    def setUp(self):
+        if not (BASE/'專案測試圖片').is_dir():self.skipTest('Local lobby screenshots not distributed with this checkout')
+
     def image(self,name):return Image.open(BASE/'專案測試圖片'/name).convert('RGB').resize((1024,800))
 
     def test_both_original_pngs_self_tc_no_map_and_no_invented_progress(self):
