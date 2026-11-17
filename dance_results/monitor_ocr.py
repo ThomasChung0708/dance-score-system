@@ -96,7 +96,7 @@ def active_pack(selection, image, catalog):
 
 def playing_preview(tokens):
     bottom = in_region(tokens, (0, 740, 1024, 800))
-    title = None; level = None
+    title = None; level = None; level_tokens = []
     for t in bottom:
         raw = t['text']
         found = re.search(r'歌曲名\s*[:：]\s*(.+)', raw)
@@ -111,13 +111,16 @@ def playing_preview(tokens):
         found = re.fullmatch(r'LV[:：]?(\d+)', compact(raw))
         if found and t['confidence'] >= .9:
             level = int(found[1])
+            level_tokens = [t]
         elif compact(raw) == 'LV:':
             x, y = center(t)
             numbers = [n for n in bottom if x < center(n)[0] < x+70 and abs(center(n)[1]-y) < 12 and
                        re.fullmatch(r'\d+', n['text']) and n['confidence'] >= .9]
             if len(numbers) == 1:
                 level = int(numbers[0]['text'])
-    return dict(title=title, game_level=level)
+                level_tokens = [t, numbers[0]]
+    return dict(title=title, game_level=level,
+                fields=dict(game_level=value(level, level_tokens, method='local_playing_banner_level')))
 
 
 def room_preview(tokens):
@@ -129,7 +132,11 @@ def room_preview(tokens):
         if found and t['confidence']>=.9:level=int(found[1])
     difficulties=[compact(t['text']) for t in in_region(tokens,(850,645,1024,690))
                   if compact(t['text']) in ('EASY','NORMAL','HARD') and t['confidence']>=.9]
-    return dict(title=title,game_level=level,difficulty=difficulties[0] if len(difficulties)==1 else None)
+    local = [t for t in in_region(tokens, (850,645,1024,690))
+             if compact(t['text']) in ('EASY', 'NORMAL', 'HARD') and t['confidence'] >= .9]
+    return dict(title=title, game_level=level, difficulty=difficulties[0] if len(difficulties)==1 else None,
+        fields=dict(difficulty=value(local[0]['text'].strip().upper(), local,
+            method='room_local_difficulty_setting') if len(local) == 1 else value(reason='room_difficulty_unreadable')))
 
 
 class Analyzer:
@@ -224,10 +231,8 @@ class Analyzer:
                     observation['selection']['numeric_roi_evidence']={'bpm':views}
                     self.calls+=sum('view_sha256' in view for view in views)
         if screen == 'waiting_room':
-            from .lobby_download_ocr import lobby_download,reread_own_badge
-            badges=reread_own_badge(self.engine,normalized,tokens,self.player_name)
-            if badges:self.calls+=1
-            observation['download_lobby']=lobby_download(tokens,normalized,self.player_name,badges)
+            from .lobby_download_ocr import lobby_download
+            observation['download_lobby']=lobby_download(tokens,normalized,self.player_name)
         if screen == 'results':
             from .result_ocr import recognize_result
             observation['result_ocr'] = recognize_result(normalized, self.engine, self.player_name, tokens=tokens)

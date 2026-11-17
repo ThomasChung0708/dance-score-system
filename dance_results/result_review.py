@@ -227,7 +227,8 @@ class ResultReviews:
                 player_verified=False, identity_reviewed=False)
             if selection.get('result_title_binding'):
                 draft.update(song_id=selection['result_title_binding']['song_id'],
-                             identity_binding_method=selection['result_title_binding']['method'])
+                             identity_binding_method=selection['result_title_binding']['method'],
+                             identity_binding_evidence=copy.deepcopy(selection['result_title_binding']))
             if draft['song_id'] is None and selected_fields:
                 # A clearer result title can recover a review's song binding.
                 # Keep the original locked selection/confidences intact: this
@@ -250,6 +251,8 @@ class ResultReviews:
                 session_id=stored['session_id'], screenshot_sha256=sha, catalog_path=str(self.database),
                 created_at=utc(), revision=0, status='pending_review', ocr=copy.deepcopy(ocr),
                 locked_session=copy.deepcopy(stored), draft=draft, history=[], writes_play_record=False)
+            from .download_tracking import prefill_download
+            prefill_download(self, row)
             atomic_json(path, row)
             if self.on_ingest:self.on_ingest(row['session_id'])
             return row
@@ -511,7 +514,10 @@ class ResultReviews:
 
     def detail(self, session_id):
         with self.lock:
-            _, row = self._read(session_id)
+            folder, row = self._read(session_id)
+            from .download_tracking import prefill_download
+            if prefill_download(self, row):
+                atomic_json(folder/'result-review.json', row)
             result = copy.deepcopy(row)
             result['review_reasons'] = self.review_reasons(row)
             result['draft']['values'].setdefault('duration_seconds',None)
@@ -543,7 +549,8 @@ class ResultReviews:
             from .source_choice import offer
             catalog = ReadOnlyCatalog(self.database)
             try:
-                result['source_prompt'] = offer(catalog, row)
+                from .download_tracking import verified_download_binding
+                result['source_prompt'] = offer(catalog, row, verified_download_binding(self, row))
             finally:
                 catalog.close()
             return result
@@ -558,7 +565,9 @@ class ResultReviews:
                 if item['status'] != 'pending_review':
                     continue
                 try:
-                    prompt = offer(catalog, self._read(item['session_id'])[1])
+                    from .download_tracking import verified_download_binding
+                    row = self._read(item['session_id'])[1]
+                    prompt = offer(catalog, row, verified_download_binding(self, row))
                     if prompt and not prompt['dismissed']:
                         prompts.append(prompt)
                 except LibraryError:
@@ -614,8 +623,12 @@ class ResultReviews:
             return dict(session_id=row['session_id'], status=row['status'], idempotent=False)
 
     def download_detail(self,session_id,row=None):
-        from .download_tracking import session_download,download_view,download_receipt
-        if row is None:_,row=self._read(session_id)
+        from .download_tracking import session_download,download_view,download_receipt,prefill_download
+        if row is None:
+            with self.lock:
+                folder, row = self._read(session_id)
+                if prefill_download(self, row):
+                    atomic_json(folder/'result-review.json', row)
         view=download_view(session_download(self.directory,session_id),row,download_receipt(self.database,session_id))
         candidates=[]
         if view and view['candidates']:
@@ -626,7 +639,8 @@ class ResultReviews:
                     if song and song['root_id']==candidate['root_id'] and song['relative_path']==candidate['relative_path']:
                         song['comparison']=self._comparison(song,row['draft']['values']);candidates.append(song)
             finally:catalog.close()
-        return dict(download_evidence=view,candidates=candidates)
+        return dict(download_evidence=view, candidates=candidates,
+                    download_prefill=copy.deepcopy(row['draft']) if row['draft'].get('identity_binding_method') == 'guest_download_stable_new_folder_title' else None)
 
     def _assistance(self, row, draft, official_source_confirmed=False):
         """An unsaved proposal: never changes raw OCR, flags or submitted reviews."""

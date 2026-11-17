@@ -4,6 +4,7 @@ No song-select pixels survive for missing selections. Never invent their OCR
 confidences. Historical invalidations are replayed under current context rules;
 the separate confirmed-pack control remains conditional evidence. Only scratch writes.
 """
+import argparse
 import copy
 from contextlib import closing
 from datetime import datetime, timezone
@@ -204,10 +205,13 @@ def run_case(database, scratch, archived, original, events, catalog, fresh, cont
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--scratch-root', type=Path, default=ROOT/'data/round34_scratch')
+    args = parser.parse_args()
     snapshots = [ROOT/'data/library.sqlite3', SOURCE]
     digests = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in snapshots}
     stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
-    scratch = ROOT/'data/round34_scratch'/('jp-'+stamp)
+    scratch = args.scratch_root/('jp-'+stamp)
     scratch.mkdir(parents=True)
     database = scratch/'ISOLATED.sqlite3'
     with closing(readonly(SOURCE)) as source, closing(sqlite3.connect(database)) as target:

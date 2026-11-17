@@ -72,6 +72,7 @@ class Monitor:
                     raise LibraryError(f'{name} 必須在 {minimum}–{maximum} 之間。')
                 return value
             self.config = dict(capture_hz=number('capture_hz', 2, .2, 10),
+                               room_capture_hz=number('room_capture_hz', 4, .2, 10),
                                ocr_interval=number('ocr_interval', 2, .5, 30),
                                confirmations=int(number('confirmations', 2, 2, 5)),
                                selection_ttl=number('selection_ttl', 60, 5, 600),
@@ -283,6 +284,8 @@ class Monitor:
             except ImportError:
                 process = None
             durations = []
+            from .room_sampler import RoomSampler
+            room_sampler = RoomSampler()
             catalog_generation=0
             last_ocr = -1e9
             last_full = -1e9
@@ -370,9 +373,19 @@ class Monitor:
                     self.stop_event.wait(.05)
                     continue
                 sampled, image = frame
+                room_sampling = self.tracker.proposed == 'WAITING_ROOM' or self.tracker.state == 'WAITING_ROOM'
+                rate_key = 'room_capture_hz' if room_sampling else 'capture_hz'
+                capture.interval = 1/self.config.get(rate_key, 4 if room_sampling else 2)
                 recent = capture.take_recent() if hasattr(capture, 'take_recent') else [frame]
                 if not isinstance(recent, (list, tuple)):
                     recent = [frame]
+                if room_sampling:
+                    costs = [room_sampler.sample(pixels, self.tracker, analyzer.engine, stamp)
+                             for stamp, pixels in recent]
+                    if costs:
+                        self.metrics['room_sampler_ms'] = round(statistics.mean(costs), 3)
+                if self.downloads:
+                    self.downloads.room_tick(self.tracker)
                 selection_frames.observe(recent, time.monotonic())
                 last_native = now
                 if black_or_loading_frame(image):
@@ -419,7 +432,9 @@ class Monitor:
                     self._capture_ocr_failure(image, observation)
                     self.latest_image = image
                     self._consume_observation(observation, last_ocr, image, sampled, result_consistency)
-                    if self.downloads:self.downloads.observe(observation,self.tracker,image)
+                    if observation['state'] == 'WAITING_ROOM':
+                        room_sampler.configure(self.tracker, observation)
+                    if self.downloads:self.downloads.observe(observation,self.tracker)
                     self.metrics.update(analyzed_frames=self.metrics['analyzed_frames']+1, ocr_calls=analyzer.calls,
                         ocr_ms=round(elapsed, 2), ocr_p50_ms=round(statistics.median(durations), 2),
                         ocr_p95_ms=round(sorted(durations)[max(0, math.ceil(len(durations)*.95)-1)], 2))

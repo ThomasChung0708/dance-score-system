@@ -32,6 +32,17 @@ def automatic_request(reviews,row):
     from .download_tracking import verified_download_binding
     binding=verified_download_binding(reviews,row)
     if binding:selection=binding['selection']
+    from .room_identity import guest_context, bind_guest_official
+    if guest_context(s) and not row.get('source_choice') and not binding:
+        guest_catalog = ReadOnlyCatalog(reviews.database)
+        try:
+            guest = bind_guest_official(guest_catalog, s, row['ocr'])
+        finally:
+            guest_catalog.close()
+        if guest:
+            selection = guest
+        else:
+            issues.append('automatic_guest_identity_requires_picker')
     ocr=row['ocr'];raw=ocr.get('fields') or {}
     screen_values = {k: item.get('value') for k, item in raw.items()}
     if row['revision']!=0 or row['status']!='pending_review':issues.append('automatic_review_already_edited')
@@ -98,12 +109,17 @@ def automatic_request(reviews,row):
             fields = result_identity_fields(selection, ocr, s.get('playing_preview'))
             pack=selection.get('pack') or {}
             confirmed_pack = pack.get('pack_id') if pack.get('status') == 'confirmed' else None
-            chosen_id = (row.get('source_choice') or {}).get('song_id')
+            chosen_id = binding['song_id'] if binding else (row.get('source_choice') or {}).get('song_id')
             match = catalog.match_identity(fields, confirmed_pack, 'custom',
                 candidate_ids=[chosen_id] if chosen_id is not None else None)
             reference_match = catalog.match(fields, confirmed_pack, 'custom')
             ref=ManualReferences(reviews.directory,reviews.database).safe_lookup(fields,confirmed_pack,'custom',catalog,reference_match)
             sid = ref['song_id'] if ref and chosen_id is None else match.get('confirmed_song_id')
+            if (binding and not any(song_id == binding['song_id'] for song_id, _ in catalog.difficulties)
+                    and reliable(fields.get('title'))):
+                # Stable new-folder provenance supplies guest chart identity;
+                # no chart rows exist from which to infer a local LV (v11).
+                sid = binding['song_id']
             if pack.get('status') != 'confirmed' and sid is None:
                 issues.append('automatic_pack_unconfirmed')
             if sid:
@@ -122,7 +138,7 @@ def automatic_request(reviews,row):
         for key in SELECTION_REQUIRED:
             if uncharted and key == 'difficulty' and fields.get(key, {}).get('value') is None:
                 continue
-            if uncharted and key == 'game_level' and reliable(raw.get(key)):
+            if uncharted and key == 'game_level' and not binding and reliable(raw.get(key)):
                 continue
             if not reliable(fields.get(key)):
                 issues.append('automatic_selection_' + key + '_required')
@@ -137,7 +153,7 @@ def automatic_request(reviews,row):
             for sample in (ocr.get('temporal_validation') or {}).get('samples', []))
         if title_relaxed and title_ids != {sid}:
             issues.append('automatic_unique_result_title_required')
-        if uncharted and (ocr.get('multiplayer') or screen_values.get('completion_status') != 'COMPLETED'
+        if uncharted and ((ocr.get('multiplayer') and not binding) or screen_values.get('completion_status') != 'COMPLETED'
                 or consistency['judged_total'] != screen_values.get('max_combo')):
             issues.append('automatic_uncharted_complete_combo_required')
         if sid is None:issues.append('automatic_unique_verified_identity_required')

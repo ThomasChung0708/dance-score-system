@@ -66,6 +66,47 @@ class Tracker:
         self.pack_list_visible=False
         self.title_catalog = None
         self.playing_context = None
+        self.room_custom = []
+        self.room_key = None
+        self.room_entry_at = None
+        self.non_host_reads = 0
+
+    def clear_room(self):
+        self.room_preview = None
+        self.room_key = None
+        self.room_entry_at = None
+        self.room_custom = []
+        self.last_room_role = None
+        self.non_host_reads = 0
+
+    def observe_room(self, observation):
+        preview = observation.get('room_preview') or {}
+        title = same_song_title_key(preview.get('title'))
+        if title:
+            key = (title, preview.get('difficulty'))
+            changed = (self.room_key is None or title != self.room_key[0]
+                       or key[1] is not None and self.room_key[1] is not None and key[1] != self.room_key[1])
+            if changed:
+                self.room_custom = []
+                self.room_entry_at = utc()
+            if key[1] is None and self.room_key and title == self.room_key[0]:
+                key = self.room_key
+            self.room_key = key
+            if any(preview.get(k) != (self.room_preview or {}).get(k) for k in ('title', 'game_level', 'difficulty')):
+                self.log('room_preview', preview=preview, epoch=self.epoch)
+            self.room_preview = copy.deepcopy(preview)
+        lobby = observation.get('download_lobby') or {}
+        if lobby.get('local_player_status') == 'CONFIRMED':
+            if lobby.get('self_no_map'):
+                self.custom_cue('self_no_map', lobby.get('slot'), 1)
+
+    def custom_cue(self, cue, slot=None, frames=2):
+        if not self.room_key:
+            return
+        item = dict(cue=cue, slot=slot, frames=frames)
+        if item not in self.room_custom:
+            self.room_custom.append(item)
+            self.log('room_custom_cue', **item, room_key=self.room_key, epoch=self.epoch)
 
     def log(self, kind, **data):
         event = dict(at=utc(), event=kind, **data)
@@ -138,12 +179,22 @@ class Tracker:
         pack = self.current_pack if (self.current_pack or {}).get('status') == 'confirmed' else None
         source = ('custom' if pack else self.current_source if source_age is not None
             and 0 <= source_age <= self.selection_ttl else 'unknown')
-        return dict(epoch=self.epoch, pack=copy.deepcopy(pack), source_type=source,
+        context = dict(epoch=self.epoch, pack=copy.deepcopy(pack), source_type=source,
                     pack_context_current=bool(pack),
                     pack_age_seconds=pack_age, source_age_seconds=source_age,
                     max_age_seconds=self.selection_ttl)
+        if self.room_preview and self.room_key:
+            room = copy.deepcopy(self.room_preview)
+            room.update(custom=bool(self.room_custom), source_evidence=copy.deepcopy(self.room_custom),
+                        room_key=list(self.room_key), room_entry_at=self.room_entry_at)
+            context['guest_room'] = room
+            if self.room_custom:
+                context.update(source_type='custom', source_evidence=copy.deepcopy(self.room_custom))
+        return context
 
     def interrupt(self, reason):
+        if reason in ('game_window_closed', 'window_identity_changed', 'monitor_stopped', 'monitor_error'):
+            self.clear_room()
         if self.session and self.session['status'] == 'playing':
             if self.best_result:
                 observation, image = self.best_result
@@ -177,8 +228,7 @@ class Tracker:
     def new_window(self, identity):
         self.interrupt('window_identity_changed')
         self.epoch += 1
-        self.room_preview=None
-        self.last_room_role=None
+        self.clear_room()
         self.state = 'UNKNOWN'
         self.log('window_connected', identity=identity, epoch=self.epoch)
 
@@ -348,6 +398,18 @@ class Tracker:
             return
         self.last_sample = sample_id
         wanted = observation['state']
+        if wanted == 'WAITING_ROOM':
+            self.observe_room(observation)
+            role = observation.get('context', {}).get('local_is_host')
+            self.non_host_reads = self.non_host_reads + 1 if role is False else 0
+            if self.non_host_reads == 2:
+                self.invalidate_selection('multiplayer_guest_source_not_confirmed')
+            if role is not None:
+                self.last_room_role = role
+        elif wanted in ('LOBBY', 'LOGIN', 'SONG_SELECT', 'PROFILE', 'SPECTATING', 'INTERRUPTED'):
+            self.clear_room()
+        else:
+            self.non_host_reads = 0
         if self.session and wanted in ('RESULT', 'GAME_OVER') and image is not None:
             from .result_ocr import complete_reliable_result
             ocr = observation.get('result_ocr') or {}
@@ -363,7 +425,8 @@ class Tracker:
         if wanted == 'SONG_SELECT':
             # A readable new identity invalidates the prior one before debounce.
             self.update_selection(observation, now)
-        if wanted == 'WAITING_ROOM' and not self.session and not self.room_title_agrees(observation.get('room_preview') or {}):
+        if (wanted == 'WAITING_ROOM' and not self.session and (self.selection or self.selection_candidate)
+                and not self.room_title_agrees(observation.get('room_preview') or {})):
             # Contradictory identity wins even before scene debounce. A later
             # blank preview cannot resurrect this selection.
             self.invalidate_selection('room_preview_changed', clear_pack=False)
@@ -398,11 +461,7 @@ class Tracker:
                 return
         if wanted=='WAITING_ROOM':
             preview=observation.get('room_preview',{})
-            self.room_preview=preview
             role=observation.get('context',{}).get('local_is_host')
-            if (role is False and self.last_room_role is not False) or (role is None and self.last_room_role is True):
-                self.invalidate_selection('multiplayer_guest_source_not_confirmed')
-            self.last_room_role=role
             current_selection = self.selection or self.selection_candidate
             # Room LV/difficulty describe the host preview, not necessarily the
             # local player's chart. Only a different title breaks local identity.
@@ -435,6 +494,9 @@ class Tracker:
             if selected and (now-selected['last_seen'] > self.selection_ttl or selected['epoch'] != self.epoch):
                 selected = None
                 reason = 'selection_expired'
+            if selected and self.room_custom and selected.get('source_type') == 'official':
+                selected = None
+                reason = 'room_custom_cue_contradicts_official_selection'
             preview = observation.get('playing_preview', {})
             if selected:
                 fields = selected['fields']

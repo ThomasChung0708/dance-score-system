@@ -21,29 +21,35 @@ def effective_selection(row):
     return selected
 
 
-def offer(catalog, row):
+def offer(catalog, row, download_binding=None):
     if row['status'] != 'pending_review' or row['revision'] != 0 or row.get('source_choice'):
         return None
+    if download_binding:
+        return None
     selection = effective_selection(row)
+    from .room_identity import guest_context, bind_guest_official
+    guest = guest_context(row['locked_session'])
+    if guest and bind_guest_official(catalog, row['locked_session'], row['ocr']):
+        return None
     # A confirmed source/pack is already authoritative, including manual GROUP.
     source = selection.get('source_type')
     if source == 'official' or (selection.get('pack') or {}).get('status') == 'confirmed':
         return None
     fields = official_fields(selection, row['ocr'])
-    title = normalize(fields.get('title', {}).get('value'))
+    title = normalize(guest['title'] if guest else fields.get('title', {}).get('value'))
     ids = sorted(catalog.title_ids(title))
-    if source == 'custom':
+    if source == 'custom' and not guest:
         ids = [i for i in ids if catalog.songs[i]['source_type'] == 'custom']
     if not ids:
         return None
     # Rule-resolved official plus chartless custom copies need no interruption.
     resolved = catalog.match_identity(fields, source_type=source)
-    if resolved.get('confirmed_song_id') is not None:
+    if resolved.get('confirmed_song_id') is not None and not guest:
         return None
     sources = {catalog.songs[i]['source_type'] for i in ids}
     custom_ids = [i for i in ids if catalog.songs[i]['source_type'] == 'custom']
     both = sources == {'official', 'custom'}
-    if not both and not (sources == {'custom'} and len(custom_ids) > 1):
+    if not guest and not both and not (sources == {'custom'} and len(custom_ids) > 1):
         return None
     candidates = []
     for sid in ids:
@@ -58,7 +64,7 @@ def offer(catalog, row):
     # A sole exact custom chart can resolve copies with different known LVs.
     # Unknown charts remain candidates unless the normal matcher resolves them.
     return dict(session_id=row['session_id'], review_id=row['review_id'], revision=row['revision'],
-        kind='source' if both else 'folder',
-        question='這首是官方譜還是自製譜？' if both else '這首是哪個資料夾的譜面？',
+        kind='folder' if sources == {'custom'} and len(custom_ids) > 1 else 'source',
+        question='這首是哪個資料夾的譜面？' if sources == {'custom'} and len(custom_ids) > 1 else '這首是官方譜還是自製譜？',
         dismissed=bool(row.get('source_prompt_dismissed')),
         candidates=sorted(candidates, key=lambda c: (not c['exact_match'], c['source_type'], c['song_id'])))

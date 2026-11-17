@@ -13,7 +13,78 @@ from uuid import uuid4
 
 from .monitor_tracking import atomic_json,utc,fingerprint,ManualReferences
 from .scanner import is_link
-from .ocr_matching import ReadOnlyCatalog,normalize
+from .ocr_matching import ReadOnlyCatalog,normalize,same_song_title_key
+
+
+def guest_download_binding(reviews, row, evidence):
+    from .room_identity import agreeing_room, field
+    session = row['locked_session']
+    room = agreeing_room(session, row['ocr'])
+    if (not room or not room.get('custom') or not evidence.get('scan_completed')
+            or evidence.get('room_key') != room.get('room_key')
+            or evidence.get('epoch') != session.get('epoch')
+            or not room.get('room_entry_at') or evidence.get('room_entry_at') != room['room_entry_at']):
+        return None
+    title_key = same_song_title_key(room['title'])
+    result_title = row['ocr'].get('fields', {}).get('title', {}).get('value')
+    playing_title = (session.get('playing_preview') or {}).get('title')
+    if (same_song_title_key(result_title) != title_key
+            or same_song_title_key(playing_title) != title_key):
+        return None
+    # Count ALL new folders, before filtering by title: a second download must
+    # never disappear just because only one title happens to agree.
+    candidates = evidence.get('candidates', [])
+    if len(candidates) != 1 or evidence.get('uncertain_imports'):
+        return None
+    candidate = candidates[0]
+    if not all(candidate.get(k) for k in ('is_new_song', 'stable_source', 'observed_after_snapshot')):
+        return None
+    catalog = ReadOnlyCatalog(reviews.database)
+    try:
+        sid = candidate['song_id']
+        if sid not in catalog.title_ids(room['title'], source_type='custom'):
+            return None
+        song = catalog.songs[sid]
+        if song['root_id'] != candidate['root_id'] or song['relative_folder'] != candidate['relative_path']:
+            return None
+        root = catalog.db.execute('SELECT path FROM library_roots WHERE root_id=?', (song['root_id'],)).fetchone()[0]
+        live = metadata_snapshot(Path(root)/song['relative_folder'])
+        if live['errors'] or not live['files'] or live['files'] != candidate.get('stable_metadata'):
+            return None
+        from .ocr_matching import result_identity_fields
+        fields = result_identity_fields({}, row['ocr'], session.get('playing_preview'))
+        title_samples = [s.get('fields', {}).get('title') or {}
+                         for s in row['ocr']['temporal_validation']['samples']]
+        agreeing = [f for f in title_samples if same_song_title_key(f.get('value')) == title_key
+                    and not f.get('reason')]
+        if agreeing:
+            fields['title'] = copy.deepcopy(max(agreeing, key=lambda f: f.get('confidence', 0)))
+        fields['difficulty'] = copy.deepcopy((room.get('fields') or {}).get('difficulty') or field(None, 'room_local_difficulty_setting'))
+        # The footer/room LV belongs to the host. Only independently measured
+        # local PLAYING evidence may fill the v11 mandatory result LV.
+        local_level = ((session.get('playing_preview') or {}).get('fields') or {}).get('game_level') or {}
+        fields['game_level'] = copy.deepcopy(local_level) if local_level.get('confidence', 0) >= .95 and not local_level.get('reason') else field(None, 'guest_host_level_not_local')
+        method = 'guest_download_stable_new_folder_title'
+        selection = dict(source_type='custom', fields=fields, ocr_fields=copy.deepcopy(fields),
+            download_song_id=sid, result_title_binding=dict(method=method, song_id=sid,
+                room=copy.deepcopy(room), episode_id=evidence['episode_id']))
+        return dict(song_id=sid, selection=selection, episode_id=evidence['episode_id'], method=method)
+    finally:
+        catalog.close()
+
+
+def prefill_download(reviews, row):
+    if row['revision'] != 0 or row['status'] != 'pending_review':
+        return False
+    binding = verified_download_binding(reviews, row)
+    if not binding:
+        return False
+    draft = row['draft']
+    before = copy.deepcopy(draft)
+    draft.update(song_id=binding['song_id'], identity_binding_method=binding['method'])
+    for key in ('difficulty', 'game_level', 'total_notes'):
+        draft['values'][key] = binding['selection']['fields'].get(key, {}).get('value')
+    return draft != before
 
 
 def metadata_snapshot(root):
@@ -56,11 +127,11 @@ def related_new_songs(evidence,row=None):
             selection.get('fields',{}).get('title',{}).get('value'),
             (s.get('playing_preview') or {}).get('title'),(evidence.get('room_observation') or {}).get('title')]
     # Result/locked song evidence takes precedence over a possibly old room title.
-    titles=[normalize(t) for t in titles if t]
+    titles=[same_song_title_key(t) for t in titles if t]
     title=titles[0] if titles else None
     return [c for c in evidence.get('candidates',[]) if c.get('is_new_song') is True and
             c.get('observed_after_snapshot') is True and title and
-            title in {normalize(t) for t in [c.get('title'),*c.get('source_titles',[])] if t}]
+            title in {same_song_title_key(t) for t in [c.get('title'),*c.get('source_titles',[])] if t}]
 
 
 def download_receipt(database,sid):
@@ -109,7 +180,11 @@ def download_view(evidence,row=None,receipt=None):
 
 def verified_download_binding(reviews,row):
     evidence=session_download(reviews.directory,row['session_id'])
-    if not evidence or evidence.get('candidate_scope')!='observed_new_song_ids_v2' or not evidence.get('scan_completed') or not evidence.get('self_no_map_confirmed'):return None
+    if not evidence or evidence.get('candidate_scope')!='observed_new_song_ids_v2':return None
+    from .room_identity import guest_context
+    if guest_context(row['locked_session']):
+        return guest_download_binding(reviews, row, evidence)
+    if not evidence.get('scan_completed') or not evidence.get('self_no_map_confirmed'):return None
     selection=copy.deepcopy(row['locked_session'].get('selection') or {})
     pack=selection.get('pack') or {};fields=selection.get('ocr_fields',selection.get('fields') or {})
     if pack.get('status')!='confirmed':return None
@@ -143,6 +218,51 @@ class DownloadTracker:
         self.thread=None;self.active=None;self.armed={};self.last_key=None;self.last_poll=0
         self.associated=set();self.results=set();self.last_lobby=None
         self.generation=0;self.enabled=False;self.view=dict(status='idle',events=[],metrics={})
+        self.room_scope = None
+        self.room_baseline = None
+        self.room_poll_at = 0
+
+    def room_tick(self, tracker):
+        """Capture-thread bridge; all filesystem work stays on our worker."""
+        room = tracker.room_preview
+        if (tracker.state != 'WAITING_ROOM' and tracker.proposed != 'WAITING_ROOM') or not tracker.room_key:
+            return
+        scope = dict(room_key=list(tracker.room_key), room_entry_at=tracker.room_entry_at,
+                     epoch=tracker.epoch, room=copy.deepcopy(room))
+        if not self.room_scope or scope['room_entry_at'] != self.room_scope['room_entry_at']:
+            self.room_scope = scope
+            self._enqueue('room_enter', copy.deepcopy(scope))
+        else:
+            # Better OCR of the same room must not discard its entry snapshot.
+            self.room_scope = scope
+        now = time.monotonic()
+        if now-self.room_poll_at >= self.interval:
+            self.room_poll_at = now
+            self._enqueue('room_poll', copy.deepcopy(scope))
+        with self.lock:
+            view = dict(self.view)
+        if (view.get('room_entry_at') == tracker.room_entry_at
+                and view.get('room_key') == list(tracker.room_key)
+                and (view.get('file_changes') or view.get('metadata_change_observed'))):
+            tracker.custom_cue('download_folder_changed', frames=1)
+
+    def _room_poll(self, scope):
+        scope_keys = ('epoch', 'room_entry_at', 'room_key')
+        if (self.room_baseline is None or not self.room_scope
+                or any(self.room_scope.get(k) != scope.get(k) for k in scope_keys)):
+            return
+        current = self._snapshots()
+        changed = any(item['snapshot']['files'] != self.room_baseline.get(rid, {}).get('snapshot', {}).get('files')
+                      for rid, item in current.items())
+        if not changed:
+            return
+        if not self.active or self.active.get('room_entry_at') != scope['room_entry_at']:
+            self._begin(dict(observed_at=utc(), lobby=self.last_lobby or {}, room=scope['room'],
+                epoch=scope['epoch'], baseline=self.room_baseline, self_no_map_confirmed=False))
+        if not self.active.get('session_id'):
+            self.active.update(metadata_change_observed=True, room_key=scope['room_key'],
+                               room_entry_at=scope['room_entry_at'])
+            self._save()
 
     def _enqueue(self,kind,data=None):
         if self.stop_event.is_set():return
@@ -155,12 +275,13 @@ class DownloadTracker:
     def pause(self):self.enabled=False
 
     def observe(self,observation,tracker,image=None):
+        self.room_tick(tracker)
         state=observation['state'];lobby=observation.get('download_lobby') or {}
         if state=='WAITING_ROOM' and tracker.count>=tracker.confirmations:
             self.last_lobby=copy.deepcopy(lobby)
             key=fingerprint(dict(epoch=tracker.epoch,player=lobby.get('player_name'),slot=lobby.get('slot'),room=observation.get('room_preview')))
             if lobby.get('self_no_map') and lobby.get('multiplayer_observed') and lobby.get('local_player_status')=='CONFIRMED' and key!=self.last_key:
-                self.last_key=key;self._enqueue('no_map',dict(lobby=lobby,room=observation.get('room_preview'),epoch=tracker.epoch,image=image.copy() if image is not None else None,observed_at=utc(),key=key))
+                self.last_key=key;self._enqueue('no_map',dict(lobby=lobby,room=observation.get('room_preview'),epoch=tracker.epoch,image=None,observed_at=utc(),key=key))
             elif self.active and (lobby.get('self_ready') or lobby.get('progress_observed')):
                 self._enqueue('lobby_status',lobby)
         session=tracker.session if state=='PLAYING' else tracker.last_session if state in ('RESULT','GAME_OVER') else None
@@ -208,10 +329,13 @@ class DownloadTracker:
         self.active=dict(episode_id=str(uuid4()),session_id=None,status='observed_no_map',
             first_observed_at=data['observed_at'],self_no_map_confirmed=data.get('self_no_map_confirmed',True),player=data['lobby'].get('player_name'),
             room_observation=data['room'],lobby_observation=data['lobby'],epoch=data['epoch'],
-            baseline_may_follow_download_start=True,_baseline=data.get('baseline') or self._snapshots(),events=[],candidates=[],
+            baseline_may_follow_download_start=True,_baseline=data.get('baseline') or self.room_baseline or self._snapshots(),events=[],candidates=[],
             candidate_scope='observed_new_song_ids_v2',existing_updates=[],uncertain_imports=[],
             scan_completed=False,result_seen=False,attempts=0,_session=None,_last_stamp=None,_last_change=time.monotonic(),_scanned=None)
         a=self.active
+        if (self.room_scope and same_song_title_key((data.get('room') or {}).get('title'))
+                == self.room_scope['room_key'][0]):
+            a.update(room_key=self.room_scope['room_key'], room_entry_at=self.room_scope['room_entry_at'])
         with self.library.open() as lib:catalog_ids=[r[0] for r in lib.connection.execute('SELECT song_id FROM songs')]
         atomic_json(self.directory/'downloads'/a['episode_id']/'catalog-before-observation.json',catalog_ids)
         snapshot_path=self.directory/'downloads'/a['episode_id']/'baseline.json'
@@ -227,6 +351,10 @@ class DownloadTracker:
         self._save()
 
     def _associate(self,s):
+        room = (s.get('identity_context') or {}).get('guest_room') or {}
+        if (self.active and room.get('room_entry_at')
+                and self.active.get('room_entry_at') != room['room_entry_at']):
+            return
         if not self.active or self.active.get('session_id') not in (None,s['session_id']):
             if not self.last_lobby or not self.last_lobby.get('multiplayer_observed') or not self.armed:return
             current=self._snapshots()
@@ -378,6 +506,9 @@ class DownloadTracker:
                     self.active=None;self.last_key=None;self.last_lobby=None;self.associated.clear();self.results.clear();self.armed=self._snapshots()
                     with self.lock:self.view=dict(status='armed',events=[],metrics={k:dict(milliseconds=v['snapshot']['milliseconds'],files=len(v['snapshot']['files']),errors=v['snapshot']['errors']) for k,v in self.armed.items()})
                 elif kind=='no_map':self._begin(data)
+                elif kind=='room_enter':
+                    self.room_baseline = self._snapshots()
+                elif kind=='room_poll':self._room_poll(data)
                 elif kind=='associate':self._associate(data)
                 elif kind=='poll':self._poll()
                 elif kind=='lobby_status' and self.active:

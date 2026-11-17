@@ -16,6 +16,9 @@ def context_selection(session):
     # cannot establish that an old Pack still belonged to this list/room.
     if pack.get('status') == 'confirmed' and context.get('pack_context_current') is True:
         return dict(pack=copy.deepcopy(pack), source_type='custom')
+    if context.get('guest_room') and not session.get('selection'):
+        room = context['guest_room']
+        return dict(source_type='custom' if room.get('custom') else 'unknown', guest_room=copy.deepcopy(room))
     # Source-only category evidence retains its existing bounded lifetime.
     limit = min(60, context.get('max_age_seconds', 0))
     age = context.get('source_age_seconds')
@@ -31,6 +34,9 @@ def bind_result_title(catalog, session, ocr, selection):
     Matching still enforces chart LV and namesake ambiguity. No preview title
     or result pack label can supply catalog authority.
     """
+    from .room_identity import bind_guest_official, guest_context
+    if guest_context(session) and selection.get('scope_authority') != 'session_source_choice':
+        return bind_guest_official(catalog, session, ocr)
     original_fields = selection.get('ocr_fields', selection.get('fields') or {})
     if original_fields.get('title', {}).get('value'):
         return None

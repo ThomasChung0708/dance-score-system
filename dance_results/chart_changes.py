@@ -33,6 +33,10 @@ def official_context(catalog, row, song_id):
     song = catalog.songs.get(song_id) or {}
     from .source_choice import effective_selection
     selection = effective_selection(row)
+    from .room_identity import bind_guest_official
+    guest = bind_guest_official(catalog, row['locked_session'], row['ocr'])
+    if guest and not row.get('source_choice'):
+        selection = guest
     if song.get('source_type') != 'official' or selection.get('source_type') == 'custom':
         return False
     fields = official_fields(selection, row['ocr'])

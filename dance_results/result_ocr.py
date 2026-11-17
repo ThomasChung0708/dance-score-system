@@ -307,8 +307,13 @@ def parse_result(tokens, player_name='TC'):
                          and (len(n['text'].strip()) > 1 and not re.fullmatch(r'\d+', n['text'])
                               or re.fullmatch(r'[A-Za-z0-9\u3400-\u9fff]', n['text'].strip())
                               and n['confidence'] >= AUTO_CONFIDENCE)]
-            if len(following) == 1:
-                titles.append(value(re.sub(r'^[:：]\s*', '', following[0]['text'].strip()), [t, following[0]]))
+            if len(following) == 1 and t['confidence'] >= .9:
+                # The label locates the field; only the actual title token
+                # measures title confidence. Preserve both measured readings.
+                title_field = value(re.sub(r'^[:：]\s*', '', following[0]['text'].strip()),
+                                    [following[0]], method='footer_title_token_after_label')
+                title_field['anchor_evidence'] = [t]
+                titles.append(title_field)
     if len(titles) == 1:
         fields['title'] = titles[0]
     else:

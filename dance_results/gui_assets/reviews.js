@@ -1019,6 +1019,9 @@ $('max-basis-source').addEventListener('change', () => {
 });
 function downloadSummary(data) {
   if (!data) return '';
+  if (!data.scan_completed && data.download_tracking) {
+    return data.scanning ? '掃描中：完成後會核對並帶入本次下載的歌曲。' : '下載中／掃描中：等待檔案穩定與歌曲庫掃描完成。';
+  }
   const lines = [data.no_map_detected ? 'NO MAP detected' : '尚無本人 NO MAP 證據', data.progress_observed ? '已觀測下載進度（完成狀態待確認）' : data.download_tracking ? '下載追蹤中' : '下載狀態：未確認', data.scanning ? 'SONG 正在掃描' : data.scan_completed ? 'SONG 本輪掃描已結束' : 'SONG 等待處理', '本次新增歌曲：' + data.new_song_count, '匹配成功：' + (data.matched_song ? data.matched_song.title || 'Song #' + data.matched_song.song_id : '0'), '待確認：' + (data.needs_manual_review ? '1' : '0'), '正式成績：' + (data.formal_saved ? '已儲存 #' + data.record_id : data.formal_saved === false ? '尚未儲存' : '待查核')];
   if (data.acquisition_uncertain) lines.push('無法確定是否為本次下載；未觀測到的新歌不計入新增');
   return lines.join('\n');
@@ -1060,6 +1063,16 @@ async function refreshDownloadEvidence() {
   if (JSON.stringify(before) === JSON.stringify(after)) return;
   current.download_evidence = after;
   renderDownloadCandidates(after);
+  if (r.download_prefill && !dirty && current.revision === 0 && after?.scan_completed) {
+    const draft = r.download_prefill;
+    current.draft = draft;
+    for (const key of fields) {
+      const value = draft.values[key];
+      $('review-' + key).value = value === null || value === undefined ? '' : value;
+    }
+    renderCandidates(r.candidates || [], draft.song_id, (r.candidates || []).length);
+    schedulePreview();
+  }
   if (after?.scan_completed && JSON.stringify(before?.candidates) !== JSON.stringify(after.candidates)) {
     const selected = song(),
       items = [...(r.candidates || [])];
