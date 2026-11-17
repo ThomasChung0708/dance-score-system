@@ -4,19 +4,26 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="dance-token" content="SESSION_TOKEN">
   <title>熱舞 Online · 我的歌曲庫</title>
-  <link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/lamps.css"><script src="/lamps.js" defer></script><script src="/app.js" defer></script>
+  <link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/lamps.css"><script src="/lamps.js" defer></script><script src="/app.js" defer></script><script src="/game-sync.js" defer></script>
 </head>
 <body>
 <header class="topbar">
   <div class="brand"><span class="brand-mark" aria-hidden="true">♫</span><div><span class="eyebrow">DANCE ONLINE / LIBRARY</span><h1>我的歌曲庫</h1></div></div>
-  <div class="header-actions"><a class="page-link" href="/reviews">待確認成績</a><a class="page-link" href="/history">歷史成績</a><a class="page-link" href="/monitor">即時監控</a><span class="local-badge"><i></i> 本機資料庫</span><button id="official-button">匯入官方 CSV</button><input type="file" id="official-file" accept=".csv,text/csv" hidden><button id="scan-button" class="primary">↻ 更新歌曲庫</button></div>
+  <div class="header-actions"><a class="page-link" href="/reviews">待確認成績</a><a class="page-link" href="/history">歷史成績</a><a class="page-link" href="/monitor">即時監控</a><button id="game-button" title="從遊戲直接讀成績與歌單">遊戲資料夾</button><button id="scan-button" class="primary">↻ 更新歌曲庫</button></div>
 </header>
-<div class="library-bar"><div class="library-picker"><label for="root">歌曲庫位置</label><select id="root" aria-label="歌曲庫位置"></select></div><div id="totals" class="totals" aria-live="polite">正在載入歌曲庫…</div></div>
+<div class="library-bar"><div class="library-picker" hidden><label for="root">歌曲庫位置</label><select id="root" aria-label="歌曲庫位置"></select></div><div id="totals" class="totals" aria-live="polite">正在載入歌曲庫…</div></div>
+<div id="game-status" class="game-status" role="status" aria-live="polite" hidden></div>
 <div id="message" class="message" role="status" hidden></div>
 <div id="scan-status" class="scan-status" aria-live="polite" hidden></div>
-<dialog id="official-dialog" aria-labelledby="official-title"><h2 id="official-title">官方歌曲匯入預覽</h2><div id="official-preview"></div><p id="official-error" role="alert" hidden></p><div class="dialog-actions"><button id="official-cancel">取消</button><button id="official-confirm" class="primary">匯入 K 模式</button></div></dialog>
+<dialog id="game-dialog" aria-labelledby="game-title"><h2 id="game-title">遊戲資料夾</h2>
+<p class="game-help">選有 <code>dance.exe</code> 的那一層。設定好之後，每打完一首歌，成績會自動存進來；官方歌與外部歌（含 StepMania／osu 資料夾）的歌單也跟遊戲同步。</p>
+<label class="game-dir-label" for="game-dir">資料夾路徑</label><input id="game-dir" type="text" autocomplete="off" spellcheck="false" placeholder="例如 D:\Dance v2.0.0">
+<label class="game-dir-label" for="game-character">角色（只存這個角色的成績）</label><select id="game-character" disabled><option>先儲存遊戲資料夾</option></select>
+<p id="game-error" class="game-error" role="alert" hidden></p><p id="game-result" class="game-result" role="status" hidden></p>
+<div id="game-detail" class="game-detail"></div>
+<div class="dialog-actions"><button id="game-cancel">關閉</button><button id="game-save" class="primary">儲存並同步</button></div></dialog>
 <main class="workspace">
-  <aside class="packs-panel" aria-label="Pack 瀏覽"><div class="panel-heading"><span class="eyebrow">COLLECTIONS</span><h2>音樂收藏</h2></div><nav id="pack-list" aria-label="Pack 清單"></nav><div class="aside-note">同名歌曲依 Pack 與資料夾分別保存。</div></aside>
+  <aside class="packs-panel" aria-label="Pack 瀏覽"><div class="panel-heading"><span class="eyebrow">COLLECTIONS</span><h2>音樂收藏</h2></div><nav id="pack-list" aria-label="Pack 清單"></nav></aside>
   <section class="songs-panel" aria-label="歌曲清單"><div class="list-heading"><div><span class="eyebrow">SONGS</span><h2 id="list-title">全部歌曲</h2></div><span id="result-count" class="count-pill">—</span></div>
     <div class="search-tools"><label class="search-box"><span aria-hidden="true">⌕</span><input id="search" type="search" autocomplete="off" aria-label="搜尋歌曲名稱" placeholder="搜尋歌名、Pack 或資料夾…"></label><select id="sort" aria-label="歌曲名稱排序"><option value="asc">名稱 A → Z</option><option value="desc">名稱 Z → A</option></select></div>
     <div class="list-hint">歌名 <span>Pack / SongFolder</span></div><div id="song-list" role="list" aria-label="查詢結果"></div>
@@ -24,5 +31,5 @@
   </section>
   <aside class="details-panel" aria-label="歌曲詳細資訊"><div id="details"><div class="empty-details"><span class="record-symbol" aria-hidden="true">◎</span><h2>選擇一首歌曲</h2><p>查看來源資訊，並設定遊戲內的<br>EASY、NORMAL、HARD 難度資料。</p><span class="small-tag">未知 LV 與音符數顯示「未設定」</span></div></div></aside>
 </main>
-<footer class="app-footer"><span id="database-path">連線中</span><span>正式提交後更新燈號 · BEST EX 與最佳燈號分別保存</span></footer>
+<footer class="app-footer"><span id="database-path">連線中</span><span data-motion-slot></span><span>正式提交後更新燈號 · BEST EX 與最佳燈號分別保存</span></footer>
 </body></html>

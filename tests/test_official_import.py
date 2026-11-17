@@ -125,7 +125,8 @@ class OfficialImportTests(unittest.TestCase):
     def test_official_library_scope_max_readonly_and_manual_custom_still_works(self):
         import_catalog(self.path,self.catalog);service=LibraryService(self.path)
         packs=service.packs(self.root_id)
-        self.assertEqual(packs['categories'],{'official':3,'custom':1,'download':1,'unknown':0})
+        # connect (multiplayer downloads) lists as ordinary custom songs.
+        self.assertEqual(packs['categories'],{'official':3,'custom':2,'download':0,'unknown':0})
         self.assertEqual((packs['pack_count'],packs['file_source_count'],packs['official_source_count']),(2,2,3))
         songs=service.songs(self.root_id,query='同名 JOINT☆')['songs'];self.assertEqual(len(songs),4)
         official=next(s for s in songs if s['source_type']=='official')

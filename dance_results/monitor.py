@@ -19,7 +19,9 @@ from .window_capture import Windows, WGCCapture, CaptureError
 from .ocr_failures import FailureCapture
 from .songs import catalog_display_title
 
-PROJECT = Path(__file__).resolve().parent.parent
+from .app_paths import app_home
+
+PROJECT = app_home()
 
 
 class Monitor:

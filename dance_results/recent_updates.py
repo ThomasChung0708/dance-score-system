@@ -2,6 +2,7 @@
 from datetime import datetime
 import json
 from .bests_policy import VERIFIED_EX,EX_POLICY
+from .game_sync import SOURCE as GAME_RESULT_SOURCE
 from .score_comparison import comparison
 from .scoring import percentage_display
 from .note_review import result_time
@@ -35,7 +36,11 @@ def recent_updates(db,limit=30):
         if not qualifies:skipped+=1;continue
         try:
             played=datetime.fromisoformat(r['played_at'].replace('Z','+00:00'))
-            original,source=result_time((e.get('review') or {}).get('locked_session') or {})
+            if e.get('played_at_source')==GAME_RESULT_SOURCE:
+                # From the game's results.jsonl: no OCR review exists; the line's own time is the result time.
+                original,source=(e.get('game_result') or {}).get('at'),'game_result.at'
+            else:
+                original,source=result_time((e.get('review') or {}).get('locked_session') or {})
             if played.tzinfo is None or not original or not source or not e.get('played_at_source'):raise ValueError()
             if played!=datetime.fromisoformat(original.replace('Z','+00:00')):raise ValueError()
         except (ValueError,AttributeError):skipped+=1;continue

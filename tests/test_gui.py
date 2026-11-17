@@ -95,8 +95,11 @@ class GuiServiceTests(unittest.TestCase):
     def test_packs_categories_counts_connect_and_no_inferred_official(self):
         packs=self.service.packs(self.root_id)
         self.assertEqual((packs['pack_count'],packs['song_count'],packs['source_count']),(2,3,3))
-        self.assertEqual(packs['categories'],{'official':0,'custom':2,'download':1,'unknown':0})
+        # Songs downloaded in multiplayer rooms (connect) list as ordinary custom songs; only the pack keeps
+        # its multiplayer_download type, which the OCR monitor uses to follow downloads.
+        self.assertEqual(packs['categories'],{'official':0,'custom':3,'download':0,'unknown':0})
         connect=next(p for p in packs['packs'] if p['name']=='connect')
+        self.assertEqual('multiplayer_download',connect['pack_type'])
         result=self.service.songs(self.root_id,pack_id=connect['pack_id'])
         self.assertEqual(result['total'],1)
         self.assertTrue(result['songs'][0]['relative_folder'].startswith('connect'))

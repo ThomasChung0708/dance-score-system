@@ -1,5 +1,17 @@
 # 熱舞 Online · 個人成績單與成長履歷
 
+## 最簡單的用法：遊戲資料夾模式（不用 OCR、不用安裝 Python）
+
+1. 執行 `DanceScore.exe`（從原始碼產生：雙擊 `BuildExe.cmd`，產物在 `dist\`）。會開啟本機網頁；保持黑色視窗開著。
+2. 按右上「遊戲資料夾」，貼上有 `dance.exe` 的資料夾路徑，按「儲存並同步」。
+3. 在「角色」下拉選單選自己的角色。
+4. 照常打歌。每首打完，成績自動存進來；官方歌、外部歌（含 StepMania／osu 資料夾）的歌單也跟遊戲同步。
+
+需要遊戲版本會寫 `results.jsonl` 成績紀錄。運作方式、讀哪些檔、格式見 [遊戲資料夾模式](docs/GAME_RESULTS.md)。
+以下 OCR 監控與手動流程仍保留，從原始碼執行時可用。
+
+---
+
 朋友在自己的 Windows 電腦首次安裝，請看 [朋友安裝與使用說明](docs/FRIEND_SETUP.md)。
 
 目前版本 **0.15.2 / SQLite Schema 10**。沿用 HTML/CSS/JavaScript、Python、SQLite、增量掃描與 OCR／監控架構。關聯仍為 Pack → Song → GameDifficulty → PlayRecord，同名不同 SongFolder 保持獨立。
@@ -85,7 +97,9 @@ python -m dance_results.gui
 
 ## 官方 K 模式歌曲匯入
 
-啟動 `LibraryGUI.cmd` 後，按 **「匯入官方 CSV」**，選擇 `song_table.csv`。預覽 K 筆數、排除數量、新增歌曲／難度及來源衝突，再按「匯入 K 模式」。同一份資料重複匯入新增為 0，來源內容或已存難度不同則整批停止，不覆寫既有資料。
+> 網頁上的「匯入官方 CSV」按鈕已移除：設定遊戲資料夾後，官方歌會自動跟著遊戲的 `song_table.csv` 更新（見 [遊戲資料夾模式](docs/GAME_RESULTS.md)）。下面的命令列匯入仍可使用。
+
+原本的手動匯入：預覽 K 筆數、排除數量、新增歌曲／難度及來源衝突，再正式匯入。同一份資料重複匯入新增為 0，來源內容或已存難度不同則整批停止，不覆寫既有資料。
 
 也能獨立使用 CLI，不需要 OCR、時間欄位、自製歌曲掃描或 GUI：
 

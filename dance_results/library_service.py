@@ -32,6 +32,14 @@ def integer(value,name,minimum=0):
     return value
 
 
+def root_label(path):
+    """Short name of a song location: '' for the game's own DATA/ADDON/SONG, else e.g. 'StepMania3.9' or 'osu!'."""
+    parts=[p for p in str(path or '').replace('\\','/').split('/') if p]
+    if not parts or parts[0].startswith('official:'):return ''
+    if len(parts)>=2 and parts[-2].lower()=='addon' and parts[-1].lower()=='song':return ''
+    return parts[-2] if parts[-1].lower()=='songs' and len(parts)>=2 else parts[-1]
+
+
 class LibraryService:
     def __init__(self,path):
         self.path=Path(path).expanduser().resolve()
@@ -61,28 +69,34 @@ class LibraryService:
                      for p in (self.path,Path(str(self.path)+'-wal')))
 
     def _catalog(self,root_id):
+        # root_id None = every song location together (official, ADDON\SONG, StepMania, osu...).
         stamp=self._stamp()
         with self._cache_lock:
             if root_id in self._cache and self._cache[root_id][0]==stamp:
                 return self._cache[root_id][1]
         with self.open() as library:
-            db=library.connection;self._root(db,root_id)
+            db=library.connection
+            if root_id is not None:self._root(db,root_id)
+            scope="(s.root_id=? OR r.root_kind='official_catalog')" if root_id is not None else '1'
+            args=(root_id,) if root_id is not None else ()
             rows=[dict(r) for r in db.execute(
                 'SELECT s.song_id,s.root_id,s.pack_id,s.relative_folder,s.folder_name,s.saved_title,s.latest_title,s.payload_json,s.latest_status,s.is_present,s.source_type,p.name AS pack_name,p.pack_type,o.file_id,o.gn '
                 'FROM songs s JOIN library_roots r ON r.root_id=s.root_id LEFT JOIN packs p ON p.pack_id=s.pack_id '
-                "LEFT JOIN official_song_sources o ON o.song_id=s.song_id WHERE s.root_id=? OR r.root_kind='official_catalog'",(root_id,))]
+                'LEFT JOIN official_song_sources o ON o.song_id=s.song_id WHERE '+scope,args)]
             extra={r['song_id']:[] for r in rows}
-            for r in db.execute("SELECT f.song_id,f.saved_title,f.saved_subtitle,json_extract(f.payload_json,'$.title_fields') AS fields FROM song_sources f JOIN songs s ON s.song_id=f.song_id WHERE s.root_id=?",(root_id,)):
+            for r in db.execute("SELECT f.song_id,f.saved_title,f.saved_subtitle,json_extract(f.payload_json,'$.title_fields') AS fields FROM song_sources f JOIN songs s ON s.song_id=f.song_id WHERE "+('s.root_id=?' if root_id is not None else '1'),args):
                 extra[r['song_id']].extend(v for v in (r['saved_title'],r['saved_subtitle']) if v)
                 for values in json.loads(r['fields'] or '{}').values():extra[r['song_id']].extend(values)
-            for r in db.execute("SELECT a.song_id,a.display_title FROM song_title_aliases a JOIN songs s ON s.song_id=a.song_id JOIN library_roots r ON r.root_id=s.root_id WHERE s.root_id=? OR r.root_kind='official_catalog'",(root_id,)):
+            for r in db.execute('SELECT a.song_id,a.display_title FROM song_title_aliases a JOIN songs s ON s.song_id=a.song_id JOIN library_roots r ON r.root_id=s.root_id WHERE '+scope,args):
                 extra[r['song_id']].append(r['display_title'])
             for r in rows:
                 r['display_title'] = catalog_display_title(db, r)
                 r.pop('payload_json')
         for r in rows:
             r['display_is_saved']=bool(r['saved_title'] and r['saved_title']!=r['latest_title'])
-            r['category']='download' if r['pack_type']=='multiplayer_download' else r['source_type']
+            # Downloads from multiplayer rooms (connect) are ordinary custom songs in the list; the pack
+            # type stays in the database for the OCR monitor, which still tracks those downloads.
+            r['category']=r['source_type']
             r['_search']=folded('\n'.join([r['display_title'],r['relative_folder'],r['pack_name'] or '',r['file_id'] or '',r['gn'] or '',*extra[r['song_id']]]))
             r['_sort']=(folded(r['display_title']),r['song_id'])
         with self._cache_lock:self._cache[root_id]=(stamp,rows)
@@ -92,8 +106,14 @@ class LibraryService:
         rows=self._catalog(root_id)
         categories={key:sum(r['category']==key for r in rows) for key in ('official','custom','download','unknown')}
         with self.open() as library:
-            packs=[dict(r) for r in library.connection.execute('SELECT pack_id,name,pack_type,relative_path FROM packs WHERE root_id=? ORDER BY name COLLATE NOCASE,pack_id',(root_id,))]
-            source_count=library.connection.execute('SELECT count(*) FROM song_sources f JOIN songs s ON s.song_id=f.song_id WHERE s.root_id=?',(root_id,)).fetchone()[0]
+            if root_id is None:
+                # Packs of every location; the location name tells same-named packs apart.
+                packs=[dict(r) for r in library.connection.execute('SELECT p.pack_id,p.name,p.pack_type,p.relative_path,p.root_id,r.path AS root_path FROM packs p JOIN library_roots r ON r.root_id=p.root_id ORDER BY p.root_id,p.name COLLATE NOCASE,p.pack_id')]
+                for p in packs:p['root_label']=root_label(p.pop('root_path'))
+                source_count=library.connection.execute('SELECT count(*) FROM song_sources').fetchone()[0]
+            else:
+                packs=[dict(r) for r in library.connection.execute('SELECT pack_id,name,pack_type,relative_path FROM packs WHERE root_id=? ORDER BY name COLLATE NOCASE,pack_id',(root_id,))]
+                source_count=library.connection.execute('SELECT count(*) FROM song_sources f JOIN songs s ON s.song_id=f.song_id WHERE s.root_id=?',(root_id,)).fetchone()[0]
             official_count=library.connection.execute('SELECT count(*) FROM official_song_sources').fetchone()[0]
         for p in packs:
             songs=[r for r in rows if r['pack_id']==p['pack_id']]
@@ -120,10 +140,11 @@ class LibraryService:
         return {'total':len(rows),'offset':offset,'limit':limit,'songs':page}
 
     def _song(self,db,root_id,song_id):
-        self._root(db,root_id);integer(song_id,'Song ID',1)
+        if root_id is not None:self._root(db,root_id)
+        integer(song_id,'Song ID',1)
         row=db.execute('SELECT s.*,p.name AS pack_name,p.pack_type,r.path AS root_path FROM songs s '
                        'JOIN library_roots r ON r.root_id=s.root_id LEFT JOIN packs p ON p.pack_id=s.pack_id '
-                       "WHERE s.song_id=? AND (s.root_id=? OR r.root_kind='official_catalog')",(song_id,root_id)).fetchone()
+                       "WHERE s.song_id=? AND (? IS NULL OR s.root_id=? OR r.root_kind='official_catalog')",(song_id,root_id,root_id)).fetchone()
         if row is None:raise LibraryError('找不到此歌曲，請重新選取。',404)
         return row
 

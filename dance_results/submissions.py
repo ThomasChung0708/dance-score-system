@@ -373,7 +373,10 @@ class SubmissionService:
         with self.library.open() as library:return self._record(library.connection,record_id)
 
     def image(self,record_id):
-        record=self.detail(record_id);path=Path(record['screenshot_path'] or '')
+        record=self.detail(record_id)
+        if str(record.get('review_id') or '').startswith('game-log:'):
+            raise LibraryError('這筆成績來自遊戲的成績紀錄檔（results.jsonl），沒有結算截圖。',404)
+        path=Path(record['screenshot_path'] or '')
         allowed=(self.reviews.directory/'sessions').resolve()
         if not path.is_absolute() or not path.resolve().is_relative_to(allowed) or path.is_symlink() or path.parent.is_symlink():
             raise LibraryError('結算原圖目前不在已登錄的監控目錄。',404)

@@ -12,7 +12,9 @@ from .report import write_report
 from .scanner import scan_library
 
 DEFAULT_ROOT = r"D:\Dance v1.9.0-dev-be622\DATA\ADDON\SONG"
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+from .app_paths import app_home
+
+PROJECT_ROOT = app_home()
 
 
 def choose_directory(initial: str) -> str | None:

@@ -1,0 +1,2 @@
+# Only for building DanceScore.exe (BuildExe.cmd). The exe itself needs no Python.
+pyinstaller==6.22.3

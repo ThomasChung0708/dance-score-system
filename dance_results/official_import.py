@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
+from .app_paths import default_database
 from .database import APPLICATION_ID, LibraryDatabase, json_text
 from .models import GAME_DIFFICULTIES
 from .sqlite_safety import audit, row_limits, check_integrity, verified_backup
@@ -23,7 +24,7 @@ CATALOG_KEY='dance_online_official_keyboard'
 CATALOG_ROOT='official://dance_online/K'
 MAX_CSV_BYTES=4*1024*1024
 REQUIRED=('fileId','title','artist','bpm','mode','gn','lvEasy','notesEasy','lvNormal','notesNormal','lvHard','notesHard')
-DEFAULT_DATABASE=Path(__file__).resolve().parent.parent/'data/library.sqlite3'
+DEFAULT_DATABASE=default_database()
 
 
 @dataclass
