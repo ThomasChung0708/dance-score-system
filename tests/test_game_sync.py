@@ -431,6 +431,66 @@ class CharacterChoiceTests(unittest.TestCase):
             self.fixture.sync.configure(str(self.fixture.game), 'accounts/acc/nobody')
 
 
+class CombinedLibraryTests(unittest.TestCase):
+    """The song list shows every location together (official, ADDON\\SONG, StepMania, osu...)."""
+
+    def test_root_labels(self):
+        from dance_results.library_service import root_label
+        self.assertEqual('', root_label('D:\\Dance v2.0.0\\DATA\\ADDON\\SONG'))
+        self.assertEqual('StepMania3.9', root_label('D:\\program\\StepMania3.9\\Songs'))
+        self.assertEqual('osu!', root_label('C:\\Users\\u\\AppData\\Local\\osu!\\Songs'))
+        self.assertEqual('MySongs', root_label('E:\\MySongs'))
+        self.assertEqual('', root_label('official://dance_online/K'))
+
+    def test_every_location_in_one_list(self):
+        from dance_results.library_service import LibraryService
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = GameFixture(Path(temp))
+            second = Path(temp) / 'osu!' / 'Songs'
+            (fixture.data / 'CACHE' / 'external_song_cache.json').write_bytes(cache_bytes(
+                [str(fixture.songs_root), str(second)],
+                [(0, '\\Pack\\Song', 'Pack', [{'key': '', 'title': '甲', 'artist': '', 'pack_id': 'a', 'charts': [(2, 5, 100)]}]),
+                 (1, '\\Set\\Map', 'Set', [{'key': '', 'title': '乙', 'artist': '', 'pack_id': 'b', 'format': 1, 'charts': [(2, 6, 120)]}])]))
+            fixture.sync.run_once()
+            service = LibraryService(fixture.database)
+            packs = service.packs(None)
+            self.assertEqual(3, packs['song_count'])  # 1 official + 2 external from two locations
+            # <x>\Songs is named after its parent folder, like StepMania3.9\Songs and osu!\Songs.
+            self.assertEqual({('Pack', Path(temp).name), ('Set', 'osu!')}, {(p['name'], p['root_label']) for p in packs['packs']})
+            songs = service.songs(None)['songs']
+            self.assertEqual({'Silly-Go-Round', '甲', '乙'}, {s['display_title'] for s in songs})
+            external = next(s for s in songs if s['display_title'] == '乙')
+            self.assertEqual('乙', service.detail(None, external['song_id'])['latest_title'])
+            root_ids = {s['root_id'] for s in songs if s['source_type'] == 'custom'}
+            self.assertEqual(2, len(root_ids))
+            for root_id in root_ids:  # asking for one location still works as before
+                self.assertEqual(2, service.packs(root_id)['song_count'])
+
+
+class DownloadFolderTests(unittest.TestCase):
+    def test_only_the_game_song_folder_connect_holds_multiplayer_downloads(self):
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = GameFixture(Path(temp))
+            other = Path(temp) / 'StepMania' / 'Songs'
+            song = {'key': '', 'title': '曲', 'artist': '', 'pack_id': 'x', 'charts': [(2, 5, 100)]}
+            (fixture.data / 'CACHE' / 'external_song_cache.json').write_bytes(cache_bytes(
+                [str(fixture.songs_root), str(other)],
+                [(0, '\\connect\\Downloaded', 'connect', [song]), (1, '\\connect\\Just A Pack', 'connect', [song])]))
+            # A library from before this rule: every 'connect' was typed as downloads.
+            fixture.sync.run_once()
+            with fixture.db() as db:
+                db.execute("UPDATE packs SET pack_type='multiplayer_download'")
+                db.commit()
+            state = json.loads(fixture.sync.state_path.read_text(encoding='utf-8'))
+            state['catalog']['version'] = 1
+            fixture.sync.state_path.write_text(json.dumps(state), encoding='utf-8')
+            fixture.sync.run_once()
+            with fixture.db() as db:
+                types = {r['path']: r['pack_type'] for r in db.execute(
+                    'SELECT r.path,p.pack_type FROM packs p JOIN library_roots r USING(root_id)')}
+        self.assertEqual({str(fixture.songs_root): 'multiplayer_download', str(other): 'normal'}, types)
+
+
 class LineParsingTests(unittest.TestCase):
     def test_rejects_unknown_versions_and_missing_numbers(self):
         for line, reason in ((dict(official_line(), v=2), '版本'), (dict(official_line(), perfect=-1), 'perfect'),

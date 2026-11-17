@@ -1,7 +1,7 @@
 'use strict';
 const $=id=>document.getElementById(id);
 const sessionToken=document.querySelector('meta[name="dance-token"]').content;
-const state={rootId:null,packId:null,category:'all',label:'全部歌曲',query:'',order:'asc',offset:0,total:0,limit:60,selectedId:null,song:null,packs:null,scanning:false,importing:false,canScan:false};
+const state={rootId:null,scanRootId:null,locationId:null,openLocations:new Set(),packId:null,category:'all',label:'全部歌曲',query:'',order:'asc',offset:0,total:0,limit:60,selectedId:null,song:null,packs:null,scanning:false,importing:false,canScan:false};
 let listRequest=null,detailRequest=null,searchTimer=null,scanTimer=null;
 let officialUpload=null,progressRefreshing=false,lastProgressRefresh=0,databasePath='';
 const EMPTY_LIBRARY='歌曲庫目前是空的：遊戲資料夾設定好之後，官方歌與外部歌會自動匯入（也可以按「匯入官方 CSV」）。';
@@ -18,11 +18,34 @@ function dirty(){return [...document.querySelectorAll('.difficulty-card')].some(
 function mayLeave(){return !dirty()||window.confirm('尚有未儲存的難度資料。要放棄這些變更嗎？');}
 function clearDetail(){if(detailRequest)detailRequest.abort();state.selectedId=null;state.song=null;$('details').replaceChildren(emptyDetail());}
 function emptyDetail(){const e=node('div','empty-details');e.append(node('span','record-symbol','◎'),node('h2','','選擇一首歌曲'),node('p','','查看來源資訊，並設定遊戲內的 EASY、NORMAL、HARD。'),node('span','small-tag','未知 LV 與音符數顯示「未設定」'));return e;}
-function collectionButton(label,count,packId,category,icon){
-  const b=node('button','pack-button');b.type='button';const selected=state.packId===packId&&state.category===category;
+function collectionButton(label,count,packId,category,icon,locationId=null){
+  const b=node('button','pack-button');b.type='button';const selected=state.packId===packId&&state.category===category&&state.locationId===locationId;
   b.classList.toggle('selected',selected);b.setAttribute('aria-pressed',String(selected));b.title=label;
   b.append(node('span','pack-icon',icon),node('span','pack-name',label),node('span','pack-count',count.toLocaleString()));
-  b.addEventListener('click',()=>{if(!mayLeave())return;clearDetail();state.packId=packId;state.category=category;state.label=label;state.offset=0;renderPacks();loadSongs().catch(reportError);});return b;
+  b.addEventListener('click',()=>{if(!mayLeave())return;clearDetail();state.packId=packId;state.category=category;state.locationId=locationId;state.label=label;state.offset=0;renderPacks();loadSongs().catch(reportError);});return b;
+}
+function packLabel(pack){return pack.root_label?pack.root_label+'／'+pack.name:pack.name;}
+// 自製歌曲 can hold hundreds of packs from several song folders: one collapsible group per folder.
+function groupByLocation(packs,key){
+  const groups=new Map();
+  for(const pack of packs){
+    if(pack.root_id===undefined)return [];
+    if(!groups.has(pack.root_id))groups.set(pack.root_id,{rootId:pack.root_id,label:pack.root_label||'遊戲 ADDON',packs:[],count:0});
+    const group=groups.get(pack.root_id);group.packs.push(pack);group.count+=pack.categories[key];
+  }
+  return [...groups.values()];
+}
+function appendLocation(section,location,key,icon){
+  const open=state.openLocations.has(location.rootId);
+  const row=node('div','location-row');
+  const toggle=node('button','location-toggle',open?'▾':'▸');toggle.type='button';
+  toggle.setAttribute('aria-expanded',String(open));toggle.setAttribute('aria-label',(open?'收合 ':'展開 ')+location.label);
+  toggle.addEventListener('click',()=>{if(open)state.openLocations.delete(location.rootId);else state.openLocations.add(location.rootId);renderPacks();});
+  row.append(toggle,collectionButton(location.label,location.count,null,key,'▤',location.rootId));section.append(row);
+  if(!open)return;
+  const list=node('div','location-packs');
+  for(const pack of location.packs)list.append(collectionButton(pack.name,pack.categories[key],pack.pack_id,key,icon));
+  section.append(list);
 }
 function renderPacks(){
   const data=state.packs;if(!data)return;const nav=$('pack-list');nav.replaceChildren(collectionButton('全部歌曲',data.song_count,null,'all','▦'),collectionButton('Recent Update','最新30',null,'recent','✦'));
@@ -30,21 +53,24 @@ function renderPacks(){
     if(key==='unknown'&&!data.categories.unknown)continue;
     const section=node('div','pack-group');section.append(collectionButton(label,data.categories[key],null,key,icon));
     const packs=data.packs.filter(p=>key==='download'?p.pack_type==='multiplayer_download':p.categories[key]>0);
-    for(const pack of packs)section.append(collectionButton(pack.name,pack.categories[key],pack.pack_id,key,icon));
+    const repeatsGroup=packs.length===1&&packs[0].categories[key]===data.categories[key];
+    const locations=repeatsGroup?[]:groupByLocation(packs,key);
+    if(locations.length>1)for(const location of locations)appendLocation(section,location,key,icon);
+    else if(!repeatsGroup)for(const pack of packs)section.append(collectionButton(packLabel(pack),pack.categories[key],pack.pack_id,key,icon));
     if(!packs.length)section.append(node('p','empty-category',key==='official'?(data.categories.official?'熱舞官方譜面':'尚未匯入官方歌曲'):'目前沒有歌曲'));
     nav.append(section);
   }
   // Empty Packs must remain visible, even without songs in any category.
   const empty=data.packs.filter(p=>!p.song_count&&p.pack_type!=='multiplayer_download');
-  if(empty.length){const section=node('div','pack-group');section.append(node('div','group-heading','空的 Pack'));for(const p of empty)section.append(collectionButton(p.name,0,p.pack_id,'all','▱'));nav.append(section);}
+  if(empty.length){const section=node('div','pack-group');section.append(node('div','group-heading','空的 Pack'));for(const p of empty)section.append(collectionButton(packLabel(p),0,p.pack_id,'all','▱'));nav.append(section);}
   $('totals').replaceChildren(node('strong','',data.pack_count.toLocaleString()),document.createTextNode(' Packs'),node('strong','',data.song_count.toLocaleString()),document.createTextNode(' Songs'),node('strong','',data.source_count.toLocaleString()),document.createTextNode(' Sources'));
 }
-async function loadPacks(){const rootId=state.rootId;const data=await api('/api/packs?root_id='+rootId);if(rootId!==state.rootId)return;state.packs=data;renderPacks();}
+async function loadPacks(){const rootId=state.rootId;const data=await api('/api/packs'+(rootId?'?root_id='+rootId:''));if(rootId!==state.rootId)return;state.packs=data;renderPacks();}
 async function loadSongs(){
   if(state.category==='recent')return loadRecent();
   if(listRequest)listRequest.abort();const request=new AbortController();listRequest=request;
   $('search').disabled=false;$('sort').disabled=false;$('list-title').textContent=state.label;$('song-list').setAttribute('aria-busy','true');if(!$('song-list').children.length)$('song-list').replaceChildren(node('p','list-empty','正在查詢歌曲…'));
-  const params=new URLSearchParams({root_id:state.rootId,q:state.query,category:state.category,order:state.order,offset:state.offset,limit:state.limit});
+  const params=new URLSearchParams({q:state.query,category:state.category,order:state.order,offset:state.offset,limit:state.limit});const scope=state.locationId||state.rootId;if(scope)params.set('root_id',scope);
   if(state.packId!==null)params.set('pack_id',state.packId);
   try{
     const data=await api('/api/songs?'+params,undefined,request.signal);if(listRequest!==request)return;
@@ -98,7 +124,7 @@ function difficultyCard(song,data){
       const body={root_id:song.root_id,song_id:song.song_id,song_folder:song.relative_folder,difficulty:data.difficulty,exists:exists.checked,game_level:nullableNumber(form.elements.level),total_notes:nullableNumber(form.elements.notes),token:data.token};
       form.dataset.saving='true';error.hidden=true;refreshCard(form);
       const saved=await api('/api/difficulty',body);
-      if(state.selectedId===song.song_id&&state.rootId===song.root_id&&form.isConnected){
+      if(state.selectedId===song.song_id&&(state.rootId===null||state.rootId===song.root_id)&&form.isConnected){
         state.song.difficulties=state.song.difficulties.map(d=>d.difficulty===saved.difficulty?saved:d);form.replaceWith(difficultyCard(song,saved));const p=state.song.progress?.find(p=>p.difficulty===saved.difficulty);if(p){Object.assign(p,{difficulty_id:saved.difficulty_id,game_level:saved.game_level,total_notes:saved.total_notes,notes_verified:saved.notes_verified});const card=$('details').querySelector('.song-result-panel .chart-progress[data-difficulty='+saved.difficulty+']');if(card){const replacement=DanceFX.chartProgress(p,{songId:song.song_id});replacement.hidden=card.hidden;card.replaceWith(replacement);}}
       }
       message('已儲存 '+data.difficulty+' · Song ID '+song.song_id+' · '+song.relative_folder,'success');
@@ -147,7 +173,7 @@ async function selectSong(id,force=false,update=null){
   if(detailRequest)detailRequest.abort();const request=new AbortController();detailRequest=request;
   const same=id===state.selectedId;state.selectedId=id;state.song=null;const rootId=state.rootId;if(!same)$('details').replaceChildren(node('p','list-empty','載入歌曲資訊…'));else $('details').classList.add('refreshing');
   for(const row of document.querySelectorAll('.song-row'))row.classList.toggle('selected',Number(row.dataset.songId)===id);
-  try{const song=await api('/api/songs/'+id+'?root_id='+rootId,undefined,request.signal);if(state.selectedId!==id||state.rootId!==rootId)return;state.song=song;renderDetail(song,update);$('details').classList.remove('refreshing');}
+  try{const song=await api('/api/songs/'+id+(rootId?'?root_id='+rootId:''),undefined,request.signal);if(state.selectedId!==id||state.rootId!==rootId)return;state.song=song;renderDetail(song,update);$('details').classList.remove('refreshing');}
   catch(error){$('details').classList.remove('refreshing');if(error.name!=='AbortError'&&state.selectedId===id){$('details').replaceChildren(node('p','list-empty',error.message));throw error;}}
 }
 function setScanning(value){state.scanning=value;$('scan-button').disabled=value||state.importing||!state.canScan;$('scan-button').textContent=value?'↻ 更新中…':'↻ 更新歌曲庫';$('official-button').disabled=value||state.importing;for(const form of document.querySelectorAll('.difficulty-card'))refreshCard(form);}
@@ -155,7 +181,8 @@ function setImporting(value){state.importing=value;$('official-button').disabled
 function setupRoots(roots){
   const current=roots.find(r=>r.root_id===state.rootId)||roots[0];$('root').replaceChildren();
   for(const root of roots){const option=node('option','',root.root_kind==='official_catalog'?'熱舞官方譜面':root.path);option.value=String(root.root_id);option.dataset.kind=root.root_kind;$('root').append(option);}
-  state.rootId=current?current.root_id:null;state.canScan=!!current&&current.root_kind==='filesystem';if(current)$('root').value=String(current.root_id);setScanning(state.scanning);
+  const scanRoot=roots.find(r=>r.root_kind==='filesystem');
+  state.rootId=null;state.scanRootId=scanRoot?scanRoot.root_id:null;state.canScan=!!scanRoot;if(current)$('root').value=String(current.root_id);setScanning(state.scanning);
 }
 async function pollScan(){
   const status=await api('/api/scan'),box=$('scan-status');
@@ -170,7 +197,12 @@ $('sort').addEventListener('change',()=>{state.order=$('sort').value;state.offse
 $('previous').addEventListener('click',()=>{state.offset=Math.max(0,state.offset-state.limit);loadSongs().catch(reportError);});
 $('next').addEventListener('click',()=>{state.offset+=state.limit;loadSongs().catch(reportError);});
 $('root').addEventListener('change',()=>{if(!mayLeave()){$('root').value=String(state.rootId);return;}clearDetail();state.rootId=Number($('root').value);state.canScan=$('root').selectedOptions[0].dataset.kind==='filesystem';setScanning(state.scanning);state.packId=null;state.category='all';state.label='全部歌曲';state.offset=0;Promise.all([loadPacks(),loadSongs()]).catch(reportError);});
-$('scan-button').addEventListener('click',async()=>{if(!mayLeave())return;try{message('');setScanning(true);await api('/api/scan',{root_id:state.rootId});await pollScan();}catch(error){setScanning(false);reportError(error);}});
+$('scan-button').addEventListener('click',async()=>{if(!mayLeave())return;try{message('');setScanning(true);
+  const game=await api('/api/game');
+  if(game.game_dir){const status=await api('/api/game/sync',{});const run=status.last_run||{};await reloadLibrary();setScanning(false);
+    if(status.state==='error')message('從遊戲同步失敗：'+(status.last_error||''),'error');
+    else message('已從遊戲同步 · '+(run.imported?'新增 '+run.imported+' 筆成績':'沒有新成績')+(run.catalog_changed?' · 歌單已更新':' · 歌單沒有變動'),'success');return;}
+  await api('/api/scan',{root_id:state.scanRootId});await pollScan();}catch(error){setScanning(false);reportError(error);}});
 window.addEventListener('beforeunload',event=>{if(dirty()){event.preventDefault();event.returnValue='';}});
 $('official-button').addEventListener('click',()=>{if(mayLeave()){$('official-file').value='';$('official-file').click();}});
 $('official-file').addEventListener('change',async()=>{
@@ -202,7 +234,6 @@ $('official-confirm').addEventListener('click',async()=>{
 async function start(){
   const bootstrap=await api('/api/bootstrap');databasePath=bootstrap.database;$('database-path').textContent=bootstrap.database;$('database-path').title=bootstrap.database;
   setupRoots(bootstrap.roots);
-  const requestedRoot=Number(new URLSearchParams(location.search).get('root_id'));if(bootstrap.roots.some(r=>r.root_id===requestedRoot)){state.rootId=requestedRoot;$('root').value=String(requestedRoot);}
   if(!bootstrap.roots.length){$('totals').textContent='歌曲庫是空的';message(EMPTY_LIBRARY);return;}
   await Promise.all([loadPacks(),loadSongs()]);
   const requested=Number(new URLSearchParams(location.search).get('song_id'));if(Number.isSafeInteger(requested)&&requested>0)await selectSong(requested);
@@ -218,7 +249,7 @@ async function reloadLibrary(){
 document.addEventListener('game-catalog-updated',()=>{if(!state.scanning&&!state.importing)reloadLibrary().catch(reportError);});
 document.addEventListener('game-results-imported',()=>refreshProgress());
 
-async function refreshProgress(update){if(!state.rootId||progressRefreshing||state.scanning||state.importing)return;if(update&&update.database&&update.database!==databasePath)return;progressRefreshing=true;try{const scroll=$('song-list').scrollTop;await loadSongs();$('song-list').scrollTop=scroll;if(state.selectedId){if(!dirty())await selectSong(state.selectedId,true,update);else{const id=state.selectedId,root=state.rootId;const fresh=await api('/api/songs/'+id+'?root_id='+root);if(id===state.selectedId&&root===state.rootId&&state.song){state.song.progress=fresh.progress;const panel=$('details').querySelector('.song-result-panel');if(panel)panel.replaceWith(buildProgressPanel(fresh,update));}}}lastProgressRefresh=Date.now();}catch(e){reportError(e);}finally{progressRefreshing=false;}}
+async function refreshProgress(update){if(!state.packs||progressRefreshing||state.scanning||state.importing)return;if(update&&update.database&&update.database!==databasePath)return;progressRefreshing=true;try{const scroll=$('song-list').scrollTop;await loadSongs();$('song-list').scrollTop=scroll;if(state.selectedId){if(!dirty())await selectSong(state.selectedId,true,update);else{const id=state.selectedId,root=state.rootId;const fresh=await api('/api/songs/'+id+'?root_id='+root);if(id===state.selectedId&&root===state.rootId&&state.song){state.song.progress=fresh.progress;const panel=$('details').querySelector('.song-result-panel');if(panel)panel.replaceWith(buildProgressPanel(fresh,update));}}}lastProgressRefresh=Date.now();}catch(e){reportError(e);}finally{progressRefreshing=false;}}
 window.addEventListener('storage',e=>{if(e.key==='dance-record-update'&&e.newValue){try{refreshProgress(JSON.parse(e.newValue));}catch(_e){}}});
 window.addEventListener('dance-record-update',e=>refreshProgress(e.detail));
 window.addEventListener('focus',()=>{if(Date.now()-lastProgressRefresh>15000)refreshProgress();});

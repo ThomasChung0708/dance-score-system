@@ -40,6 +40,8 @@ RESULT_VERSIONS = (1,)
 DIFFICULTY_LABELS = {'easy': 'EASY', 'normal': 'NORMAL', 'hard': 'HARD'}
 SLOT_LABELS = ('EASY', 'NORMAL', 'HARD')
 MAX_POLICY = 'game-chart-judged-v1'
+# Bump when sync_official/sync_external change what they write: every library re-syncs once.
+CATALOG_SYNC_VERSION = 2
 SOURCE = 'game_results_log'
 REVIEW_PREFIX = 'game-log:'
 SESSION_PREFIX = 'game-'
@@ -87,14 +89,16 @@ def _ensure_root(db, root: str, kind: str = 'filesystem') -> int:
     return row['root_id']
 
 
-def _ensure_pack(db, root_id: int, group: str) -> int | None:
+def _ensure_pack(db, root_id: int, group: str, *, game_song_root: bool = False) -> int | None:
+    """game_song_root: this is the game's own SONG folder, whose 'connect' receives multiplayer downloads
+    (NetSongFetcher.DefaultGroup). A 'connect' pack anywhere else is just a pack with that name."""
     if not group:
         return None
     key = path_key(Path(group))
-    pack_type = 'multiplayer_download' if key == 'connect' else 'normal'
+    pack_type = 'multiplayer_download' if key == 'connect' and game_song_root else 'normal'
     db.execute(
         'INSERT INTO packs(root_id,relative_path,path_key,name,pack_type) VALUES(?,?,?,?,?) '
-        'ON CONFLICT(root_id,path_key) DO NOTHING',
+        'ON CONFLICT(root_id,path_key) DO UPDATE SET pack_type=excluded.pack_type',
         (root_id, group, key, group, pack_type),
     )
     return db.execute('SELECT pack_id FROM packs WHERE root_id=? AND path_key=?', (root_id, key)).fetchone()[0]
@@ -221,6 +225,8 @@ def sync_external(db, cache: song_cache.SongCache) -> dict:
     """Every external song the game lists, one row per (folder, song key)."""
     stats = {'external_added': 0, 'external_updated': 0, 'external_difficulties_changed': 0}
     root_ids = {root: _ensure_root(db, root) for root in cache.roots}
+    # The game lists its own DATA/ADDON/SONG first (ExternalSongLibrary.Roots), then the extra folders.
+    game_song_root = cache.roots[0] if cache.roots else None
     packs: dict[tuple[int, str], int | None] = {}
     known: dict[int, dict[str, object]] = {}
     for root_id in set(root_ids.values()):
@@ -234,7 +240,7 @@ def sync_external(db, cache: song_cache.SongCache) -> dict:
             continue
         group = song.group or Path(song.relative_folder).parts[0]
         if (root_id, group) not in packs:
-            packs[(root_id, group)] = _ensure_pack(db, root_id, group)
+            packs[(root_id, group)] = _ensure_pack(db, root_id, group, game_song_root=song.root == game_song_root)
         details = {'pack_id': song.pack_id, 'song_key': song.song_key, 'format': song.format, 'file_id': song.file_id}
         key = song_folder_key(song.relative_folder, song.song_key)
         row = known[root_id].get(key)
@@ -366,8 +372,14 @@ class _Resolver:
         root_id, relative = location
         group = Path(relative).parts[0] if Path(relative).parts else ''
         details = {'pack_id': pack_id, 'song_key': song_key, 'format': song.get('format'), 'from_result_line': True}
+        root_path = self.db.execute('SELECT path FROM library_roots WHERE root_id=?', (root_id,)).fetchone()['path']
+        cache = self.cache()
+        if cache is not None and cache.roots:
+            game_root = path_key(Path(root_path)) == path_key(Path(cache.roots[0]))
+        else:
+            game_root = [p.lower() for p in Path(root_path).parts[-2:]] == ['addon', 'song']
         return _insert_custom_song(
-            self.db, root_id, _ensure_pack(self.db, root_id, group), relative, song_key, group,
+            self.db, root_id, _ensure_pack(self.db, root_id, group, game_song_root=game_root), relative, song_key, group,
             str(song.get('title') or ''), str(song.get('artist') or ''), song.get('format'), details,
         )
 
@@ -747,7 +759,8 @@ class GameSync:
 
     def _sync_catalog(self, folder: GameFolder, state: dict) -> dict | None:
         stamps = {'song_table': _stamp(folder.song_table), 'song_cache': _stamp(folder.song_cache)}
-        if stamps == state['catalog'].get('stamps') and state['catalog'].get('stats'):
+        if (stamps == state['catalog'].get('stamps') and state['catalog'].get('stats')
+                and state['catalog'].get('version') == CATALOG_SYNC_VERSION):
             return None
         stats = {}
         with self._write() as db:
@@ -760,7 +773,7 @@ class GameSync:
             else:
                 stats['cache_missing'] = str(folder.song_cache)
         stats['synced_at'] = utc_now()
-        state['catalog'] = {'stamps': stamps, 'stats': stats}
+        state['catalog'] = {'stamps': stamps, 'stats': stats, 'version': CATALOG_SYNC_VERSION}
         return stats
 
     def _sync_results(self, folder: GameFolder, state: dict):
