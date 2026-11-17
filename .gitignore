@@ -20,3 +20,7 @@ captures/
 *.sqlite
 *.sqlite-*
 *.log
+
+# Packaged exe (BuildExe.cmd)
+build/
+dist/

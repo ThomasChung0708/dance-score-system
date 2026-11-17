@@ -1,5 +1,17 @@
 # 熱舞 Online · 個人成績單與成長履歷
 
+## 最簡單的用法：遊戲資料夾模式（不用 OCR、不用安裝 Python）
+
+1. 執行 `DanceScore.exe`（從原始碼產生：雙擊 `BuildExe.cmd`，產物在 `dist\`）。會開啟本機網頁；保持黑色視窗開著。
+2. 按右上「遊戲資料夾」，貼上有 `dance.exe` 的資料夾路徑，按「儲存並同步」。
+3. 在「角色」下拉選單選自己的角色。
+4. 照常打歌。每首打完，成績自動存進來；官方歌、外部歌（含 StepMania／osu 資料夾）的歌單也跟遊戲同步。
+
+需要遊戲版本會寫 `results.jsonl` 成績紀錄。運作方式、讀哪些檔、格式見 [遊戲資料夾模式](docs/GAME_RESULTS.md)。
+以下 OCR 監控與手動流程仍保留，從原始碼執行時可用。
+
+---
+
 朋友在自己的 Windows 電腦首次安裝，請看 [朋友安裝與使用說明](docs/FRIEND_SETUP.md)。
 
 目前版本 **0.15.2 / SQLite Schema 10**。沿用 HTML/CSS/JavaScript、Python、SQLite、增量掃描與 OCR／監控架構。關聯仍為 Pack → Song → GameDifficulty → PlayRecord，同名不同 SongFolder 保持獨立。

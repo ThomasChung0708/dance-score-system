@@ -12,19 +12,25 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
+from .app_paths import default_database, ocr_available
 from .database import LibraryDatabase
+from .game_folder import GameFolderError
+from .game_sync import GameSync
 from .library_service import LibraryError, LibraryService
 from .monitor import Monitor
 from .submissions import SubmissionService
 from .verified_auto import AutomaticStorage
 
 ASSETS=Path(__file__).with_name('gui_assets')
-DEFAULT_DATABASE=Path(__file__).resolve().parent.parent/'data/library.sqlite3'
+DEFAULT_DATABASE=default_database()
 
 
-def create_server(database,port=0,monitor_directory=None):
+def create_server(database,port=0,monitor_directory=None,*,game_sync=True):
     path=Path(database).expanduser().resolve()
-    if not path.is_file():raise ValueError('尚無歌曲資料庫，請先用 Start.cmd 匯入歌曲。')
+    if not path.is_file():
+        # Game folder mode needs no prior scan: start from an empty library.
+        path.parent.mkdir(parents=True,exist_ok=True)
+        with LibraryDatabase(path,[]):pass
     with closing(sqlite3.connect(path.as_uri()+'?mode=ro',uri=True)) as db:
         columns=[r[1] for r in db.execute('PRAGMA table_info(library_roots)')]
         condition=" WHERE root_kind='filesystem'" if 'root_kind' in columns else ''
@@ -36,6 +42,9 @@ def create_server(database,port=0,monitor_directory=None):
     automatic=AutomaticStorage(submissions)
     from .download_tracking import DownloadTracker
     monitor.downloads=DownloadTracker(service,monitor.reviews,on_update=automatic.enqueue)
+    game=GameSync(path,path.parent,write_lock=service._write_lock)
+    if game_sync:game.start()
+    ocr=ocr_available()
     token=secrets.token_hex(32)
 
     class Handler(BaseHTTPRequestHandler):
@@ -90,6 +99,7 @@ def create_server(database,port=0,monitor_directory=None):
                 assets.update({'/lamps.js':('lamps.js','text/javascript; charset=utf-8'),'/lamps.css':('lamps.css','text/css; charset=utf-8')})
                 assets['/source-choice.js'] = ('source-choice.js', 'text/javascript; charset=utf-8')
                 assets['/player-settings.js'] = ('player-settings.js', 'text/javascript; charset=utf-8')
+                assets['/game-sync.js'] = ('game-sync.js', 'text/javascript; charset=utf-8')
                 if parsed.path in assets:
                     file,mime=assets[parsed.path]
                     return self._response(200,(ASSETS/file).read_bytes(),mime)
@@ -100,6 +110,7 @@ def create_server(database,port=0,monitor_directory=None):
                     try:return int(value)
                     except (ValueError,TypeError):raise LibraryError(name+' 必須是整數。')
                 if parsed.path=='/api/bootstrap':result=service.bootstrap()
+                elif parsed.path=='/api/game':result=dict(game.status(),ocr_available=ocr)
                 elif parsed.path=='/api/player-settings':result=dict(player_name=monitor.player_settings.get())
                 elif parsed.path=='/api/history':
                     result=submissions.history(song_id=number('song_id'),difficulty=args.get('difficulty',[None])[0],
@@ -164,7 +175,14 @@ def create_server(database,port=0,monitor_directory=None):
                     body=json.loads(payload)
                 except (ValueError,UnicodeError):raise LibraryError('JSON 資料不正確。')
                 if not isinstance(body,dict):raise LibraryError('資料格式不正確。')
-                if route=='/api/difficulty':result=service.save_difficulty(body)
+                if route=='/api/game/settings':
+                    try:result=dict(game.configure(body.get('game_dir'),body.get('character')),ocr_available=ocr)
+                    except GameFolderError as error:raise LibraryError(str(error))
+                    # The chosen character is "me" everywhere, including the OCR monitor's player name.
+                    if result.get('character_name'):monitor.player_settings.set(result['character_name'])
+                elif route=='/api/game/sync':
+                    game.trigger();result=dict(game.status(),ocr_available=ocr)
+                elif route=='/api/difficulty':result=service.save_difficulty(body)
                 elif route=='/api/player-settings':result=dict(player_name=monitor.player_settings.set(body.get('player_name')))
                 elif route=='/api/scan':result=service.start_scan(body.get('root_id'))
                 elif route=='/api/official/preview':result=service.official_catalog(body)
@@ -205,6 +223,7 @@ def create_server(database,port=0,monitor_directory=None):
 
     class Server(ThreadingHTTPServer):
         def server_close(self):
+            game.close()
             automatic.close()
             monitor.stop(wait=3)
             monitor.downloads.close()
@@ -218,6 +237,7 @@ def create_server(database,port=0,monitor_directory=None):
     server.automatic=automatic
     server.session_token=token
     server.migrations=migrations
+    server.game=game
     return server
 
 
