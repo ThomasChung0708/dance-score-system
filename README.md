@@ -2,15 +2,17 @@
 
 > **第一次使用？** 請看白話版 [使用手冊](docs/USER_GUIDE.md)：安裝、設定遊戲資料夾、看成績、常見問題，一步一步說明。
 
-## 最簡單的用法：遊戲資料夾模式（不用 OCR、不用安裝 Python）
+## 最簡單的用法：DanceScore.exe（不用 OCR、不用安裝 Python）
 
-1. 雙擊 `LibraryGUI.cmd`（只需安裝 Python 3.10 以上，不需其他套件）；或執行 `DanceScore.exe`（從原始碼產生：雙擊 `BuildExe.cmd`，產物在 `dist\`，資料放在 exe 旁的 `data`，與原始碼目錄的 `data` 是不同的資料庫）。會開啟本機網頁；保持黑色視窗開著。
+1. 到 [Releases 下載頁](https://github.com/ThomasChung0708/dance-score-system/releases/latest) 下載 `DanceScore.exe`，放進**它自己的空資料夾**（例如 `D:\DanceScore`），雙擊開啟。第一次若出現「Windows 已保護您的電腦」，按「其他資訊」→「仍要執行」（exe 沒有數位簽章）。會開啟本機網頁；保持黑色視窗開著。
 2. 按右上「遊戲資料夾」，貼上有 `dance.exe` 的資料夾路徑，按「儲存並同步」。
 3. 在「角色」下拉選單選自己的角色。
 4. 照常打歌。每首打完，成績自動存進來；官方歌、外部歌（含 StepMania／osu 資料夾）的歌單也跟遊戲同步。
 
-需要遊戲版本會寫 `results.jsonl` 成績紀錄。運作方式、讀哪些檔、格式見 [遊戲資料夾模式](docs/GAME_RESULTS.md)。
-以下 OCR 監控與手動流程仍保留，從原始碼執行時可用。
+- 成績存在 exe 旁邊的 `data` 資料夾：請備份，不要分享給別人。更新時只換掉 exe，保留 `data`。
+- 需要遊戲版本會寫 `results.jsonl` 成績紀錄。運作方式、讀哪些檔、格式見 [遊戲資料夾模式](docs/GAME_RESULTS.md)。
+- exe 不含 OCR。開發者或需要 OCR 備用流程時，可改用原始碼：安裝 Python 3.10 以上後雙擊 `LibraryGUI.cmd`（資料在原始碼目錄的 `data`，與 exe 是不同的資料庫；要改用 exe 時把 `data` 複製到 exe 旁邊）。自己打包 exe：用 Python 3.11 雙擊 `BuildExe.cmd`，產物在 `dist\`。
+- 以下 OCR 監控與手動流程仍保留，從原始碼執行時可用。
 
 ---
 
