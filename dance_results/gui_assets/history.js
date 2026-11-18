@@ -6,6 +6,134 @@ function localTime(v){if(!v)return '時間未知';const d=new Date(v);return Num
 function text(v){return v===null||v===undefined?'未確認':String(v);}
 async function api(path){const response=await fetch('/api/history'+path,{headers:{'X-Dance-Token':token}}),data=await response.json();if(!response.ok)throw new Error(data.error||'讀取失敗');return data;}
 function message(value){$('history-message').hidden=!value;$('history-message').textContent=value;}
+const songInput = $('history-song'), songIdInput = $('history-song-id');
+const songOptions = $('history-song-options');
+let songSuggestions = [], activeSong = -1, songSearchTimer, songSearchVersion = 0;
+let songComposing = false;
+
+function closeSongOptions() {
+ clearTimeout(songSearchTimer);
+ ++songSearchVersion;
+ songSuggestions = [];
+ activeSong = -1;
+ songOptions.hidden = true;
+ songOptions.replaceChildren();
+ songInput.setAttribute('aria-expanded', 'false');
+ songInput.removeAttribute('aria-activedescendant');
+ $('history-song-status').textContent = '';
+}
+
+function pickSong(song) {
+ songInput.value = song.title;
+ songIdInput.value = song.song_id;
+ closeSongOptions();
+}
+
+function highlightSong(index) {
+ activeSong = index;
+ for (const [i, option] of [...songOptions.children].entries()) {
+  option.setAttribute('aria-selected', String(i === index));
+ }
+ const option = songOptions.children[index];
+ if (option) {
+  songInput.setAttribute('aria-activedescendant', option.id);
+  option.scrollIntoView({block: 'nearest'});
+ }
+}
+
+async function searchSongs() {
+ const query = songInput.value;
+ const version = ++songSearchVersion;
+ if (!query.trim() || songIdInput.value) return;
+ try {
+  const data = await api('/song-search?' + new URLSearchParams({q: query, limit: 20}));
+  if (version !== songSearchVersion) return;
+  songSuggestions = data.songs;
+  activeSong = -1;
+  songInput.removeAttribute('aria-activedescendant');
+  songOptions.replaceChildren(...songSuggestions.map((song, index) => {
+   const option = element('li', 'history-song-option');
+   option.id = 'history-song-option-' + index;
+   option.setAttribute('role', 'option');
+   option.setAttribute('aria-selected', 'false');
+   const source = song.source_type === 'official' ? 'Official / K' :
+    (song.pack_name || song.relative_folder || '自製歌曲');
+   option.append(element('strong', '', song.title),
+    element('span', '', song.artist || '歌手未設定'),
+    element('small', '', source + (song.relative_folder ? ' · ' + song.relative_folder : '')));
+   option.addEventListener('pointerdown', event => event.preventDefault());
+   option.addEventListener('click', () => pickSong(song));
+   return option;
+  }));
+  if (!songSuggestions.length) {
+   const empty = element('li', 'history-song-empty', '找不到符合的歌曲');
+   empty.setAttribute('role', 'presentation');
+   songOptions.append(empty);
+  }
+  songOptions.hidden = false;
+  songInput.setAttribute('aria-expanded', 'true');
+  $('history-song-status').textContent = songSuggestions.length + ' 首符合歌曲';
+  return songSuggestions;
+ } catch (error) {
+  if (version === songSearchVersion) {
+   closeSongOptions();
+   message(error.message);
+  }
+ }
+}
+
+function scheduleSongSearch() {
+ closeSongOptions();
+ if (!songComposing && songInput.value.trim() && !songIdInput.value) {
+  songSearchTimer = setTimeout(searchSongs, 200);
+ }
+}
+
+songInput.addEventListener('input', event => {
+ songIdInput.value = '';
+ closeSongOptions();
+ if (!event.isComposing && !songComposing) scheduleSongSearch();
+});
+songInput.addEventListener('compositionstart', () => {
+ songComposing = true;
+ closeSongOptions();
+});
+songInput.addEventListener('compositionend', () => {
+ songComposing = false;
+ scheduleSongSearch();
+});
+songInput.addEventListener('focus', scheduleSongSearch);
+songInput.addEventListener('keydown', event => {
+ if (event.isComposing || songComposing) {
+  if (event.key === 'Enter') event.preventDefault();
+  return;
+ }
+ if (event.key === 'Escape') {
+  event.preventDefault();
+  closeSongOptions();
+ } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+  event.preventDefault();
+  if (songOptions.hidden) {
+   clearTimeout(songSearchTimer);
+   searchSongs();
+  } else if (songSuggestions.length) {
+   const step = event.key === 'ArrowDown' ? 1 : -1;
+   const next = activeSong < 0 ? (step > 0 ? 0 : songSuggestions.length - 1) :
+    (activeSong + step + songSuggestions.length) % songSuggestions.length;
+   highlightSong(next);
+  }
+ } else if (event.key === 'Enter' && !songOptions.hidden && songSuggestions.length) {
+  event.preventDefault();
+  pickSong(songSuggestions[activeSong < 0 ? 0 : activeSong]);
+ }
+});
+document.addEventListener('pointerdown', event => {
+ if (!$('history-song-search').contains(event.target)) closeSongOptions();
+});
+$('history-song-search').addEventListener('focusout', event => {
+ if (!$('history-song-search').contains(event.relatedTarget)) closeSongOptions();
+});
+
 function cell(tr,label,cls){const td=element('td',cls);td.dataset.label=label;tr.append(td);return td;}
 function row(record){
  const r=record,tr=element('tr','record-row');tr.dataset.recordId=r.record_id;tr.dataset.updateKind=r.update_summary.kind;
@@ -30,7 +158,7 @@ function row(record){
  td=cell(tr,'詳情','record-actions');const button=element('button','','查看 #'+r.record_id);button.type='button';button.addEventListener('click',()=>detail(r.record_id));td.append(button);return tr;
 }
 async function load(){
- const version=++loadVersion;try{message('');const args=new URLSearchParams({offset,limit:60});for(const [id,key]of [['history-song','song_id'],['history-difficulty','difficulty'],['history-player','player_name']])if($(id).value)args.set(key,$(id).value);
+ const version=++loadVersion;try{message('');const args=new URLSearchParams({offset,limit:60});for(const [id,key]of [['history-song-id','song_id'],['history-difficulty','difficulty'],['history-player','player_name']])if($(id).value)args.set(key,$(id).value);
  const data=await api('?'+args);if(version!==loadVersion)return;
  $('history-count').textContent=data.total+' 次挑戰 · 本頁 '+data.records.length+' 筆';$('history-prev').disabled=offset===0;$('history-next').disabled=offset+60>=data.total;$('history-rows').replaceChildren(...data.records.map(row));
  if(!data.records.length){const tr=element('tr','empty-records'),td=element('td','','尚無符合條件的正式成績。');td.colSpan=7;tr.append(td);$('history-rows').append(tr);}
@@ -48,8 +176,39 @@ async function detail(id){
  }catch(e){if(version===detailVersion)message(e.message);}
 }
 $('close-history-detail').addEventListener('click',()=>{++detailVersion;$('history-detail').hidden=true;});
-$('history-filter').addEventListener('submit',e=>{e.preventDefault();offset=0;load();});$('history-prev').addEventListener('click',()=>{offset=Math.max(0,offset-60);load();});$('history-next').addEventListener('click',()=>{offset+=60;load();});
+$('history-filter').addEventListener('submit', async event => {
+ event.preventDefault();
+ if (songComposing) return;
+ clearTimeout(songSearchTimer);
+ if (songInput.value.trim() && !songIdInput.value) {
+  const songs = await searchSongs();
+  if (!songs) return;
+  if (songs.length !== 1) {
+   message(songs.length ? '請從清單選擇歌曲' : '找不到符合的歌曲');
+   return;
+  }
+  pickSong(songs[0]);
+ }
+ closeSongOptions();
+ offset = 0;
+ load();
+});
+$('history-prev').addEventListener('click',()=>{offset=Math.max(0,offset-60);load();});$('history-next').addEventListener('click',()=>{offset+=60;load();});
 window.addEventListener('dance-record-update',load);window.addEventListener('storage',e=>{if(e.key==='dance-record-update')load();});
-const selectedSong=new URLSearchParams(location.search).get('song_id');if(selectedSong&&/^\d+$/.test(selectedSong))$('history-song').value=selectedSong;
+const selectedSong = new URLSearchParams(location.search).get('song_id');
+if (selectedSong && /^[1-9]\d*$/.test(selectedSong)) {
+ songIdInput.value = selectedSong;
+ songInput.value = 'Song #' + selectedSong;
+ api('/song-search?' + new URLSearchParams({song_id: selectedSong})).then(data => {
+  if (songIdInput.value === selectedSong) {
+   songInput.value = data.songs[0].title;
+  }
+ }).catch(error => {
+  if (songIdInput.value === selectedSong) {
+   $('history-song-status').textContent =
+    '找不到歌曲標題，仍以 Song #' + selectedSong + ' 篩選。' + error.message;
+  }
+ });
+}
 const requestedDifficulty=new URLSearchParams(location.search).get('difficulty');if(['EASY','NORMAL','HARD'].includes(requestedDifficulty))$('history-difficulty').value=requestedDifficulty;
 const initial=new URLSearchParams(location.search).get('record_id');load().then(()=>{if(initial&&/^\d+$/.test(initial))detail(Number(initial));});

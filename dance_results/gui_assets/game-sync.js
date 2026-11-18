@@ -22,14 +22,6 @@
     return data;
   }
 
-  function hideOcrPages(status) {
-    if (status.ocr_available) return;
-    // The packaged exe leaves OCR out; its pages would only show errors.
-    document.querySelectorAll('a.page-link[href="/reviews"], a.page-link[href="/monitor"]').forEach((link) => {
-      link.hidden = true;
-    });
-  }
-
   function time(value) {
     if (!value) return '—';
     const date = new Date(value);
@@ -103,7 +95,6 @@
   }
 
   function render(status) {
-    hideOcrPages(status);
     hideManualImports(status);
     renderCharacters(status);
     if (bar) {

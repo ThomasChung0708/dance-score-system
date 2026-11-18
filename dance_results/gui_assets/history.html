@@ -1,8 +1,19 @@
 <!doctype html>
 <html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="dance-token" content="SESSION_TOKEN"><title>熱舞 Online · 歷史成績</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/lamps.css"><script src="/lamps.js" defer></script><link rel="stylesheet" href="/history.css"><script src="/history.js" defer></script><script src="/game-sync.js" defer></script></head>
-<body class="history-page"><header class="topbar"><div class="brand"><span class="brand-mark" aria-hidden="true">≡</span><div><span class="eyebrow">DANCE ONLINE / PERSONAL RECORD</span><h1>歷史成績</h1></div></div><nav class="header-actions"><a class="page-link" href="/reviews">待確認成績</a><a class="page-link" href="/monitor">即時監控</a><a class="page-link" href="/">歌曲庫</a></nav></header><div id="history-message" class="message" role="status" hidden></div>
+<body class="history-page"><header class="topbar"><div class="brand"><span class="brand-mark" aria-hidden="true">≡</span><div><span class="eyebrow">DANCE ONLINE / PERSONAL RECORD</span><h1>歷史成績</h1></div></div>
+<nav class="header-actions">
+  <a class="page-link" href="/">歌曲庫</a>
+</nav></header><div id="history-message" class="message" role="status" hidden></div>
 <main class="history-workspace"><section class="record-sheet"><div class="sheet-intro"><div><span class="eyebrow">MY PLAY RECORD</span><h2>每次挑戰，都留下進步</h2><p class="history-note">最高 EX 與最佳燈號各自保留。歷史更新標記記錄當時的突破。</p></div><span class="sheet-emblem" aria-hidden="true">EX<br>×<br>LAMP</span></div>
-<form id="history-filter"><label>Song ID<input id="history-song" type="number" min="1" placeholder="全部歌曲"></label><label>遊戲難度<select id="history-difficulty"><option value="">全部</option><option>EASY</option><option>NORMAL</option><option>HARD</option></select></label><label>本人暱稱<input id="history-player" maxlength="64" placeholder="全部已保存暱稱"></label><button type="submit">查詢成績</button></form>
+<form id="history-filter">
+<div id="history-song-search" class="history-song-search">
+<label for="history-song">歌曲名稱 / 歌手</label>
+<input id="history-song" type="text" maxlength="500" placeholder="全部歌曲；輸入歌名或歌手" autocomplete="off" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="history-song-options" aria-describedby="history-song-status">
+<input id="history-song-id" type="hidden">
+<ul id="history-song-options" class="history-song-options" role="listbox" aria-label="歌曲搜尋結果" hidden></ul>
+<span id="history-song-status" class="history-song-status" role="status"></span>
+</div>
+<label>遊戲難度<select id="history-difficulty"><option value="">全部</option><option>EASY</option><option>NORMAL</option><option>HARD</option></select></label><label>本人暱稱<input id="history-player" maxlength="64" placeholder="全部已保存暱稱"></label><button type="submit">查詢成績</button></form>
 <div id="history-bests" class="history-bests"></div><div class="log-heading"><span class="eyebrow">PLAY LOG / 遊玩紀錄</span><p id="history-count" class="history-note" aria-live="polite"></p></div>
 <div class="history-table-wrap"><table class="record-table"><thead><tr><th scope="col">遊玩日期 / Record</th><th scope="col">歌曲 / 難度</th><th scope="col">CLEAR STATUS</th><th scope="col">SCORE STATUS</th><th scope="col">P / C / B / M</th><th scope="col">本次更新</th><th scope="col">詳情</th></tr></thead><tbody id="history-rows"></tbody></table></div><div class="history-pager"><button id="history-prev" disabled>上一頁</button><button id="history-next" disabled>下一頁</button></div><p class="history-note sheet-footnote">依實際遊玩時間排列。當次燈號不等於歷史最佳；未知 MAX 不產生百分比。更新證據不足時不推測歷史突破。</p></section>
 <section id="history-detail" hidden><div class="detail-heading"><span class="eyebrow">RESULT ARCHIVE / 原始結算</span><button id="close-history-detail" type="button">收起詳情</button></div><h2 id="history-detail-title">成績證據</h2><div id="history-detail-score"></div><img id="history-image" alt="已儲存成績的原始結算截圖" hidden><p id="history-image-error" class="history-note"></p><details><summary>歌曲身份與完整成績資訊</summary><dl id="history-metadata" class="metadata"></dl></details><details><summary>人工確認與原始 OCR 證據</summary><pre id="history-evidence"></pre></details></section></main></body></html>

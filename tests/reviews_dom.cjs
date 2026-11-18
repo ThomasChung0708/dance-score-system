@@ -117,8 +117,15 @@ async function main() {
         status:200, contentType:'application/json', body:JSON.stringify({windows:[]})
       }));
       for (const route of ['/', '/reviews', '/history', '/monitor']) {
+        const gameResponse = route === '/' || route === '/history'
+          ? page.waitForResponse(response => new URL(response.url()).pathname === '/api/game')
+          : null;
         await page.goto(base + route);
         await page.waitForSelector('.motion-control');
+        if (gameResponse) {
+          assert.equal((await gameResponse).status(), 200);
+          assert.equal(await page.locator('a[href="/monitor"], a[href="/reviews"]').count(), 0);
+        }
         for (const width of [390, 700, 768]) {
           await page.setViewportSize({width, height:932});
           const actual = await page.evaluate(() => ({

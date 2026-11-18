@@ -5,8 +5,10 @@ import hashlib
 import json
 from pathlib import Path
 import sqlite3
+import threading
+import unicodedata
 
-from .library_service import LibraryError, integer
+from .library_service import LibraryError, folded, integer
 from .monitor_tracking import fingerprint, utc
 from .ocr_matching import normalize
 from .scoring import calculate, percentage_display
@@ -19,11 +21,105 @@ from .songs import catalog_display_title, evidence_titles, record_display_title
 def basis_is_custom(score):return score.get('max_policy')=='custom-judged-v1'
 
 
+def normalize_song_search(value):
+    """Width/case/spacing-insensitive text, including punctuation variants."""
+    return ''.join(
+        char for char in folded(value)
+        if not char.isspace() and not unicodedata.category(char).startswith('P')
+    )
+
+
 class SubmissionService:
     def __init__(self, library, reviews):
         self.library=library
         self.reviews=reviews
         self.auto_allowed=lambda sid:False
+        self._song_search_lock = threading.Lock()
+        self._song_search_cache = None
+
+    def _searchable_songs(self):
+        # Reuse the library's display names and DB/WAL stamp. Normalize once per
+        # catalog change, without loading per-song progress or review evidence.
+        with self._song_search_lock:
+            stamp = self.library._stamp()
+            if self._song_search_cache and self._song_search_cache[0] == stamp:
+                return self._song_search_cache[1]
+            catalog = self.library._catalog(None)
+            with self.library.open() as library:
+                db = library.connection
+                artists = {row['song_id']: [row['artist']] if row['artist'] else []
+                           for row in db.execute('SELECT song_id,artist FROM songs')}
+                for row in db.execute(
+                    "SELECT song_id,COALESCE(NULLIF(saved_artist,''),"
+                    "json_extract(payload_json,'$.artist')) AS artist "
+                    'FROM song_sources ORDER BY source_id'
+                ):
+                    if row['artist']:
+                        artists.setdefault(row['song_id'], []).append(row['artist'])
+                played = {row[0] for row in db.execute(
+                    'SELECT DISTINCT COALESCE(r.song_id,d.song_id) '
+                    'FROM play_records r LEFT JOIN game_difficulties d '
+                    'ON d.difficulty_id=r.difficulty_id'
+                )}
+            rows = []
+            for song in catalog:
+                song_artists = artists.get(song['song_id'], [])
+                artist = ' / '.join(dict.fromkeys(song_artists))
+                rows.append(dict(
+                    song_id=song['song_id'], title=song['display_title'], artist=artist,
+                    source_type=song['source_type'], pack_name=song['pack_name'],
+                    relative_folder=song['relative_folder'],
+                    _title=normalize_song_search(song['display_title']),
+                    _titles=[normalize_song_search(t) for t in song['_title_candidates']],
+                    _artists=[normalize_song_search(a) for a in song_artists],
+                    _played=song['song_id'] in played,
+                ))
+            self._song_search_cache = (stamp, rows)
+            return rows
+
+    def song_search(self, query='', *, limit=20, song_id=None):
+        """Small ranked catalog suggestions; song_id resolves history deep links.
+
+        Empty queries return no suggestions. Title exact/prefix/substring matches
+        precede artist matches, with recorded songs preferred within each rank.
+        """
+        integer(limit, '搜尋筆數', 1)
+        if limit > 100:
+            raise LibraryError('搜尋最多 100 首。')
+        if not isinstance(query, str) or len(query) > 500:
+            raise LibraryError('搜尋文字過長。')
+        if song_id is not None:
+            integer(song_id, 'Song ID', 1)
+        q = normalize_song_search(query)
+        if not q and song_id is None:
+            return dict(songs=[], limit=limit)
+
+        def rank(value):
+            if value == q:
+                return 0
+            if value.startswith(q):
+                return 1
+            return 2 if q in value else 6
+
+        matches = []
+        for song in self._searchable_songs():
+            if song_id is not None:
+                if song['song_id'] == song_id:
+                    matches.append((0, song))
+                continue
+            priority = min(min(rank(t) for t in song['_titles']),
+                           min((rank(a) + 3 for a in song['_artists']), default=9))
+            if priority < 6:
+                matches.append((priority, song))
+        if song_id is not None and not matches:
+            raise LibraryError('找不到歌曲。', 404)
+        matches.sort(key=lambda item: (
+            item[0], not item[1]['_played'], item[1]['_title'], item[1]['song_id']
+        ))
+        return dict(songs=[
+            {key: value for key, value in song.items() if not key.startswith('_')}
+            for _, song in matches[:limit]
+        ], limit=limit)
 
     @staticmethod
     def request_hash(body):

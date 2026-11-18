@@ -97,6 +97,9 @@ class LibraryService:
             # Downloads from multiplayer rooms (connect) are ordinary custom songs in the list; the pack
             # type stays in the database for the OCR monitor, which still tracks those downloads.
             r['category']=r['source_type']
+            r['_title_candidates'] = [
+                r['display_title'], r['saved_title'] or '', *extra[r['song_id']],
+            ]
             r['_search']=folded('\n'.join([r['display_title'],r['relative_folder'],r['pack_name'] or '',r['file_id'] or '',r['gn'] or '',*extra[r['song_id']]]))
             r['_sort']=(folded(r['display_title']),r['song_id'])
         with self._cache_lock:self._cache[root_id]=(stamp,rows)

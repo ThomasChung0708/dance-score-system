@@ -1,12 +1,24 @@
 """Full-site audit regression: static routes and disconnected HTTP clients."""
 from io import BytesIO
+from html.parser import HTMLParser
 import threading
 import unittest
 from unittest.mock import Mock, patch
 from urllib.request import urlopen
+from urllib.parse import urlsplit
 
 from dance_results.gui import create_server
 import test_gui as fixture
+
+
+class PageLinks(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.paths = set()
+
+    def handle_starttag(self, tag, attrs):
+        if tag == 'a':
+            self.paths.add(urlsplit(dict(attrs).get('href') or '').path)
 
 
 class PageAuditTests(unittest.TestCase):
@@ -85,6 +97,30 @@ class PageAuditTests(unittest.TestCase):
                     self.assertEqual(response.status, 200)
                     self.assertEqual(response.headers.get_content_type(), mime)
                     self.assertGreater(len(response.read()), 0)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join()
+
+    def test_ocr_routes_served_but_unlinked_from_library_and_history(self):
+        server = create_server(
+            self.path, monitor_directory=self.base/'monitor', game_sync=False,
+        )
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            hidden_routes = {'/monitor', '/reviews'}
+            for route in ('/', '/history', *sorted(hidden_routes)):
+                with self.subTest(route=route), urlopen(
+                    f'http://127.0.0.1:{server.server_port}{route}'
+                ) as response:
+                    self.assertEqual(response.status, 200)
+                    markup = response.read().decode('utf-8')
+                    if route in ('/', '/history'):
+                        links = PageLinks()
+                        links.feed(markup)
+                        self.assertFalse(links.paths & hidden_routes)
+                        self.assertIn('/history' if route == '/' else '/', links.paths)
         finally:
             server.shutdown()
             server.server_close()

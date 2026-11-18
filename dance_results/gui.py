@@ -115,6 +115,11 @@ def create_server(database,port=0,monitor_directory=None,*,game_sync=True):
                 elif parsed.path=='/api/history':
                     result=submissions.history(song_id=number('song_id'),difficulty=args.get('difficulty',[None])[0],
                         player_name=args.get('player_name',[None])[0],offset=number('offset',0),limit=number('limit',60))
+                elif parsed.path == '/api/history/song-search':
+                    result = submissions.song_search(
+                        args.get('q', [''])[0], limit=number('limit', 20),
+                        song_id=number('song_id'),
+                    )
                 elif parsed.path=='/api/progress-history':
                     result=submissions.progress_history(song_id=number('song_id'),difficulty=args.get('difficulty',[None])[0],
                         offset=number('offset',0),limit=number('limit',20),order=args.get('order',['desc'])[0])
