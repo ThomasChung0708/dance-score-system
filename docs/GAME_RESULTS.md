@@ -49,4 +49,4 @@
 ## 執行檔
 
 `BuildExe.cmd` 產生 `dist\DanceScore.exe`（約 10 MB，單一檔案，不需要安裝 Python）。
-exe 不含 OCR 套件，所以「待確認成績」「即時監控」兩頁會自動隱藏；資料放在 exe 旁邊的 `data` 資料夾。
+exe 不含 OCR 套件。「待確認成績」「即時監控」的入口現在在所有版本都已從介面移除（從原始碼執行時仍可直接輸入網址 `/monitor`、`/reviews` 開啟）；資料放在 exe 旁邊的 `data` 資料夾。
