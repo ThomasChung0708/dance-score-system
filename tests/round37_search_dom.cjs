@@ -12,9 +12,13 @@ async function main() {
     await page.waitForFunction(() => document.querySelector('#result-count').textContent === '共 1 首歌曲');
     assert.equal(await page.locator('#lamp-filter').inputValue(), 'AC');
     assert.deepEqual(await page.locator('#lamp-filter option').evaluateAll(options =>
-      options.map(option => option.value)), ['', 'ACP', 'AC', 'CLEAR', 'FAILED', 'UNCLEARED', 'CLEARED']);
-    await page.locator('#lamp-filter').selectOption('CLEARED');
-    await page.waitForURL(url => url.searchParams.get('lamp') === 'CLEARED');
+      options.map(option => option.value)), ['', 'ACP', 'AC', 'CLEAR', 'FAILED', 'UNPLAYED']);
+    assert.equal(await page.locator('#lamp-filter option[value="UNPLAYED"]').textContent(), 'NO PLAY');
+    await page.locator('#lamp-filter').selectOption('UNPLAYED');
+    await page.waitForURL(url => url.searchParams.get('lamp') === 'UNPLAYED');
+    await page.reload();
+    await page.waitForFunction(() => document.querySelector('#result-count').textContent === '共 3 首歌曲');
+    assert.equal(await page.locator('#lamp-filter').inputValue(), 'UNPLAYED');
     await page.getByRole('button', {name: '官方歌曲', exact: false}).click();
     await page.locator('#sort').selectOption('desc');
     await page.locator('#search').fill('missing');
@@ -49,13 +53,20 @@ async function main() {
       return strip.left < row.querySelector('.song-title').getBoundingClientRect().left;
     }), true);
 
+    for (const lamp of ['UNPLAYED', 'UNCLEARED', 'CLEARED']) {
+      await page.goto(base + '/history?lamp=' + lamp);
+      await page.waitForFunction(() => document.querySelector('#history-count').textContent === '共 4 筆成績 · 本頁 4 筆');
+      assert.equal(await page.locator('#history-lamp').inputValue(), '');
+    }
+
     await page.goto(base + '/history?lamp=AC&difficulty=NORMAL&player_name=Eithwa');
     await page.waitForFunction(() => document.querySelector('#history-count').textContent === '共 1 筆成績 · 本頁 1 筆');
     assert.equal(await page.locator('#history-lamp').inputValue(), 'AC');
     assert.equal(await page.locator('.record-row > td:first-child').first()
       .evaluate(cell => getComputedStyle(cell).paddingLeft), '19px');
     assert.deepEqual(await page.locator('#history-lamp option').evaluateAll(options =>
-      options.map(option => option.value)), ['', 'ACP', 'AC', 'CLEAR', 'FAILED', 'UNCLEARED', 'CLEARED']);
+      options.map(option => option.value)), ['', 'ACP', 'AC', 'CLEAR', 'FAILED']);
+    assert.equal(await page.locator('#history-lamp option').filter({hasText: 'NO PLAY'}).count(), 0);
     await page.locator('#history-lamp').selectOption('FAILED');
     await page.getByRole('button', {name: '查詢成績', exact: true}).click();
     await page.locator('.empty-records').waitFor();

@@ -145,8 +145,6 @@ class SearchControlsTests(unittest.TestCase):
             ('AC', 4, 2, {'AC'}),
             ('CLEAR', 2, 1, {'CLEAR'}),
             ('FAILED', 2, 1, {'FAILED'}),
-            ('UNCLEARED', 3, 2, {'FAILED', None}),
-            ('CLEARED', 7, 4, {'CLEAR', 'AC', 'ACP'}),
         ]:
             for filters, total in [
                 ({}, expected),
@@ -182,37 +180,53 @@ class SearchControlsTests(unittest.TestCase):
             )
             db.commit()
         for lamp, total in [('', 4), ('ACP', 1), ('AC', 1), ('CLEAR', 1),
-                            ('FAILED', 1), ('UNCLEARED', 1), ('CLEARED', 2)]:
+                            ('FAILED', 1), ('UNPLAYED', 1)]:
             for offset in (0, 1, 4):
                 with self.subTest(lamp=lamp, offset=offset):
                     data = self.get('/api/songs', lamp=lamp, offset=offset, limit=1)
                     self.assertEqual(data['total'], total)
                     self.assertEqual(len(data['songs']), int(offset < total))
+                    if lamp == 'UNPLAYED':
+                        for song in data['songs']:
+                            self.assertEqual(song['play_count'], 0)
+                            self.assertEqual(song['display_title'], '包裡第二首')
         for filters, total in [
             ({'lamp': 'ACP', 'q': 'Silly', 'category': 'official'}, 1),
             ({'lamp': 'ACP', 'q': 'Silly', 'category': 'custom'}, 0),
             ({'lamp': 'FAILED', 'q': '外部曲', 'category': 'custom'}, 1),
             ({'lamp': 'FAILED', 'q': 'Silly'}, 0),
-            ({'lamp': 'UNCLEARED', 'q': 'Silly'}, 0),
-            ({'lamp': 'UNCLEARED', 'q': '包裡第一首'}, 0),
-            ({'lamp': 'UNCLEARED', 'q': '外部曲'}, 1),
+            ({'lamp': 'UNPLAYED', 'q': 'Silly'}, 0),
+            ({'lamp': 'UNPLAYED', 'q': '包裡第一首'}, 0),
+            ({'lamp': 'UNPLAYED', 'q': '外部曲'}, 0),
+            ({'lamp': 'UNPLAYED', 'q': '包裡第二首', 'category': 'custom'}, 1),
+            ({'lamp': 'UNPLAYED', 'q': '包裡第二首', 'category': 'official'}, 0),
         ]:
             with self.subTest(filters=filters):
                 self.assertEqual(self.get('/api/songs', **filters)['total'], total)
 
     def test_unknown_lamp_filters_are_rejected_with_400(self):
         for route in ('/api/history', '/api/songs'):
-            for lamp in ('assist', 'acp', 'PENDING', 'UNPLAYED', "ACP' OR 1=1", ' '):
+            invalid = ['UNCLEARED', 'CLEARED', 'assist', 'acp', 'PENDING', "ACP' OR 1=1", ' ']
+            if route == '/api/history':
+                invalid.append('UNPLAYED')
+            for lamp in invalid:
                 with self.subTest(route=route, lamp=lamp):
                     with self.assertRaises(HTTPError) as error:
                         self.get(route, lamp=lamp)
                     self.assertEqual(error.exception.code, 400)
-                    self.assertIn('通關狀態', json.load(error.exception)['error'])
+                    self.assertEqual(json.load(error.exception)['error'], '通關狀態不正確。')
 
-    def test_library_uncleared_requires_saved_play_and_no_cleared_chart(self):
+    def test_library_unplayed_excludes_any_saved_play(self):
         # Catalog charts alone and missing E/N slots are never saved plays.
-        self.assertEqual(self.get('/api/songs', lamp='UNCLEARED')['total'], 0)
+        self.assertEqual(self.get('/api/songs', lamp='UNPLAYED')['total'], 3)
         song = self.get('/api/songs', q='包裡第二首')['songs'][0]
+        self.assertEqual(
+            [s['song_id'] for s in self.get('/api/songs', q='包裡第二首', lamp='UNPLAYED')['songs']],
+            [song['song_id']],
+        )
+        for lamp in ('ACP', 'AC', 'CLEAR', 'FAILED'):
+            with self.subTest(lamp=lamp, saved_play=False):
+                self.assertEqual(self.get('/api/songs', q='包裡第二首', lamp=lamp)['total'], 0)
         with self.fixture.db() as db:
             db.execute(
                 'INSERT INTO play_sessions(session_id,player_name,play_mode,room_status,player_status) '
@@ -225,17 +239,20 @@ class SearchControlsTests(unittest.TestCase):
                                  values=dict(difficulty='EASY'))),),
             )
             db.commit()
-        self.assertEqual(
-            [s['song_id'] for s in self.get('/api/songs', lamp='UNCLEARED')['songs']],
-            [song['song_id']],
+        self.assertEqual(self.get('/api/songs', lamp='UNPLAYED')['total'], 2)
+        self.assertNotIn(
+            song['song_id'],
+            [s['song_id'] for s in self.get('/api/songs', lamp='UNPLAYED')['songs']],
         )
-        for lamp in ('ACP', 'AC', 'CLEAR', 'FAILED', 'CLEARED'):
+        for lamp in ('ACP', 'AC', 'CLEAR', 'FAILED'):
             with self.subTest(lamp=lamp):
                 self.assertEqual(self.get('/api/songs', q='包裡第二首', lamp=lamp)['total'], 0)
 
         self.add_lamp_records()
-        # The failed HARD chart still matches FAILED after EASY is cleared,
-        # but the song as a whole must no longer match UNCLEARED.
+        # A FAILED-only song is played even with unplayed difficulty slots.
+        self.assertEqual(self.get('/api/songs', q='外部曲', lamp='FAILED')['total'], 1)
+        self.assertEqual(self.get('/api/songs', q='外部曲', lamp='UNPLAYED')['total'], 0)
+        # Specific lamps still match any chart's best after EASY is cleared.
         cleared = external_line(self.fixture)
         cleared.update(
             at='2026-11-19T13:00:00Z', difficulty='easy', level=3,
@@ -244,7 +261,7 @@ class SearchControlsTests(unittest.TestCase):
         )
         self.fixture.append(cleared)
         self.fixture.sync.run_once()
-        for lamp, total in [('FAILED', 1), ('CLEAR', 1), ('CLEARED', 1), ('UNCLEARED', 0)]:
+        for lamp, total in [('FAILED', 1), ('CLEAR', 1), ('UNPLAYED', 0)]:
             with self.subTest(lamp=lamp):
                 self.assertEqual(self.get('/api/songs', q='外部曲', lamp=lamp)['total'], total)
 
@@ -286,7 +303,7 @@ class LampBestPolicyTests(unittest.TestCase):
             self.assertEqual(lamps['HARD'], record['lamp_status'])
         self.assertIn(song_id, [s['song_id'] for s in
                                library.songs(None, lamp=record['lamp_status'])['songs']])
-        self.assertIn(song_id, [s['song_id'] for s in library.songs(None, lamp='CLEARED')['songs']])
+        self.assertNotIn(song_id, [s['song_id'] for s in library.songs(None, lamp='UNPLAYED')['songs']])
         self.assertNotIn(song_id, [s['song_id'] for s in library.songs(None, lamp='FAILED')['songs']])
 
 

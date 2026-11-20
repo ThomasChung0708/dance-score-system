@@ -8,7 +8,7 @@ import sqlite3
 import threading
 import unicodedata
 
-from .library_service import LibraryError, LAMP_FILTERS, folded, integer, validate_lamp_filter
+from .library_service import LibraryError, HISTORY_LAMP_FILTERS, folded, integer, validate_lamp_filter
 from .monitor_tracking import fingerprint, utc
 from .ocr_matching import normalize
 from .scoring import calculate, percentage_display
@@ -430,7 +430,7 @@ class SubmissionService:
         self, *, song_id=None, difficulty=None, player_name=None, offset=0,
         limit=60, order='desc', lamp='', title=None, artist=None,
     ):
-        validate_lamp_filter(lamp)
+        validate_lamp_filter(lamp, HISTORY_LAMP_FILTERS)
         integer(offset,'起點');integer(limit,'筆數',1)
         if limit>100:raise LibraryError('每頁最多100筆。')
         if order not in ('asc','desc'):raise LibraryError('遊玩時間排序不正確。')
@@ -443,12 +443,9 @@ class SubmissionService:
                 raise LibraryError('歌曲篩選文字過長。')
         for sql,value in [(SONG_ID+'=?',song_id),(DIFFICULTY+'=?',difficulty),('p.player_name=?',player_name)]:
             if value is not None:where.append(sql);args.append(value)
-        if lamp == 'UNCLEARED':
-            where.append("(r.lamp_status='FAILED' OR r.lamp_status IS NULL)")
-        elif lamp:
-            values = LAMP_FILTERS[lamp]
-            where.append('r.lamp_status IN (' + ','.join('?' for _ in values) + ')')
-            args.extend(values)
+        if lamp:
+            where.append('r.lamp_status=?')
+            args.append(lamp)
         joins=JOINS
         with self.library.open() as library:
             db=library.connection

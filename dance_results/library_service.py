@@ -23,18 +23,14 @@ class LibraryError(ValueError):
         super().__init__(message);self.status=status
 
 
-LAMP_FILTERS = {
-    'ACP': ('ACP',),
-    'AC': ('AC',),
-    'CLEAR': ('CLEAR',),
-    'FAILED': ('FAILED',),
-    'UNCLEARED': (),
-    'CLEARED': ('CLEAR', 'AC', 'ACP'),
-}
+HISTORY_LAMP_FILTERS = frozenset({
+    '', 'ACP', 'AC', 'CLEAR', 'FAILED',
+})
+LIBRARY_LAMP_FILTERS = HISTORY_LAMP_FILTERS | {'UNPLAYED'}
 
 
-def validate_lamp_filter(lamp):
-    if lamp != '' and (not isinstance(lamp, str) or lamp not in LAMP_FILTERS):
+def validate_lamp_filter(lamp, allowed=LIBRARY_LAMP_FILTERS):
+    if not isinstance(lamp, str) or lamp not in allowed:
         raise LibraryError('通關狀態不正確。')
 
 
@@ -159,15 +155,13 @@ class LibraryService:
             db = library.connection
             if lamp:
                 song_ids = [r['song_id'] for r in rows]
-                lamps = best_lamps_for_songs(db, song_ids)
-                if lamp == 'UNCLEARED':
+                if lamp == 'UNPLAYED':
                     played = played_song_ids(db, song_ids)
-                    rows = [r for r in rows if r['song_id'] in played and not any(
-                        status in LAMP_FILTERS['CLEARED'] for status in lamps[r['song_id']].values()
-                    )]
+                    rows = [r for r in rows if r['song_id'] not in played]
                 else:
+                    lamps = best_lamps_for_songs(db, song_ids)
                     rows = [r for r in rows if any(
-                        status in LAMP_FILTERS[lamp] for status in lamps[r['song_id']].values()
+                        status == lamp for status in lamps[r['song_id']].values()
                     )]
             if order.startswith('plays_'):
                 totals = totals_for_songs(db)
