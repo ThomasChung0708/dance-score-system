@@ -94,8 +94,16 @@ def create_server(database,port=0,monitor_directory=None,*,game_sync=True):
         def do_GET(self):
             try:
                 parsed=urlsplit(self.path);self._check(parsed.path.startswith('/api/'))
-                if parsed.path in ('/','/monitor','/reviews','/history'):
-                    source=(ASSETS/({'/monitor':'monitor.html','/reviews':'reviews.html','/history':'history.html'}.get(parsed.path,'index.html'))).read_text(encoding='utf-8').replace('SESSION_TOKEN',html.escape(token,quote=True))
+                pages = {
+                    '/': 'index.html',
+                    '/monitor': 'monitor.html',
+                    '/reviews': 'reviews.html',
+                    '/history': 'history.html',
+                    '/plays': 'plays.html',
+                }
+                if parsed.path in pages:
+                    source = (ASSETS / pages[parsed.path]).read_text(encoding='utf-8')
+                    source = source.replace('SESSION_TOKEN', html.escape(token, quote=True))
                     source=source.replace('PLAYER_NAME_SETTING', html.escape(monitor.player_settings.get(), quote=True))
                     return self._response(200,source.encode('utf-8'),'text/html; charset=utf-8')
                 assets={'/app.js':('app.js','text/javascript; charset=utf-8'),'/monitor.js':('monitor.js','text/javascript; charset=utf-8'),'/reviews.js':('reviews.js','text/javascript; charset=utf-8'),'/reviews.css':('reviews.css','text/css; charset=utf-8'),'/history.js':('history.js','text/javascript; charset=utf-8'),'/history.css':('history.css','text/css; charset=utf-8'),'/style.css':('style.css','text/css; charset=utf-8')}
@@ -103,6 +111,7 @@ def create_server(database,port=0,monitor_directory=None,*,game_sync=True):
                 assets['/source-choice.js'] = ('source-choice.js', 'text/javascript; charset=utf-8')
                 assets['/player-settings.js'] = ('player-settings.js', 'text/javascript; charset=utf-8')
                 assets['/game-sync.js'] = ('game-sync.js', 'text/javascript; charset=utf-8')
+                assets['/plays.js'] = ('plays.js', 'text/javascript; charset=utf-8')
                 if parsed.path in assets:
                     file,mime=assets[parsed.path]
                     return self._response(200,(ASSETS/file).read_bytes(),mime)
@@ -118,7 +127,10 @@ def create_server(database,port=0,monitor_directory=None,*,game_sync=True):
                 elif parsed.path=='/api/history':
                     result=submissions.history(song_id=number('song_id'),difficulty=args.get('difficulty',[None])[0],
                         player_name=args.get('player_name',[None])[0],offset=number('offset',0),limit=number('limit',60),
-                        lamp=args.get('lamp',[''])[0])
+                        lamp=args.get('lamp',[''])[0],title=args.get('title',[None])[0],
+                        artist=args.get('artist',[None])[0])
+                elif parsed.path == '/api/plays/top':
+                    result = submissions.top_plays(number('limit', 30))
                 elif parsed.path == '/api/history/song-search':
                     result = submissions.song_search(
                         args.get('q', [''])[0], limit=number('limit', 20),

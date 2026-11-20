@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="dance-token" content="SESSION_TOKEN">
+  <title>熱舞 Online · 遊玩排行</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/history.css">
+  <link rel="stylesheet" href="/lamps.css">
+  <script src="/lamps.js" defer></script>
+  <script src="/plays.js" defer></script>
+</head>
+<body class="history-page plays-page">
+<header class="topbar">
+  <div class="brand"><div><h1>遊玩排行</h1></div></div>
+  <nav class="header-actions" aria-label="主要導覽">
+    <a class="page-link" href="/">歌曲庫</a>
+    <a class="page-link" href="/history">歷史成績</a>
+    <a class="page-link" href="/plays" aria-current="page">遊玩排行</a>
+  </nav>
+</header>
+<div id="plays-message" class="message" role="alert" hidden></div>
+<main class="history-workspace">
+  <section class="record-sheet" aria-labelledby="plays-title">
+    <div class="sheet-intro">
+      <h2 id="plays-title">最常遊玩的 30 首歌</h2>
+      <p class="history-note">合計全部難度的已保存遊玩紀錄。同次數並列名次，最近遊玩的歌曲在前。</p>
+    </div>
+    <div class="log-heading">
+      <p id="plays-count" class="history-note" role="status">正在載入遊玩排行…</p>
+      <button id="plays-refresh" type="button">重新整理</button>
+    </div>
+    <p class="history-scroll-hint">左右捲動可查看完整排行</p>
+    <div class="history-table-wrap">
+      <table class="record-table plays-table" aria-labelledby="plays-title">
+        <thead><tr>
+          <th scope="col">名次</th>
+          <th scope="col">歌曲 / 歌手</th>
+          <th scope="col">總遊玩次數</th>
+          <th scope="col">最佳燈號</th>
+          <th scope="col">BEST EX</th>
+          <th scope="col">最後遊玩</th>
+        </tr></thead>
+        <tbody id="plays-rows"></tbody>
+      </table>
+    </div>
+    <p class="history-note sheet-footnote">點選歌曲查看歷史成績。最高 EX 與最佳燈號依既有成績驗證規則各自保留。</p>
+    <div data-motion-slot></div>
+  </section>
+</main>
+</body>
+</html>

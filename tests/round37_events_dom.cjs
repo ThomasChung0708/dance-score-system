@@ -196,6 +196,9 @@ async function main() {
     releaseDetail();
     await library.waitForFunction(() => document.querySelector('.song-result-panel').textContent.includes('EX 1260'));
     await history.waitForFunction(() => document.querySelector('#history-count').textContent === '共 62 筆成績 · 本頁 2 筆');
+    await library.waitForFunction(() => document.querySelector('.detail-play-count').textContent.includes('總遊玩 62 次'));
+    assert.match(await library.locator('.song-row.selected .song-play-count').textContent(), /遊玩 62 次/);
+    assert.match(await history.locator('#history-play-count').textContent(), /共遊玩 62 次/);
     assert.equal(await notes.inputValue(), '777');
     assert.equal(await library.locator('.difficulty-card[data-label="HARD"]').getAttribute('data-dirty'), 'true');
     assert.equal(await library.locator('#search').inputValue(), '外部曲');

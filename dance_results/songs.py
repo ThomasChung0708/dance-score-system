@@ -90,7 +90,24 @@ def record_display_title(db, evidence, song_id, session_title=None):
         return _text(snapshot['saved_title'])
     observed = (session_title, *evidence_titles(evidence))
     return (catalog_display_title(db, song_id=song_id, observed_titles=observed) or
-            display_title(snapshot or None, observed_titles=observed))
+            display_title(snapshot or None, observed_titles=observed) or
+            _text(session_title) or next((t for t in evidence_titles(evidence) if _text(t)), None) or
+            _text((evidence.get('values') or {}).get('title')) or '歌曲待確認')
+
+
+def record_display_artist(evidence):
+    """Display-only provenance; never use artist text to bind a catalog song."""
+    review = evidence.get('review') or {}
+    session = evidence.get('session') or review.get('locked_session') or {}
+    result_fields = (review.get('ocr') or {}).get('fields') or {}
+    selection_fields = (session.get('selection') or {}).get('fields') or {}
+    return next((_text(value) for value in (
+        (evidence.get('song') or {}).get('artist'),
+        ((evidence.get('game_result') or {}).get('song') or {}).get('artist'),
+        (evidence.get('values') or {}).get('artist'),
+        (result_fields.get('artist') or {}).get('value'),
+        (selection_fields.get('artist') or {}).get('value'),
+    ) if _text(value)), '')
 
 
 def group_songs(files: list[ParsedFile]) -> list[SongEntry]:

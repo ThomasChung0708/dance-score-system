@@ -475,7 +475,7 @@
 
   .history-page .topbar {
     align-items: center;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
   }
 
   .history-page .header-actions {
@@ -555,3 +555,33 @@
   }
 
 }
+/* The ranking shares the history ledger's rules and responsive scroll. */
+.plays-table {
+  min-width: 820px;
+}
+
+.plays-table th:nth-child(1) { width: 7%; }
+.plays-table th:nth-child(2) { width: 31%; }
+.plays-table th:nth-child(3) { width: 12%; }
+.plays-table th:nth-child(4) { width: 15%; }
+.plays-table th:nth-child(5) { width: 12%; }
+.plays-table th:nth-child(6) { width: 23%; }
+
+.plays-rank, .plays-total, .plays-ex {
+  font-family: var(--font-score);
+  font-variant-numeric: tabular-nums;
+  font-size: 20px;
+}
+
+.plays-total {
+  color: var(--accent);
+}
+
+.plays-artist {
+  display: block;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.plays-row { cursor: pointer; }
+.plays-row:focus-within { background: var(--raised); }

@@ -146,7 +146,7 @@ class LibraryService:
     ):
         validate_lamp_filter(lamp)
         if category not in ('all','official','custom','download','unknown'):raise LibraryError('分類不正確。')
-        if order not in ('asc','desc'):raise LibraryError('排序不正確。')
+        if order not in ('asc','desc','plays_desc','plays_asc'):raise LibraryError('排序不正確。')
         integer(offset,'頁面起點');integer(limit,'每頁筆數',1)
         if limit>100:raise LibraryError('每頁最多 100 首。')
         if not isinstance(query,str) or len(query)>500:raise LibraryError('搜尋文字過長。')
@@ -160,11 +160,22 @@ class LibraryService:
             rows = [r for r in rows if any(
                 status in LAMP_FILTERS[lamp] for status in lamps[r['song_id']].values()
             )]
-        rows.sort(key=lambda r:r['_sort'],reverse=order=='desc')
+        from .play_counts import counts_for_songs
+        with self.open() as library:
+            counts = counts_for_songs(library.connection)
+        if order.startswith('plays_'):
+            rows.sort(key=lambda r: (
+                counts.get(r['song_id'], {}).get('play_count', 0) * (-1 if order == 'plays_desc' else 1),
+                r['_sort'], r['song_id'],
+            ))
+        else:
+            rows.sort(key=lambda r:r['_sort'],reverse=order=='desc')
         page=[{k:v for k,v in r.items() if not k.startswith('_')} for r in rows[offset:offset+limit]]
         with self.open() as library:
             progress=progress_for_songs(library.connection,[r['song_id'] for r in page])
-        for song in page:song['progress']=progress[song['song_id']]
+        for song in page:
+            song['progress']=progress[song['song_id']]
+            song.update(counts.get(song['song_id'], dict(play_count=0, play_counts={})))
         return {'total':len(rows),'offset':offset,'limit':limit,'songs':page}
 
     def _song(self,db,root_id,song_id):
@@ -212,6 +223,8 @@ class LibraryService:
                           title_candidates=raw.get('title_candidates',[]),
                           difficulties=[self._difficulty(db,song,label) for label in GAME_DIFFICULTIES])
             result['progress']=progress_for_songs(db,[song_id])[song_id]
+            from .play_counts import song_counts
+            result.update(song_counts(db, song_id))
             return result
 
     def save_difficulty(self,body):

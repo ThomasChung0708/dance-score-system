@@ -1707,3 +1707,23 @@ button,a,input,select,summary {
   }
 
 }
+/* Saved song totals use the same score numerals as the result panels. */
+.song-play-count {
+  color: var(--accent);
+  font-family: var(--font-score);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  margin: 6px 0;
+}
+
+.header-actions nav {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.topbar .header-actions .page-link[aria-current="page"] {
+  color: var(--accent);
+  border-color: var(--accent);
+}

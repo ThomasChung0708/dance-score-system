@@ -84,7 +84,7 @@ async function loadSongs(){
       const heading=node('div','song-title-row'),title=node('span','song-title',song.display_title);
       if(song.latest_status!=='ok')title.append(node('span','status-tag','待確認'));
       const official=song.source_type==='official';
-      heading.append(title,node('span','song-id','#'+song.song_id));row.append(heading,node('div','song-pack',official?'官方歌曲 · K · fileId '+song.file_id:(song.pack_name||'未歸類 Pack')),node('div','song-folder',official?song.gn:song.relative_folder));
+      heading.append(title,node('span','song-id','#'+song.song_id));row.append(heading,node('div','song-play-count','遊玩 '+song.play_count+' 次'),node('div','song-pack',official?'官方歌曲 · K · fileId '+song.file_id:(song.pack_name||'未歸類 Pack')),node('div','song-folder',official?song.gn:song.relative_folder));
       if(!song.is_present)row.append(node('span','status-tag','來源暫時未找到，資料保留'));
       const progress=node('div','song-progress');for(const p of song.progress||[])progress.append(DanceFX.chartProgress(p,{compact:true}));row.append(progress);row.addEventListener('click',()=>selectSong(song.song_id).catch(reportError));list.append(row);
       const bestLamp = ['ACP', 'AC', 'CLEAR', 'FAILED'].find(status =>
@@ -147,9 +147,15 @@ function buildProgressPanel(song,update=null){
   if(summary)try{sessionStorage.setItem('dance-progress-fx:'+key,'1');}catch(_e){}
  }if(update?.song_id===song.song_id&&['EASY','NORMAL','HARD'].includes(update.difficulty))choice.value=update.difficulty;const show=()=>{for(const c of cards)c.hidden=c.dataset.difficulty!==choice.value;};choice.addEventListener('change',show);show();return scores;
 }
+function playCountSummary(song) {
+  const breakdown = ['EASY', 'NORMAL', 'HARD', 'UNKNOWN'].filter(label => song.play_counts?.[label])
+    .map(label => (label === 'UNKNOWN' ? '難度未知' : label[0]) + ' ' + song.play_counts[label]).join(' / ');
+  return '總遊玩 '+song.play_count+' 次' + (breakdown ? '（'+breakdown+'）' : '');
+}
 function renderDetail(song,update=null){
   const target=$('details');target.replaceChildren();const top=node('div','detail-top'),reload=node('button','','重新載入');reload.type='button';reload.setAttribute('aria-label','重新載入歌曲資訊');reload.addEventListener('click',()=>{if(mayLeave())selectSong(song.song_id,true).catch(reportError);});top.append(node('span','eyebrow','SONG DETAILS'),reload);
   target.append(top,node('h2','detail-title',song.display_title),node('p','artist-list',song.artists.length?song.artists.join(' / '):'Artist 未設定'));
+  target.append(node('p','song-play-count detail-play-count',playCountSummary(song)));
   const meta=node('dl','metadata');metadataLine(meta,'Song ID',song.song_id);metadataLine(meta,'Pack',song.official?'不適用 · 熱舞官方譜面':(song.pack_name||'未歸類'));metadataLine(meta,'SongFolder',song.official?'不適用':song.folder_name);metadataLine(meta,'來源格式',song.official?'官方 CSV':song.formats.map(f=>f.toUpperCase()).join(' / '));
   if(song.official){metadataLine(meta,'fileId',song.official.file_id);metadataLine(meta,'mode',song.official.mode);metadataLine(meta,'BPM',song.official.bpm_raw);metadataLine(meta,'gn',song.official.gn);}
   if(song.latest_title!==song.saved_title&&song.saved_title)metadataLine(meta,'顯示名稱','沿用上次可確認名稱；原始候選保留於來源資訊');target.append(meta,node('div','full-path',song.official?'來源 CSV：'+song.official.source_name+' · 記錄 '+song.official.csv_record_number:song.original_path));
@@ -293,6 +299,10 @@ async function refreshProgress(update) {
         // Check after the request: an edit may have started while it was in flight.
         if (dirty()) {
           state.song.progress = fresh.progress;
+          state.song.play_count = fresh.play_count;
+          state.song.play_counts = fresh.play_counts;
+          const count = $('details').querySelector('.detail-play-count');
+          if (count) count.textContent = playCountSummary(fresh);
           const panel = $('details').querySelector('.song-result-panel');
           if (panel) panel.replaceWith(buildProgressPanel(fresh, update));
         } else {

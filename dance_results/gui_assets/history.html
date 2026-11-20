@@ -1,8 +1,10 @@
 <!doctype html>
 <html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="dance-token" content="SESSION_TOKEN"><title>熱舞 Online · 歷史成績</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/lamps.css"><script src="/lamps.js" defer></script><link rel="stylesheet" href="/history.css"><script src="/history.js" defer></script><script src="/game-sync.js" defer></script></head>
 <body class="history-page"><header class="topbar"><div class="brand"><div><h1>歷史成績</h1></div></div>
-<nav class="header-actions">
+<nav class="header-actions" aria-label="主要導覽">
   <a class="page-link" href="/">歌曲庫</a>
+  <a class="page-link" href="/history" aria-current="page">歷史成績</a>
+  <a class="page-link" href="/plays">遊玩排行</a>
 </nav></header><div id="history-message" class="message" role="status" hidden></div>
 <main class="history-workspace"><section class="record-sheet"><div class="sheet-intro"><div><h2>每次挑戰，都留下進步</h2><p class="history-note">最高 EX 與最佳燈號各自保留。歷史更新標記記錄當時的突破。</p></div></div>
 <form id="history-filter">
@@ -26,6 +28,7 @@
 <label>本人暱稱<input id="history-player" maxlength="64" placeholder="全部已保存暱稱"></label><button type="submit">查詢成績</button>
 <button id="history-clear" type="button">清除條件</button>
 </form>
+<p id="history-play-count" class="song-play-count" aria-live="polite" hidden></p>
 <div id="history-bests" class="history-bests"></div><div class="log-heading"><span class="eyebrow">遊玩紀錄</span><p id="history-count" class="history-note" aria-live="polite"></p></div>
 <p class="history-scroll-hint">左右捲動可查看完整成績</p>
 <div class="history-table-wrap"><table class="record-table"><thead><tr><th scope="col">遊玩日期 / Record</th><th scope="col">歌曲 / 難度</th><th scope="col">CLEAR STATUS</th><th scope="col">SCORE STATUS</th><th scope="col">P / C / B / M</th><th scope="col">本次更新</th><th scope="col">詳情</th></tr></thead><tbody id="history-rows"></tbody></table></div><div class="history-pager"><button id="history-prev" disabled>上一頁</button><button id="history-next" disabled>下一頁</button></div><p class="history-note sheet-footnote">依實際遊玩時間排列。當次燈號不等於歷史最佳；未知 MAX 不產生百分比。更新證據不足時不推測歷史突破。</p></section>

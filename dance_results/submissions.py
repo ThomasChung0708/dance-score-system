@@ -16,7 +16,8 @@ from .sqlite_safety import verified_backup, check_integrity
 from .achievements import progress_for_songs, feedback
 from .note_review import result_time
 from .result_consistency import screen_catalog, observation, screen_totals, validate, selection_is_reference
-from .songs import catalog_display_title, evidence_titles, record_display_title
+from .songs import catalog_display_title, evidence_titles, record_display_title, record_display_artist
+from .play_counts import SONG_ID, DIFFICULTY, JOINS, song_counts, ranked_songs, unbound_record_ids
 
 def basis_is_custom(score):return score.get('max_policy')=='custom-judged-v1'
 
@@ -57,9 +58,7 @@ class SubmissionService:
                     if row['artist']:
                         artists.setdefault(row['song_id'], []).append(row['artist'])
                 played = {row[0] for row in db.execute(
-                    'SELECT DISTINCT COALESCE(r.song_id,d.song_id) '
-                    'FROM play_records r LEFT JOIN game_difficulties d '
-                    'ON d.difficulty_id=r.difficulty_id'
+                    'SELECT DISTINCT ' + SONG_ID + JOINS
                 )}
             rows = []
             for song in catalog:
@@ -378,9 +377,10 @@ class SubmissionService:
 
     @staticmethod
     def _record(db,record_id,*,include_evidence=True):
-        row=db.execute('SELECT r.*,COALESCE(r.song_id,d.song_id) AS bound_song_id,COALESCE(d.difficulty,ps.local_difficulty) AS difficulty,s.saved_title,s.latest_title,s.relative_folder,s.source_type,p.name AS pack_name,ps.player_name,ps.play_mode,ps.display_song_title '
+        identity = SONG_ID
+        row=db.execute('SELECT r.*,'+identity+' AS bound_song_id,COALESCE(d.difficulty,ps.local_difficulty) AS difficulty,s.saved_title,s.latest_title,s.relative_folder,s.source_type,p.name AS pack_name,ps.player_name,ps.play_mode,ps.display_song_title '
             'FROM play_records r JOIN play_sessions ps ON ps.session_id=r.session_id LEFT JOIN game_difficulties d ON d.difficulty_id=r.difficulty_id '
-            'LEFT JOIN songs s ON s.song_id=COALESCE(r.song_id,d.song_id) LEFT JOIN packs p ON p.pack_id=s.pack_id WHERE r.record_id=?',(record_id,)).fetchone()
+            'LEFT JOIN songs s ON s.song_id='+identity+' LEFT JOIN packs p ON p.pack_id=s.pack_id WHERE r.record_id=?',(record_id,)).fetchone()
         if row is None:raise LibraryError('找不到成績。',404)
         result=dict(row);evidence=json.loads(result.pop('evidence_json'))
         result['song_id'] = result.pop('bound_song_id')
@@ -389,8 +389,11 @@ class SubmissionService:
             result.pop('display_song_title'))
         result.pop('saved_title',None);result.pop('latest_title',None)
         snapshot=evidence.get('song') or {}
-        for key in ('song_id','pack_name','source_type'):
+        result['artist'] = record_display_artist(evidence)
+        for key in ('pack_name','source_type'):
             if key in snapshot:result[key]=snapshot[key]
+        if not db.execute('SELECT 1 FROM songs WHERE song_id=?', (result['song_id'],)).fetchone():
+            result['song_id'] = None
         if snapshot.get('relative_folder') is not None:result['relative_folder']=snapshot['relative_folder']
         if (evidence.get('values') or {}).get('difficulty'):result['difficulty']=evidence['values']['difficulty']
         result['display']=(f"MAX -{result['max_difference']}" if result.get('max_difference') is not None and result['max_difference']<=150
@@ -425,7 +428,7 @@ class SubmissionService:
 
     def history(
         self, *, song_id=None, difficulty=None, player_name=None, offset=0,
-        limit=60, order='desc', lamp='',
+        limit=60, order='desc', lamp='', title=None, artist=None,
     ):
         validate_lamp_filter(lamp)
         integer(offset,'起點');integer(limit,'筆數',1)
@@ -435,7 +438,10 @@ class SubmissionService:
         if difficulty is not None and difficulty not in ('EASY','NORMAL','HARD'):raise LibraryError('難度不正確。')
         if player_name is not None and (not isinstance(player_name,str) or len(player_name)>64):raise LibraryError('暱稱不正確。')
         where=[];args=[]
-        for sql,value in [('COALESCE(r.song_id,d.song_id)=?',song_id),('COALESCE(d.difficulty,p.local_difficulty)=?',difficulty),('p.player_name=?',player_name)]:
+        for value in (title, artist):
+            if value is not None and (not isinstance(value, str) or len(value) > 500):
+                raise LibraryError('歌曲篩選文字過長。')
+        for sql,value in [(SONG_ID+'=?',song_id),(DIFFICULTY+'=?',difficulty),('p.player_name=?',player_name)]:
             if value is not None:where.append(sql);args.append(value)
         if lamp == 'UNCLEARED':
             where.append("(r.lamp_status='FAILED' OR r.lamp_status IS NULL)")
@@ -443,10 +449,19 @@ class SubmissionService:
             values = LAMP_FILTERS[lamp]
             where.append('r.lamp_status IN (' + ','.join('?' for _ in values) + ')')
             args.extend(values)
-        suffix=(' WHERE '+' AND '.join(where)) if where else ''
-        joins=' FROM play_records r LEFT JOIN game_difficulties d ON d.difficulty_id=r.difficulty_id JOIN play_sessions p ON p.session_id=r.session_id'
+        joins=JOINS
         with self.library.open() as library:
-            db=library.connection;count=db.execute('SELECT count(*)'+joins+suffix,args).fetchone()[0]
+            db=library.connection
+            title_count = None
+            if title is not None:
+                # Exact displayed-title fallback for unbound ranking rows only.
+                # This is a history filter, never a catalog identity match.
+                ids = unbound_record_ids(db, title, artist)
+                title_count = len(ids)
+                where.append('r.record_id IN (' + ','.join('?' for _ in ids) + ')')
+                args.extend(ids)
+            suffix=(' WHERE '+' AND '.join(where)) if where else ''
+            count=db.execute('SELECT count(*)'+joins+suffix,args).fetchone()[0]
             ids=[r[0]for r in db.execute('SELECT r.record_id'+joins+suffix+' ORDER BY julianday(r.played_at) '+order+',r.record_id '+order+' LIMIT ? OFFSET ?',(*args,limit,offset))]
             records=[self._record(db,i,include_evidence=False)for i in ids]
             bests=[]
@@ -462,7 +477,18 @@ class SubmissionService:
                 for item in bests:
                     p=next(x for x in progress if x['difficulty']==item['difficulty'])
                     item.update(comparison_paused=p.get('comparison_paused',False),my_best_score=p['best_score_record'],best_lamp_record=p['best_lamp_record'],comparison_scope=p.get('comparison_scope'))
-            return dict(records=records,total=count,offset=offset,limit=limit,bests=bests)
+            counts = song_counts(db, song_id) if song_id is not None else dict(
+                play_count=title_count, play_counts={},
+            )
+            return dict(records=records,total=count,offset=offset,limit=limit,bests=bests,**counts)
+
+    def top_plays(self, limit=30):
+        integer(limit, '筆數', 1)
+        if limit > 100:
+            raise LibraryError('最多 100 首。')
+        with self.library.open() as library:
+            rows = ranked_songs(library.connection)
+        return dict(songs=rows[:limit], total=len(rows), limit=limit)
 
     def progress_history(self,*,song_id,difficulty=None,offset=0,limit=20,order='desc'):
         integer(song_id,'Song ID',1)

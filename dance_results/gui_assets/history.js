@@ -10,6 +10,9 @@ const songInput = $('history-song'), songIdInput = $('history-song-id');
 const songOptions = $('history-song-options');
 let songSuggestions = [], activeSong = -1, songSearchTimer, songSearchVersion = 0;
 let songComposing = false;
+let unboundTitle = new URLSearchParams(location.search).get('title');
+let unboundArtist = new URLSearchParams(location.search).get('artist');
+if (unboundTitle) songInput.value = unboundTitle;
 
 function closeSongOptions() {
  clearTimeout(songSearchTimer);
@@ -24,6 +27,8 @@ function closeSongOptions() {
 }
 
 function pickSong(song) {
+ unboundTitle = null;
+ unboundArtist = null;
  songInput.value = song.title;
  songIdInput.value = song.song_id;
  closeSongOptions();
@@ -90,6 +95,8 @@ function scheduleSongSearch() {
 }
 
 songInput.addEventListener('input', event => {
+ unboundTitle = null;
+ unboundArtist = null;
  songIdInput.value = '';
  closeSongOptions();
  if (!event.isComposing && !songComposing) scheduleSongSearch();
@@ -141,7 +148,7 @@ function row(record){
  DanceFX.lampStrip(tr, r.lamp_status);
  td = cell(tr, '歌曲 / 難度', 'record-song');
  const title = element('a', 'record-title', r.title || '歌曲待確認');
- title.href = '/history?' + new URLSearchParams({song_id: r.song_id,
+ title.href = '/history?' + new URLSearchParams({...(r.song_id ? {song_id: r.song_id} : {title: r.title, artist: r.artist || ''}),
    ...(r.difficulty ? {difficulty: r.difficulty} : {})});
  td.append(title, element('span', 'difficulty-chip difficulty-' + (r.difficulty || 'unknown').toLowerCase(),
    (r.difficulty || '難度未設定') + ' / LV ' + text(r.game_level)));
@@ -160,7 +167,13 @@ function row(record){
 }
 async function load(){
  const version=++loadVersion;try{message('');const args=new URLSearchParams({offset,limit:60});for(const [id,key]of [['history-song-id','song_id'],['history-difficulty','difficulty'],['history-lamp','lamp'],['history-player','player_name']])if($(id).value)args.set(key,$(id).value);
+ if (unboundTitle) {
+  args.set('title', unboundTitle);
+  if (unboundArtist !== null) args.set('artist', unboundArtist);
+ }
  const data=await api('?'+args);if(version!==loadVersion)return;
+ $('history-play-count').hidden = data.play_count === null;
+ $('history-play-count').textContent = data.play_count === null ? '' : '這首歌共遊玩 '+data.play_count+' 次（全部難度）';
  $('history-count').textContent='共 '+data.total+' 筆成績 · 本頁 '+data.records.length+' 筆';$('history-prev').disabled=offset===0;$('history-next').disabled=offset+60>=data.total;$('history-rows').replaceChildren(...data.records.map(row));
  if(!data.records.length){const tr=element('tr','empty-records'),td=element('td','','尚無符合條件的正式成績。');td.colSpan=7;tr.append(td);$('history-rows').append(tr);}
  $('history-bests').replaceChildren();for(const d of data.bests){const group=element('section','history-best-group'),h=element('h3','chart-label',d.difficulty+(d.comparison_paused?' · 比較暫停':''));group.append(h,DanceFX.bestPair({difficulty:d.difficulty,best_score_record:d.my_best_score,best_lamp_record:d.best_lamp_record,best_lamp:d.best_clear_lamp,comparison_paused:d.comparison_paused},{songId:d.song_id}));$('history-bests').append(group);}
@@ -181,7 +194,7 @@ $('history-filter').addEventListener('submit', async event => {
  event.preventDefault();
  if (songComposing) return;
  clearTimeout(songSearchTimer);
- if (songInput.value.trim() && !songIdInput.value) {
+ if (songInput.value.trim() && !songIdInput.value && !unboundTitle) {
   const songs = await searchSongs();
   if (!songs) return;
   if (songs.length !== 1) {
@@ -193,6 +206,10 @@ $('history-filter').addEventListener('submit', async event => {
  closeSongOptions();
  offset = 0;
  const params = new URLSearchParams();
+ if (unboundTitle) {
+  params.set('title', unboundTitle);
+  if (unboundArtist !== null) params.set('artist', unboundArtist);
+ }
  for (const [id, key] of [['history-song-id', 'song_id'], ['history-difficulty', 'difficulty'],
    ['history-lamp', 'lamp'], ['history-player', 'player_name']]) {
   if ($(id).value) params.set(key, $(id).value);
@@ -205,6 +222,8 @@ $('history-clear').addEventListener('click', () => {
  closeSongOptions();
  songInput.value = '';
  songIdInput.value = '';
+ unboundTitle = null;
+ unboundArtist = null;
  $('history-difficulty').value = '';
  $('history-lamp').value = '';
  $('history-player').value = '';
