@@ -117,7 +117,8 @@ def create_server(database,port=0,monitor_directory=None,*,game_sync=True):
                 elif parsed.path=='/api/player-settings':result=dict(player_name=monitor.player_settings.get())
                 elif parsed.path=='/api/history':
                     result=submissions.history(song_id=number('song_id'),difficulty=args.get('difficulty',[None])[0],
-                        player_name=args.get('player_name',[None])[0],offset=number('offset',0),limit=number('limit',60))
+                        player_name=args.get('player_name',[None])[0],offset=number('offset',0),limit=number('limit',60),
+                        lamp=args.get('lamp',[''])[0])
                 elif parsed.path == '/api/history/song-search':
                     result = submissions.song_search(
                         args.get('q', [''])[0], limit=number('limit', 20),
@@ -132,7 +133,7 @@ def create_server(database,port=0,monitor_directory=None,*,game_sync=True):
                 elif parsed.path=='/api/songs':
                     result=service.songs(number('root_id'),query=args.get('q',[''])[0],pack_id=number('pack_id'),
                                          category=args.get('category',['all'])[0],order=args.get('order',['asc'])[0],
-                                         offset=number('offset',0),limit=number('limit',60))
+                                         offset=number('offset',0),limit=number('limit',60),lamp=args.get('lamp',[''])[0])
                 elif parsed.path.startswith('/api/songs/'):
                     try:song_id=int(parsed.path.removeprefix('/api/songs/'))
                     except ValueError:raise LibraryError('Song ID 不正確。')

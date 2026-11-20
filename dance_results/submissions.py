@@ -8,7 +8,7 @@ import sqlite3
 import threading
 import unicodedata
 
-from .library_service import LibraryError, folded, integer
+from .library_service import LibraryError, LAMP_FILTERS, folded, integer, validate_lamp_filter
 from .monitor_tracking import fingerprint, utc
 from .ocr_matching import normalize
 from .scoring import calculate, percentage_display
@@ -423,7 +423,11 @@ class SubmissionService:
         if include_evidence:result['evidence']=evidence
         return result
 
-    def history(self,*,song_id=None,difficulty=None,player_name=None,offset=0,limit=60,order='desc'):
+    def history(
+        self, *, song_id=None, difficulty=None, player_name=None, offset=0,
+        limit=60, order='desc', lamp='',
+    ):
+        validate_lamp_filter(lamp)
         integer(offset,'起點');integer(limit,'筆數',1)
         if limit>100:raise LibraryError('每頁最多100筆。')
         if order not in ('asc','desc'):raise LibraryError('遊玩時間排序不正確。')
@@ -433,6 +437,12 @@ class SubmissionService:
         where=[];args=[]
         for sql,value in [('COALESCE(r.song_id,d.song_id)=?',song_id),('COALESCE(d.difficulty,p.local_difficulty)=?',difficulty),('p.player_name=?',player_name)]:
             if value is not None:where.append(sql);args.append(value)
+        if lamp == 'UNCLEARED':
+            where.append("(r.lamp_status='FAILED' OR r.lamp_status IS NULL)")
+        elif lamp:
+            values = LAMP_FILTERS[lamp]
+            where.append('r.lamp_status IN (' + ','.join('?' for _ in values) + ')')
+            args.extend(values)
         suffix=(' WHERE '+' AND '.join(where)) if where else ''
         joins=' FROM play_records r LEFT JOIN game_difficulties d ON d.difficulty_id=r.difficulty_id JOIN play_sessions p ON p.session_id=r.session_id'
         with self.library.open() as library:

@@ -1,5 +1,46 @@
 /* Clear-status indicators. Color accompanies the explicit status label. */
 
+/* Light fills keep dark text readable at every point of the moving band. */
+[data-lamp] {
+  --lamp: #b9beb4;
+  --lamp-ink: #c8cdc3;
+  --lamp-fill: transparent;
+  --lamp-border: solid;
+  --lamp-cycle: none;
+}
+
+.lamp-acp, [data-lamp=ACP] {
+  --lamp: #ddb0ff;
+  --lamp-ink: #141817;
+  --lamp-fill: linear-gradient(110deg, #ff929d, #ffd36e, #9fea91, #81e5df, #94bcff, #ddb0ff, #ff929d, #ffd36e, #9fea91, #81e5df, #94bcff, #ddb0ff, #ff929d);
+  --lamp-cycle: lamp-flow 8s linear infinite;
+}
+
+.lamp-ac, [data-lamp=AC] {
+  --lamp: #edca67;
+  --lamp-ink: #141817;
+  --lamp-fill: linear-gradient(110deg, #e5bc51 0%, #edca67 35%, #fff5cf 48%, #edca67 61%, #e5bc51 100%);
+  --lamp-cycle: lamp-flow 6s ease-in-out infinite alternate;
+}
+
+.lamp-clear, [data-lamp=CLEAR] {
+  --lamp: #74cfea;
+  --lamp-ink: #141817;
+  --lamp-fill: #74cfea;
+}
+
+.lamp-failed, [data-lamp=FAILED] {
+  --lamp: #5d6262;
+  --lamp-ink: #efa8a5;
+  --lamp-fill: #343637;
+}
+
+.lamp-pending, [data-lamp=PENDING] {
+  --lamp: #969d91;
+  --lamp-fill: #2b2f2b;
+  --lamp-border: dashed;
+}
+
 .clear-lamp {
   display: inline-flex;
   position: relative;
@@ -9,79 +50,88 @@
   color: var(--lamp);
   white-space: nowrap;
   animation: lamp-enter .36s ease-out both;
-  --lamp: #b0b7ad;
-  gap: 7px;
-  min-width: 88px;
-  padding: 6px 9px;
-  border: 1px solid color-mix(in srgb, var(--lamp) 65%, #202323);
-  border-radius: 2px;
-  background: #202323;
-  font: 600 12px/1.2 var(--font-score);
-  letter-spacing: normal;
-  box-shadow: none;
+  font: 700 12px/1.2 var(--font-score);
+  border-radius: 3px;
 }
 
-.lamp-acp {
-  --lamp: #f1cf76;
-}
-
-.lamp-ac {
-  --lamp: #8dcdf0;
-}
-
-.lamp-clear {
-  --lamp: #8ed7ad;
-}
-
-.lamp-failed {
-  --lamp: #ffa4a0;
-}
-
-.lamp-unplayed {
-  --lamp: #b0b7ad;
-  box-shadow: none;
-  background: transparent;
-}
-
+/* Retain the public core hook; the badge itself now carries the lamp colour. */
 .lamp-core {
-  width: 5px;
-  height: 12px;
-  border: 0;
-  border-radius: 0;
-  transform: none;
-  background: currentColor;
-  box-shadow: none;
-}
-
-.lamp-unplayed .lamp-core {
-  background: transparent;
-  box-shadow: none;
-  border: 1px solid currentColor;
-}
-
-.clear-lamp::before {
-  content: '';
-  position: absolute;
-  z-index: -1;
-  inset: -4px;
-  border-radius: inherit;
-  opacity: .5;
   display: none;
+}
+
+.lamp-label {
+  display: block;
+  min-width: 88px;
+  padding: 7px 10px;
+  border: 1px var(--lamp-border) var(--lamp);
+  border-radius: inherit;
+  color: var(--lamp-ink);
+  background: var(--lamp-fill);
+  background-size: 200% 100%;
+  animation: var(--lamp-cycle);
+  animation-play-state: paused;
+  text-align: center;
+}
+
+.clear-lamp.fx-visible > .lamp-label {
+  animation-play-state: running;
 }
 
 .clear-lamp.compact {
   font-size: 11px;
-  min-width: 0;
-  padding: 3px 0;
-  gap: 5px;
-  letter-spacing: normal;
-  border: 0;
-  background: transparent;
 }
 
-.compact .lamp-core {
-  width: 3px;
-  height: 10px;
+.clear-lamp.compact .lamp-label {
+  min-width: 66px;
+  padding: 5px 7px;
+}
+
+.lamp-strip-host {
+  position: relative;
+}
+
+.lamp-strip {
+  --lamp-from: 50% 0%;
+  --lamp-to: 50% 100%;
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 7px;
+  pointer-events: none;
+  background: var(--lamp-fill);
+  background-size: 100% 200%;
+  animation: var(--lamp-cycle);
+  animation-play-state: paused;
+}
+
+.lamp-strip-host.fx-visible > .lamp-strip,
+.lamp-strip-host.fx-visible > td:first-child > .lamp-strip {
+  animation-play-state: running;
+}
+
+[data-lamp=UNPLAYED] > .lamp-strip,
+[data-lamp=UNPLAYED] > td:first-child > .lamp-strip,
+[data-lamp=PENDING] > .lamp-strip,
+[data-lamp=PENDING] > td:first-child > .lamp-strip {
+  border: 1px var(--lamp-border) var(--lamp);
+}
+
+#history-rows .lamp-strip-host > td:first-child {
+  position: relative;
+  padding-left: 19px;
+}
+
+.song-row.lamp-strip-host,
+.song-row.lamp-strip-host.selected {
+  padding-left: 19px;
+}
+
+@keyframes lamp-flow {
+  from {
+    background-position: var(--lamp-from, 0% 50%);
+  }
+  to {
+    background-position: var(--lamp-to, 100% 50%);
+  }
 }
 
 .lamp-upgrade {
@@ -96,17 +146,6 @@
   border: 1px solid currentColor;
   border-radius: inherit;
   animation: lamp-ring .65s ease-out both;
-}
-
-.lamp-upgrade .lamp-label {
-  animation: lamp-shine .52s ease-out both;
-  background: none;
-  background-image: none;
-  color: var(--lamp);
-}
-
-.lamp-acp.lamp-upgrade {
-  box-shadow: none;
 }
 
 .lamp-failure {
@@ -127,13 +166,6 @@
   100% {
     opacity: 1;
     transform: scale(1);
-  }
-
-}
-
-@keyframes lamp-breathe {
-  50% {
-    opacity: 1;
   }
 
 }
@@ -166,24 +198,6 @@
     transform: scale(1.5);
   }
 
-}
-
-@keyframes lamp-shine {
-  0% {
-    opacity: .5
-  }
-
-  100% {
-    opacity: 1
-  }
-
-}
-
-.lamp-upgrade .lamp-label {
-  background: none;
-  color: var(--lamp);
-  background-image: none;
-  animation: lamp-shine .52s ease-out both;
 }
 
 @keyframes lamp-failed {
@@ -257,7 +271,7 @@
 }
 
 .compact-progress {
-  padding: 0 10px;
+  padding: 0 10px 0 15px;
   border: 0;
   border-right: 1px solid var(--line);
 }
@@ -369,11 +383,11 @@
 }
 
 .tone-ac {
-  --event: #70caff;
+  --event: #edca67;
 }
 
 .tone-clear {
-  --event: #65e3aa;
+  --event: #74cfea;
 }
 
 .tone-failed {
@@ -494,17 +508,13 @@ html[data-reduced-motion=true] .clear-lamp,html[data-reduced-motion=true] .lamp-
   animation: fx-fade .12s ease-out both!important;
 }
 
-html[data-reduced-motion=true] .clear-lamp::before,html[data-reduced-motion=true] .clear-lamp::after,html[data-reduced-motion=true] .lamp-label {
+html[data-reduced-motion=true] .lamp-label,
+html[data-reduced-motion=true] .lamp-strip {
   animation: none!important;
 }
 
 html[data-reduced-motion=true] .clear-lamp::after {
   display: none;
-}
-
-html[data-reduced-motion=true] .lamp-label {
-  background: none;
-  color: var(--lamp);
 }
 
 html[data-reduced-motion=true] .toast-leave {
@@ -523,17 +533,12 @@ html[data-reduced-motion=true] .toast-leave {
     animation: fx-fade .12s ease-out both!important;
   }
 
-  .clear-lamp::before,.clear-lamp::after,.lamp-label {
+  .clear-lamp::after,.lamp-label,.lamp-strip {
     animation: none!important;
   }
 
   .clear-lamp::after {
     display: none;
-  }
-
-  .lamp-label {
-    background: none!important;
-    color: var(--lamp)!important;
   }
 
   .toast-leave {
@@ -549,19 +554,9 @@ html[data-reduced-motion=true] .toast-leave {
   }
 
   .compact-progress {
-    padding: 0 10px;
+    padding: 0 10px 0 15px;
     border: 0;
     border-right: 1px solid var(--line);
-  }
-
-  .clear-lamp.compact {
-    min-width: 0;
-    font-size: 11px;
-    padding: 3px 0;
-    gap: 5px;
-    border: 0;
-    background: transparent;
-    letter-spacing: normal;
   }
 
   .compact-progress .progress-head {
@@ -581,14 +576,6 @@ html[data-reduced-motion=true] .toast-leave {
 
 .achievement-tags:empty {
   display: none;
-}
-
-.lamp-pending {
-  --lamp: #e0b6d9;
-}
-
-.lamp-pending::before {
-  animation: none!important;
 }
 
 .note-exception-mark {
@@ -622,8 +609,7 @@ html[data-reduced-motion=true] .toast-leave {
   background: transparent;
   border: 0;
   border-top: 0;
-  border-left: 1px solid var(--line);
-  padding: 0 0 0 12px;
+  padding: 0 0 0 19px;
 }
 
 .best-eyebrow {
@@ -883,7 +869,7 @@ html[data-reduced-motion=true] .toast-leave {
   margin-top: 12px;
 }
 
-.double-update .lamp-upgrade,.double-update .lamp-upgrade::after,.double-update .lamp-upgrade .lamp-label {
+.double-update .lamp-upgrade,.double-update .lamp-upgrade::after {
   animation-delay: .2s;
 }
 
@@ -1144,7 +1130,7 @@ html[data-reduced-motion=true] .double-update .lamp-upgrade {
 }
 
 .song-progress .compact-progress:first-child {
-  padding-left: 0;
+  padding-left: 15px;
 }
 
 .song-progress .compact-progress:last-child {
@@ -1158,7 +1144,7 @@ html[data-reduced-motion=true] .double-update .lamp-upgrade {
 
 @media (max-width:650px) {
   .compact-progress {
-    padding: 0 7px;
+    padding: 0 7px 0 13px;
   }
 
   .compact-progress .progress-head {
@@ -1173,12 +1159,6 @@ html[data-reduced-motion=true] .double-update .lamp-upgrade {
     font-size: 11px;
   }
 
-  .clear-lamp.compact {
-    font-size: 10px;
-    min-width: 0;
-    padding: 3px 0;
-  }
-
   .best-pair {
     gap: 0;
   }
@@ -1188,7 +1168,7 @@ html[data-reduced-motion=true] .double-update .lamp-upgrade {
   }
 
   .best-lamp {
-    padding: 0 0 0 12px;
+    padding: 0 0 0 19px;
   }
 
   .best-number {

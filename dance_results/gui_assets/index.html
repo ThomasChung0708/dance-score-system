@@ -30,6 +30,15 @@
   <aside class="packs-panel" aria-label="Pack 瀏覽"><div class="panel-heading"><h2>音樂收藏</h2></div><nav id="pack-list" aria-label="Pack 清單"></nav></aside>
   <section class="songs-panel" aria-label="歌曲清單"><div class="list-heading"><div><h2 id="list-title">全部歌曲</h2></div><span id="result-count" class="count-pill">—</span></div>
     <div class="search-tools"><label class="search-box"><input id="search" type="search" autocomplete="off" aria-label="搜尋歌曲名稱" placeholder="搜尋歌名、Pack 或資料夾…"></label><select id="sort" aria-label="歌曲名稱排序"><option value="asc">名稱 A → Z</option><option value="desc">名稱 Z → A</option></select>
+      <select id="lamp-filter" aria-label="Clear 狀態：任一難度的最佳燈號" title="任一 EASY / NORMAL / HARD 的最佳燈號符合；未取得燈號也算未通關">
+        <option value="">Clear 狀態：全部</option>
+        <option value="ACP">ACP</option>
+        <option value="AC">AC</option>
+        <option value="CLEAR">CLEAR</option>
+        <option value="FAILED">FAILED</option>
+        <option value="UNCLEARED">未通關</option>
+        <option value="CLEARED">已通關</option>
+      </select>
       <button id="clear-search" type="button">清除條件</button>
     </div>
     <div class="list-hint">歌名 <span>Pack / SongFolder</span></div><div id="song-list" role="list" aria-label="查詢結果"></div>

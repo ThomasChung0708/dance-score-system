@@ -13,13 +13,28 @@ from .database import LibraryDatabase
 from .models import GAME_DIFFICULTIES
 from .scanner import scan_library
 from .official_import import read_catalog, preview_catalog, import_catalog
-from .achievements import progress_for_songs
+from .achievements import best_lamps_for_songs, progress_for_songs
 from .songs import catalog_display_title
 
 
 class LibraryError(ValueError):
     def __init__(self,message,status=400):
         super().__init__(message);self.status=status
+
+
+LAMP_FILTERS = {
+    'ACP': ('ACP',),
+    'AC': ('AC',),
+    'CLEAR': ('CLEAR',),
+    'FAILED': ('FAILED',),
+    'UNCLEARED': ('FAILED', 'UNPLAYED'),
+    'CLEARED': ('CLEAR', 'AC', 'ACP'),
+}
+
+
+def validate_lamp_filter(lamp):
+    if lamp != '' and (not isinstance(lamp, str) or lamp not in LAMP_FILTERS):
+        raise LibraryError('通關狀態不正確。')
 
 
 def folded(value):
@@ -125,7 +140,11 @@ class LibraryService:
         return {'packs':packs,'categories':categories,'song_count':len(rows),'pack_count':len(packs),
                 'source_count':source_count+official_count,'file_source_count':source_count,'official_source_count':official_count}
 
-    def songs(self,root_id,*,query='',pack_id=None,category='all',order='asc',offset=0,limit=60):
+    def songs(
+        self, root_id, *, query='', pack_id=None, category='all', order='asc',
+        offset=0, limit=60, lamp='',
+    ):
+        validate_lamp_filter(lamp)
         if category not in ('all','official','custom','download','unknown'):raise LibraryError('分類不正確。')
         if order not in ('asc','desc'):raise LibraryError('排序不正確。')
         integer(offset,'頁面起點');integer(limit,'每頁筆數',1)
@@ -135,6 +154,12 @@ class LibraryService:
         q=folded(query.strip())
         rows=[r for r in self._catalog(root_id) if (pack_id is None or r['pack_id']==pack_id)
               and (category=='all' or r['category']==category) and (not q or q in r['_search'])]
+        if lamp:
+            with self.open() as library:
+                lamps = best_lamps_for_songs(library.connection, [r['song_id'] for r in rows])
+            rows = [r for r in rows if any(
+                status in LAMP_FILTERS[lamp] for status in lamps[r['song_id']].values()
+            )]
         rows.sort(key=lambda r:r['_sort'],reverse=order=='desc')
         page=[{k:v for k,v in r.items() if not k.startswith('_')} for r in rows[offset:offset+limit]]
         with self.open() as library:

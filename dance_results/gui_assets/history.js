@@ -138,6 +138,7 @@ function cell(tr,label,cls){const td=element('td',cls);td.dataset.label=label;tr
 function row(record){
  const r=record,tr=element('tr','record-row');tr.dataset.recordId=r.record_id;tr.dataset.updateKind=r.update_summary.kind;
  let td=cell(tr,'遊玩日期 / Record','record-date');td.append(element('time','',localTime(r.played_at_verified===false?null:r.played_at)),element('span','record-number','RECORD #'+r.record_id));
+ DanceFX.lampStrip(tr, r.lamp_status);
  td = cell(tr, '歌曲 / 難度', 'record-song');
  const title = element('a', 'record-title', r.title || '歌曲待確認');
  title.href = '/history?' + new URLSearchParams({song_id: r.song_id,
@@ -158,7 +159,7 @@ function row(record){
  td=cell(tr,'詳情','record-actions');const button=element('button','','查看 #'+r.record_id);button.type='button';button.addEventListener('click',()=>detail(r.record_id));td.append(button);return tr;
 }
 async function load(){
- const version=++loadVersion;try{message('');const args=new URLSearchParams({offset,limit:60});for(const [id,key]of [['history-song-id','song_id'],['history-difficulty','difficulty'],['history-player','player_name']])if($(id).value)args.set(key,$(id).value);
+ const version=++loadVersion;try{message('');const args=new URLSearchParams({offset,limit:60});for(const [id,key]of [['history-song-id','song_id'],['history-difficulty','difficulty'],['history-lamp','lamp'],['history-player','player_name']])if($(id).value)args.set(key,$(id).value);
  const data=await api('?'+args);if(version!==loadVersion)return;
  $('history-count').textContent='共 '+data.total+' 筆成績 · 本頁 '+data.records.length+' 筆';$('history-prev').disabled=offset===0;$('history-next').disabled=offset+60>=data.total;$('history-rows').replaceChildren(...data.records.map(row));
  if(!data.records.length){const tr=element('tr','empty-records'),td=element('td','','尚無符合條件的正式成績。');td.colSpan=7;tr.append(td);$('history-rows').append(tr);}
@@ -191,6 +192,12 @@ $('history-filter').addEventListener('submit', async event => {
  }
  closeSongOptions();
  offset = 0;
+ const params = new URLSearchParams();
+ for (const [id, key] of [['history-song-id', 'song_id'], ['history-difficulty', 'difficulty'],
+   ['history-lamp', 'lamp'], ['history-player', 'player_name']]) {
+  if ($(id).value) params.set(key, $(id).value);
+ }
+ history.replaceState(null, '', location.pathname + (params.size ? '?' + params : ''));
  load();
 });
 $('history-prev').addEventListener('click',()=>{offset=Math.max(0,offset-60);load();});$('history-next').addEventListener('click',()=>{offset+=60;load();});
@@ -199,6 +206,7 @@ $('history-clear').addEventListener('click', () => {
  songInput.value = '';
  songIdInput.value = '';
  $('history-difficulty').value = '';
+ $('history-lamp').value = '';
  $('history-player').value = '';
  offset = 0;
  ++detailVersion;
@@ -223,6 +231,12 @@ if (selectedSong && /^[1-9]\d*$/.test(selectedSong)) {
  });
 }
 const requestedDifficulty=new URLSearchParams(location.search).get('difficulty');if(['EASY','NORMAL','HARD'].includes(requestedDifficulty))$('history-difficulty').value=requestedDifficulty;
+const requestedLamp = new URLSearchParams(location.search).get('lamp');
+if ([...$('history-lamp').options].some(option => option.value === requestedLamp)) {
+ $('history-lamp').value = requestedLamp;
+}
+const requestedPlayer = new URLSearchParams(location.search).get('player_name');
+if (requestedPlayer) $('history-player').value = requestedPlayer;
 const initial = new URLSearchParams(location.search).get('record_id');
 load().then(() => {
  if (initial && /^\d+$/.test(initial) && new URLSearchParams(location.search).get('record_id') === initial) {

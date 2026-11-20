@@ -85,6 +85,40 @@ def song_result_progress(db, song_id, label):
     return p
 
 
+def best_lamps_for_songs(db, song_ids):
+    """The same chart lamps as progress_for_songs, without loading record details.
+
+    Catalog charts use difficulty_bests (including its legacy fallback); charts
+    known only from result evidence use VERIFIED_EX, like song_result_progress.
+    Empty E/N/H slots remain UNPLAYED, as in the library's progress cells.
+    """
+    ids = sorted(set(song_ids))
+    result = {sid: {d: 'UNPLAYED' for d in ('EASY', 'NORMAL', 'HARD')} for sid in ids}
+    rank_sql = 'CASE r.lamp_status ' + ' '.join(
+        f"WHEN '{status}' THEN {rank}" for status, rank in RANK.items()
+    ) + ' ELSE 0 END'
+    by_rank = {rank: status for status, rank in RANK.items()}
+    for start in range(0, len(ids), 400):
+        batch = ids[start:start + 400]
+        marks = ','.join('?' for _ in batch)
+        for row in db.execute(
+            'SELECT song_id,difficulty,best_clear_lamp FROM difficulty_bests '
+            'WHERE song_id IN (' + marks + ')', batch,
+        ):
+            result[row['song_id']][row['difficulty']] = row['best_clear_lamp']
+        for row in db.execute(
+            "SELECT r.song_id,json_extract(r.evidence_json,'$.values.difficulty') AS label,"
+            'MAX(' + rank_sql + ') AS lamp_rank FROM play_records r '
+            'WHERE r.song_id IN (' + marks + ') AND ' + VERIFIED_EX +
+            " AND NOT EXISTS(SELECT 1 FROM game_difficulties d WHERE d.song_id=r.song_id "
+            "AND d.difficulty=json_extract(r.evidence_json,'$.values.difficulty')) "
+            'GROUP BY r.song_id,label', batch,
+        ):
+            if row['label'] in result[row['song_id']]:
+                result[row['song_id']][row['label']] = by_rank[row['lamp_rank']]
+    return result
+
+
 def progress_for_songs(db,song_ids):
     """Bounded to the requested song page; reuse indexed difficulty_bests."""
     ids=sorted(set(song_ids));result={i:[empty_progress(d) for d in ('EASY','NORMAL','HARD')] for i in ids}

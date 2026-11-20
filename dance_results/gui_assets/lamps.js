@@ -1,4 +1,4 @@
-/* Original geometric lamps and achievement presentation. No score decisions. */
+/* Shared clear lamps and achievement presentation. No score decisions. */
 (()=>{'use strict';
 const states=new Set(['UNPLAYED','FAILED','CLEAR','AC','ACP','PENDING']);
 const el=(tag,cls,text)=>{const n=document.createElement(tag);n.className=cls||'';if(text!==undefined)n.textContent=text;return n;};
@@ -6,11 +6,53 @@ let manualReduce=false;
 try{manualReduce=localStorage.getItem('dance-motion')==='reduce';}catch(_e){}
 const media=window.matchMedia('(prefers-reduced-motion: reduce)');
 const visibility='IntersectionObserver'in window?new IntersectionObserver(entries=>{for(const e of entries)e.target.classList.toggle('fx-visible',e.isIntersecting);}):null;
+function lampStatus(status){
+ return status===null?'PENDING':states.has(status)?status:'UNPLAYED';
+}
+function observeLamp(node){
+ if(visibility)visibility.observe(node);
+ else node.classList.add('fx-visible');
+}
+function lampStrip(node,status){
+ node.dataset.lamp=lampStatus(status);
+ node.classList.add('lamp-strip-host');
+ const strip=el('i','lamp-strip');
+ strip.setAttribute('aria-hidden','true');
+ if(node.tagName==='TR')node.firstElementChild.prepend(strip);
+ else node.prepend(strip);
+ observeLamp(node);
+ return node;
+}
 function reduced(){return manualReduce||media.matches;}
 function updateMotion(){document.documentElement.dataset.reducedMotion=String(reduced());for(const b of document.querySelectorAll('.motion-control')){b.textContent=manualReduce?'動畫：減少':media.matches?'動畫：依系統（減少）':'動畫：標準';b.setAttribute('aria-pressed',String(manualReduce));}}
 function motionControl(){const b=el('button','motion-control');b.type='button';b.title='切換減少動畫偏好；系統偏好仍會生效';b.addEventListener('click',()=>{manualReduce=!manualReduce;try{localStorage.setItem('dance-motion',manualReduce?'reduce':'system');}catch(_e){}updateMotion();});return b;}
 media.addEventListener('change',updateMotion);window.addEventListener('storage',e=>{if(e.key==='dance-motion'){manualReduce=e.newValue==='reduce';updateMotion();}});
-function lamp(status,{compact=false,upgrade=false,failure=false}={}){const s=status===null?'PENDING':states.has(status)?status:'UNPLAYED',n=el('span','clear-lamp lamp-'+s.toLowerCase()+(compact?' compact':'')+(upgrade&&s!=='FAILED'?' lamp-upgrade':'')+(failure&&s==='FAILED'?' lamp-failure':''));n.dataset.lamp=s;n.dataset.entryKind=upgrade&&s!=='FAILED'?'upgrade':failure&&s==='FAILED'?'failure':'entry';const markStart=e=>{if(e.target===n&&!e.pseudoElement){n.dataset.entryAnimation=e.animationName;n.removeEventListener('animationstart',markStart);}};n.addEventListener('animationstart',markStart);n.setAttribute('aria-label','燈號 '+s);n.append(el('i','lamp-core'),el('span','lamp-label',s));n.firstChild.setAttribute('aria-hidden','true');if(visibility)visibility.observe(n);else n.classList.add('fx-visible');const settle=event=>{if(event.target!==n)return;n.classList.add('lamp-settled');n.classList.remove('lamp-upgrade','lamp-failure');n.removeEventListener('animationend',settle);};n.addEventListener('animationend',settle);return n;}
+function lamp(status,{compact=false,upgrade=false,failure=false}={}){
+ const s=lampStatus(status);
+ const n=el('span','clear-lamp lamp-'+s.toLowerCase()+(compact?' compact':'')+
+  (upgrade&&s!=='FAILED'?' lamp-upgrade':'')+(failure&&s==='FAILED'?' lamp-failure':''));
+ n.dataset.lamp=s;
+ n.dataset.entryKind=upgrade&&s!=='FAILED'?'upgrade':failure&&s==='FAILED'?'failure':'entry';
+ const markStart=e=>{
+  if(e.target===n&&!e.pseudoElement){
+   n.dataset.entryAnimation=e.animationName;
+   n.removeEventListener('animationstart',markStart);
+  }
+ };
+ n.addEventListener('animationstart',markStart);
+ n.setAttribute('aria-label','?? '+s);
+ n.append(el('i','lamp-core'),el('span','lamp-label',s));
+ n.firstChild.setAttribute('aria-hidden','true');
+ observeLamp(n);
+ const settle=event=>{
+  if(event.target!==n||event.pseudoElement)return;
+  n.classList.add('lamp-settled');
+  n.classList.remove('lamp-upgrade','lamp-failure');
+  n.removeEventListener('animationend',settle);
+ };
+ n.addEventListener('animationend',settle);
+ return n;
+}
 function when(record){if(!record?.played_at_source)return '時間未確認';const d=new Date(record.played_at);return Number.isNaN(d.valueOf())?'時間未確認':d.toLocaleString();}
 function recordLink(record,songId,difficulty){const a=el('a','record-link','#'+record.record_id);a.href='/history?'+new URLSearchParams({record_id:record.record_id,...(songId?{song_id:songId}:{}),...(difficulty?{difficulty}: {})});a.setAttribute('aria-label','查看 Record #'+record.record_id+' 原始結算截圖');return a;}
 function scorePanel(record,{animate=false}={}){
@@ -42,12 +84,12 @@ function bestPair(p,{songId,upgrade=false,scoreHighlight=false}={}){
  const pair=el('div','best-pair'),best=p.best_score_record,source=p.best_lamp_record;
  const score=el('section','best-card best-score');score.setAttribute('aria-label','My Best Score '+p.difficulty);score.append(el('span','best-eyebrow','MY BEST SCORE'));
  if(best){score.append(el('strong','best-number'+(scoreHighlight?' score-refresh':''),'EX '+best.ex_score),el('p','best-metric',p.comparison_paused?'比較暫停':best.display||'MAX 未確認'),el('p','best-date','取得 '+when(best)),recordLink(best,songId,p.difficulty),el('p','best-caption','當次 '+(best.lamp_status||'PENDING')));}else score.append(el('strong','best-number','—'),el('p','best-caption','尚無有效 EX'));
- const clear=el('section','best-card best-lamp');clear.setAttribute('aria-label','Best Clear Lamp '+p.difficulty);clear.append(el('span','best-eyebrow','BEST CLEAR LAMP'),lamp(p.best_lamp,{upgrade}));
+ const clear=el('section','best-card best-lamp');clear.setAttribute('aria-label','Best Clear Lamp '+p.difficulty);clear.append(el('span','best-eyebrow','BEST CLEAR LAMP'),lamp(p.best_lamp,{upgrade}));lampStrip(clear,p.best_lamp);
  if(source)clear.append(el('p','best-date','首次達成 '+when(source)),recordLink(source,songId,p.difficulty),el('p','best-metric','當次 EX '+source.ex_score));else clear.append(el('p','best-caption','尚未取得燈號'));
  pair.append(score,clear);return pair;
 }
 function chartProgress(p,{compact=false,upgrade=false,scoreHighlight=false,songId}={}){
- const n=el('div',compact?'chart-progress compact-progress':'chart-progress');n.dataset.difficulty=p.difficulty;
+ const n=el('div',compact?'chart-progress compact-progress':'chart-progress');n.dataset.difficulty=p.difficulty;if(compact)lampStrip(n,p.best_lamp);
  const head=el('div','progress-head');head.append(el('span','chart-label',p.difficulty));if(compact)head.append(lamp(p.best_lamp,{compact:true}));else head.append(el('span','chart-level','LV '+(p.game_level??'未設定')));n.append(head);
  if(compact){n.append(el('div','progress-score',p.best_ex_score===null?'BEST EX —':'BEST EX '+p.best_ex_score),el('div','progress-max',p.comparison_paused?'比較暫停':p.best_score_record?.display||'MAX 未確認'));}
  else{n.append(bestPair(p,{songId,upgrade,scoreHighlight}));if(p.comparison_paused)n.append(el('p','comparison-warning','完整基準衝突：暫停排名與最佳刷新，保留原成績。'));
@@ -124,8 +166,8 @@ function dispatchRecordUpdate(record,{broadcast=false}={}){
  window.dispatchEvent(new CustomEvent('dance-record-update',{detail}));
 }
 function publish(record,{idempotent=false}={}){if(!idempotent)dispatchRecordUpdate(record,{broadcast:true});}
-window.DanceFX={lamp,chartProgress,bestPair,scorePanel,updateSummary,progressHistory,notify,receiptSummary,publish,dispatchRecordUpdate,reduced,motionControl};
-document.addEventListener('DOMContentLoaded',()=>{if(visibility)new MutationObserver(records=>{for(const r of records)for(const removed of r.removedNodes){if(removed.nodeType!==1||removed.isConnected)continue;if(removed.matches('.clear-lamp'))visibility.unobserve(removed);for(const l of removed.querySelectorAll('.clear-lamp'))visibility.unobserve(l);}}).observe(document.body,{childList:true,subtree:true});const actions=document.querySelector('[data-motion-slot]')||document.querySelector('.header-actions');if(actions&&!actions.querySelector('.motion-control'))actions.prepend(motionControl());updateMotion();});
+window.DanceFX={lamp,lampStrip,chartProgress,bestPair,scorePanel,updateSummary,progressHistory,notify,receiptSummary,publish,dispatchRecordUpdate,reduced,motionControl};
+document.addEventListener('DOMContentLoaded',()=>{if(visibility)new MutationObserver(records=>{for(const r of records)for(const removed of r.removedNodes){if(removed.nodeType!==1||removed.isConnected)continue;if(removed.matches('.clear-lamp, .lamp-strip-host'))visibility.unobserve(removed);for(const l of removed.querySelectorAll('.clear-lamp, .lamp-strip-host'))visibility.unobserve(l);}}).observe(document.body,{childList:true,subtree:true});const actions=document.querySelector('[data-motion-slot]')||document.querySelector('.header-actions');if(actions&&!actions.querySelector('.motion-control'))actions.prepend(motionControl());updateMotion();});
 })();
 
 // Both automatic import paths publish receipts only after the transaction commits.
