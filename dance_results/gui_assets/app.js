@@ -74,7 +74,7 @@ async function loadSongs(){
   if(state.packId!==null)params.set('pack_id',state.packId);
   try{
     const data=await api('/api/songs?'+params,undefined,request.signal);if(listRequest!==request)return;
-    state.total=data.total;$('result-count').textContent=data.total.toLocaleString()+' 首';const list=$('song-list');list.replaceChildren();
+    state.total=data.total;$('result-count').textContent='共 '+data.total.toLocaleString()+' 首歌曲';const list=$('song-list');list.replaceChildren();
     if(!data.songs.length)list.append(node('p','list-empty',state.category==='official'?'官方歌曲尚未匯入。\n沒有推測或套用官方歌曲分類。':'沒有符合條件的歌曲。\n可以換個歌名、Pack 或資料夾搜尋。'));
     for(const song of data.songs){
       const row=node('button','song-row');row.type='button';row.dataset.songId=song.song_id;row.setAttribute('role','listitem');row.setAttribute('aria-label',song.display_title+'，Song ID '+song.song_id+'，'+song.relative_folder);
@@ -192,6 +192,25 @@ async function pollScan(){
   }else{setScanning(false);if(status.status==='failed'){box.hidden=false;box.textContent='更新失敗：'+status.message;message('更新沒有完成；請檢查來源路徑與啟動視窗。','error');}}
 }
 $('search').addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>{state.query=$('search').value;state.offset=0;loadSongs().catch(reportError);},160);});
+$('clear-search').addEventListener('click', () => {
+  if (!mayLeave()) return;
+  clearTimeout(searchTimer);
+  clearDetail();
+  Object.assign(state, {
+    rootId: null,
+    locationId: null,
+    packId: null,
+    category: 'all',
+    label: '全部歌曲',
+    query: '',
+    order: 'asc',
+    offset: 0,
+  });
+  $('search').value = '';
+  $('sort').value = 'asc';
+  history.replaceState(null, '', location.pathname);
+  Promise.all([loadPacks(), loadSongs()]).catch(reportError);
+});
 $('sort').addEventListener('change',()=>{state.order=$('sort').value;state.offset=0;loadSongs().catch(reportError);});
 $('previous').addEventListener('click',()=>{state.offset=Math.max(0,state.offset-state.limit);loadSongs().catch(reportError);});
 $('next').addEventListener('click',()=>{state.offset+=state.limit;loadSongs().catch(reportError);});

@@ -160,7 +160,7 @@ function row(record){
 async function load(){
  const version=++loadVersion;try{message('');const args=new URLSearchParams({offset,limit:60});for(const [id,key]of [['history-song-id','song_id'],['history-difficulty','difficulty'],['history-player','player_name']])if($(id).value)args.set(key,$(id).value);
  const data=await api('?'+args);if(version!==loadVersion)return;
- $('history-count').textContent=data.total+' 次挑戰 · 本頁 '+data.records.length+' 筆';$('history-prev').disabled=offset===0;$('history-next').disabled=offset+60>=data.total;$('history-rows').replaceChildren(...data.records.map(row));
+ $('history-count').textContent='共 '+data.total+' 筆成績 · 本頁 '+data.records.length+' 筆';$('history-prev').disabled=offset===0;$('history-next').disabled=offset+60>=data.total;$('history-rows').replaceChildren(...data.records.map(row));
  if(!data.records.length){const tr=element('tr','empty-records'),td=element('td','','尚無符合條件的正式成績。');td.colSpan=7;tr.append(td);$('history-rows').append(tr);}
  $('history-bests').replaceChildren();for(const d of data.bests){const group=element('section','history-best-group'),h=element('h3','chart-label',d.difficulty+(d.comparison_paused?' · 比較暫停':''));group.append(h,DanceFX.bestPair({difficulty:d.difficulty,best_score_record:d.my_best_score,best_lamp_record:d.best_lamp_record,best_lamp:d.best_clear_lamp,comparison_paused:d.comparison_paused},{songId:d.song_id}));$('history-bests').append(group);}
  }catch(e){if(version===loadVersion)message(e.message);}
@@ -194,6 +194,18 @@ $('history-filter').addEventListener('submit', async event => {
  load();
 });
 $('history-prev').addEventListener('click',()=>{offset=Math.max(0,offset-60);load();});$('history-next').addEventListener('click',()=>{offset+=60;load();});
+$('history-clear').addEventListener('click', () => {
+ closeSongOptions();
+ songInput.value = '';
+ songIdInput.value = '';
+ $('history-difficulty').value = '';
+ $('history-player').value = '';
+ offset = 0;
+ ++detailVersion;
+ $('history-detail').hidden = true;
+ history.replaceState(null, '', location.pathname);
+ load();
+});
 window.addEventListener('dance-record-update',load);window.addEventListener('storage',e=>{if(e.key==='dance-record-update')load();});
 const selectedSong = new URLSearchParams(location.search).get('song_id');
 if (selectedSong && /^[1-9]\d*$/.test(selectedSong)) {
@@ -211,4 +223,9 @@ if (selectedSong && /^[1-9]\d*$/.test(selectedSong)) {
  });
 }
 const requestedDifficulty=new URLSearchParams(location.search).get('difficulty');if(['EASY','NORMAL','HARD'].includes(requestedDifficulty))$('history-difficulty').value=requestedDifficulty;
-const initial=new URLSearchParams(location.search).get('record_id');load().then(()=>{if(initial&&/^\d+$/.test(initial))detail(Number(initial));});
+const initial = new URLSearchParams(location.search).get('record_id');
+load().then(() => {
+ if (initial && /^\d+$/.test(initial) && new URLSearchParams(location.search).get('record_id') === initial) {
+  detail(Number(initial));
+ }
+});
