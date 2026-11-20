@@ -2,10 +2,87 @@ const assert = require('node:assert/strict');
 const {chromium} = require(process.argv[2]);
 const base = process.argv[3], songId = process.argv[4];
 
+async function emptyLibraryDoesNotRetry(browser) {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await page.route('**/api/bootstrap', route => route.fulfill({
+    json: {database: 'empty.sqlite3', roots: []},
+  }));
+  await page.addInitScript(() => {
+    window.progressRetries = 0;
+    const timeout = window.setTimeout;
+    window.setTimeout = (callback, delay, ...args) => {
+      if (String(callback).includes('refreshProgress')) ++window.progressRetries;
+      return timeout(callback, delay, ...args);
+    };
+  });
+  await page.goto(base);
+  await page.waitForFunction(() => document.querySelector('#totals').textContent === '歌曲庫是空的');
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event('focus'));
+    window.dispatchEvent(new CustomEvent('dance-record-update', {detail: {record_id: 999}}));
+    document.dispatchEvent(new Event('game-results-imported'));
+  });
+  await page.waitForTimeout(1600);
+  assert.equal(await page.evaluate(() => window.progressRetries), 0);
+  await context.close();
+}
+
+async function polledNotificationsAreQueued(browser, reducedMotion) {
+  const context = await browser.newContext({reducedMotion});
+  const page = await context.newPage();
+  let events = [];
+  await page.route('**/api/reviews/storage', route => route.fulfill({json: {events}}));
+  await page.addInitScript(() => {
+    window.storagePolls = 0;
+    window.addEventListener('dance-storage-status', () => ++window.storagePolls);
+  });
+  await page.clock.install({time: new Date('2026-11-20T00:00:00Z')});
+  await page.goto(base + '/history');
+  await page.waitForFunction(() => window.storagePolls > 0);
+  await page.clock.pauseAt(new Date('2026-11-20T00:01:00Z'));
+  await page.waitForFunction(() => window.storagePolls >= 2);
+  events = [99001, 99002].map(record_id => ({
+    record_id, catalog_path: 'queue.sqlite3', title: 'Queued result', difficulty: 'HARD',
+    ex_score: 100, lamp_status: 'CLEAR', update_summary: {kind: 'NO_UPDATE', label: 'SAVED'},
+  }));
+  await page.clock.runFor(2000);
+  const card = page.locator('.achievement-toast');
+  const area = page.locator('#achievement-notifications');
+  await card.waitFor();
+  assert.equal(await card.getAttribute('data-record-id'), '99001');
+  assert.equal(await area.getAttribute('data-delivery-count'), '1');
+  assert.equal(JSON.parse(await area.getAttribute('data-last-event')).motion,
+    reducedMotion === 'reduce' ? 'reduce' : 'standard');
+  assert.deepEqual(await page.evaluate(records => [
+    DanceFX.notify(records[1]),
+    DanceFX.notify({...records[1], record_id: 99003}, {idempotent: true}),
+  ], events), [false, false]);
+  await page.clock.runFor(2799);
+  assert.equal(await card.getAttribute('data-record-id'), '99001');
+  assert.equal(await card.evaluate(node => node.classList.contains('toast-leave')), false);
+  await page.clock.runFor(1);
+  assert.equal(await card.evaluate(node => node.classList.contains('toast-leave')), true);
+  await page.clock.runFor(219);
+  assert.equal(await card.getAttribute('data-record-id'), '99001');
+  await page.clock.runFor(1);
+  assert.equal(await card.getAttribute('data-record-id'), '99002');
+  assert.equal(await area.getAttribute('data-delivery-count'), '2');
+  await page.clock.runFor(3020);
+  assert.equal(await card.count(), 0);
+  assert.equal(await area.getAttribute('data-delivery-count'), '2');
+  await context.close();
+}
+
 async function main() {
   const browser = await chromium.launch({headless: true, channel: 'msedge'});
   try {
     const context = await browser.newContext();
+    // Isolate receipt refreshes from the separate game-status refresh path.
+    await context.route('**/api/game', async route => {
+      const response = await route.fetch();
+      await route.fulfill({json: {...await response.json(), imported_total: 0, catalog: null}});
+    });
     const library = await context.newPage();
     const history = await context.newPage();
     const errors = [], dialogs = [];
@@ -14,7 +91,13 @@ async function main() {
       page.on('dialog', dialog => { dialogs.push(dialog.message()); dialog.dismiss(); });
       await page.addInitScript(() => {
         window.storagePolls = 0;
+        window.recordUpdates = [];
+        window.recordStorageEvents = 0;
         window.addEventListener('dance-storage-status', () => ++window.storagePolls);
+        window.addEventListener('dance-record-update', event => window.recordUpdates.push(event.detail));
+        window.addEventListener('storage', event => {
+          if (event.key === 'dance-record-update') ++window.recordStorageEvents;
+        });
       });
     }
     await library.goto(base + '/?song_id=' + songId);
@@ -38,6 +121,13 @@ async function main() {
     await history.waitForFunction(() => document.querySelectorAll('.record-row').length === 1);
     await Promise.all([library, history].map(page => page.waitForFunction(() => window.storagePolls > 0)));
     assert.equal(await history.locator('.achievement-toast').count(), 0);
+    const refreshes = {library: 0, history: 0};
+    library.on('request', request => {
+      if (new URL(request.url()).pathname === '/api/packs') ++refreshes.library;
+    });
+    history.on('request', request => {
+      if (new URL(request.url()).pathname === '/api/history') ++refreshes.history;
+    });
 
     let releaseDetail, detailSeen;
     const release = new Promise(resolve => { releaseDetail = resolve; });
@@ -87,12 +177,32 @@ async function main() {
         Number(document.querySelector('#achievement-notifications')?.dataset.deliveryCount || 0))));
       return counts.reduce((total, count) => total + count, 0);
     };
-    await Promise.race([library, history].map(page => page.waitForFunction(() =>
-      document.querySelector('#achievement-notifications'))));
-    assert.equal(await deliveryCount(), 2);
+    // A batch may be celebrated in one tab, where its second card is queued.
+    await Promise.all([library, history].map(page => page.waitForFunction(() => window.recordUpdates.length === 2)));
     await sync();
-    await history.waitForTimeout(2300);
+    await history.waitForTimeout(3300);
     assert.equal(await deliveryCount(), 2);
+    assert.deepEqual(refreshes, {library: 2, history: 2});
+    for (const page of [library, history]) {
+      const updates = await page.evaluate(() => ({
+        records: window.recordUpdates, storage: window.recordStorageEvents,
+        broadcast: localStorage.getItem('dance-record-update'),
+      }));
+      assert.equal(new Set(updates.records.map(record => record.record_id)).size, 2);
+      assert.equal(updates.storage, 0);
+      assert.equal(updates.broadcast, null);
+      for (const record of updates.records) {
+        assert.deepEqual(Object.keys(record).sort(),
+          ['at', 'database', 'difficulty', 'record_id', 'song_id', 'update_summary']);
+      }
+    }
+    // Explicit publishers still broadcast once and dispatch once locally.
+    await library.evaluate(() => DanceFX.publish({song_id: 1, record_id: 99999}, {idempotent: true}));
+    assert.equal(await library.evaluate(() => window.recordUpdates.length), 2);
+    await library.evaluate(() => DanceFX.publish({song_id: 1, record_id: 99999}));
+    await history.waitForFunction(() => window.recordStorageEvents === 1);
+    assert.equal(await library.evaluate(() => window.recordUpdates.length), 3);
+    assert.equal(await history.evaluate(() => window.recordUpdates.length), 2);
     assert.deepEqual(dialogs, []);
     assert.deepEqual(errors, []);
     // No monitor or review page was opened during this test.
@@ -108,6 +218,10 @@ async function main() {
     await freshPage.waitForFunction(() => window.storagePolls >= 2);
     assert.equal(await freshPage.locator('#achievement-notifications').count(), 0);
     await reopened.close();
+    await context.close();
+    await emptyLibraryDoesNotRetry(browser);
+    await polledNotificationsAreQueued(browser, 'no-preference');
+    await polledNotificationsAreQueued(browser, 'reduce');
   } finally {
     await browser.close();
   }

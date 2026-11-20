@@ -2,7 +2,7 @@
 (()=>{'use strict';
 const states=new Set(['UNPLAYED','FAILED','CLEAR','AC','ACP','PENDING']);
 const el=(tag,cls,text)=>{const n=document.createElement(tag);n.className=cls||'';if(text!==undefined)n.textContent=text;return n;};
-let manualReduce=false,toastTimer,exitTimer;
+let manualReduce=false;
 try{manualReduce=localStorage.getItem('dance-motion')==='reduce';}catch(_e){}
 const media=window.matchMedia('(prefers-reduced-motion: reduce)');
 const visibility='IntersectionObserver'in window?new IntersectionObserver(entries=>{for(const e of entries)e.target.classList.toggle('fx-visible',e.isIntersecting);}):null;
@@ -76,15 +76,26 @@ function progressHistory({songId,difficulty='HARD'}={}){
 }
 function receiptKey(r){return [r.catalog_path||(r.evidence&&r.evidence.review&&r.evidence.review.catalog_path),r.session_id,r.review_id,r.record_id].join('|');}
 const seen=new Set();
+const notificationQueue=[];
 function notify(record,{idempotent=false}={}){
  const key=receiptKey(record);if(idempotent||seen.has(key))return false;try{if(localStorage.getItem('dance-celebrated:'+key))return false;localStorage.setItem('dance-celebrated:'+key,'1');}catch(_e){}seen.add(key);
+ notificationQueue.push(record);
+ if(notificationQueue.length===1)showNotification();
+ return true;
+}
+function showNotification(){
+ const record=notificationQueue[0];
  const summary=record.update_summary||{kind:'UNAVAILABLE',label:'更新證據未保存'},f=record.achievement_feedback||{},changed=!!(summary.score||summary.lamp),primary=summary.kind==='DOUBLE_UPDATE'?'DOUBLE UPDATE':changed?summary.label:'SAVED',tone=changed?(f.tone||'SCORE'):'SAVED';
  let area=document.getElementById('achievement-notifications');if(!area){area=el('div','achievement-notifications');area.id='achievement-notifications';area.setAttribute('role','status');area.setAttribute('aria-live','polite');area.setAttribute('aria-atomic','true');document.body.append(area);}
- clearTimeout(toastTimer);clearTimeout(exitTimer);area.replaceChildren();const card=el('div','achievement-toast tone-'+tone.toLowerCase()+(summary.kind==='DOUBLE_UPDATE'?' double-update':''));card.dataset.recordId=record.record_id;
+ area.replaceChildren();const card=el('div','achievement-toast tone-'+tone.toLowerCase()+(summary.kind==='DOUBLE_UPDATE'?' double-update':''));card.dataset.recordId=record.record_id;
  card.append(el('span','achievement-kicker','RESULT CONFIRMED'),el('strong','achievement-title',primary),el('p','achievement-song',record.title+' · '+(record.difficulty || '難度未設定')),scorePanel(record,{animate:!!summary.score}),updateSummary(summary,{animate:changed}),lamp(record.lamp_status,{upgrade:!!summary.lamp&&record.lamp_status!=='FAILED',failure:changed&&record.lamp_status==='FAILED'}));
  area.dataset.lastEvent=JSON.stringify({record_id:record.record_id,primary,events:f.events||['SAVED'],updateKind:summary.kind,tone,motion:reduced()?'reduce':'standard'});area.dataset.deliveryCount=String(Number(area.dataset.deliveryCount||0)+1);area.dataset.animationTrace='[]';
  card.addEventListener('animationstart',event=>{const trace=JSON.parse(area.dataset.animationTrace);trace.push({name:event.animationName,pseudo:event.pseudoElement||'',target:event.target===card?'toast':event.target.classList.contains('clear-lamp')?'lamp':'label'});area.dataset.animationTrace=JSON.stringify(trace);if(event.target.classList.contains('clear-lamp')&&!event.pseudoElement)area.dataset.lastLampAnimation=event.animationName;if(event.target===card)area.dataset.lastToastAnimation=event.animationName;});area.append(card);
- toastTimer=setTimeout(()=>{card.classList.add('toast-leave');exitTimer=setTimeout(()=>card.remove(),220);},2800);return true;
+ setTimeout(()=>{card.classList.add('toast-leave');setTimeout(()=>{
+  card.remove();
+  notificationQueue.shift();
+  if(notificationQueue.length)showNotification();
+ },220);},2800);
 }
 function receiptSummary(container,record,{animate=false}={}){
  const summary=record.update_summary||{kind:'UNAVAILABLE',label:'更新證據未保存'};container.replaceChildren();container.dataset.sessionId=record.session_id;container.hidden=false;
@@ -93,8 +104,20 @@ function receiptSummary(container,record,{animate=false}={}){
  const f=record.achievement_feedback;if(f)container.append(el('p','progress-note','提交當時 BEST EX '+(f.best_ex_score??'—')+' · 最佳燈號 '+f.best_lamp+'（與當次燈號分開）'));
  const link=el('a','page-link','查看歌曲與各難度最佳成績');const root=record.root_id||record.evidence?.song?.root_id;link.href='/?'+new URLSearchParams({song_id:record.song_id,...(root?{root_id:root}:{})});container.append(link);
 }
-function publish(record,{idempotent=false}={}){if(idempotent)return;const detail={song_id:record.song_id,difficulty:record.difficulty,record_id:record.record_id,update_summary:record.update_summary,at:Date.now(),database:record.catalog_path||(record.evidence&&record.evidence.review&&record.evidence.review.catalog_path)};try{localStorage.setItem('dance-record-update',JSON.stringify(detail));}catch(_e){}window.dispatchEvent(new CustomEvent('dance-record-update',{detail}));}
-window.DanceFX={lamp,chartProgress,bestPair,scorePanel,updateSummary,progressHistory,notify,receiptSummary,publish,reduced,motionControl};
+function dispatchRecordUpdate(record,{broadcast=false}={}){
+ const detail={
+  song_id:record.song_id,
+  difficulty:record.difficulty,
+  record_id:record.record_id,
+  update_summary:record.update_summary,
+  at:Date.now(),
+  database:record.catalog_path||(record.evidence&&record.evidence.review&&record.evidence.review.catalog_path),
+ };
+ if(broadcast){try{localStorage.setItem('dance-record-update',JSON.stringify(detail));}catch(_e){}}
+ window.dispatchEvent(new CustomEvent('dance-record-update',{detail}));
+}
+function publish(record,{idempotent=false}={}){if(!idempotent)dispatchRecordUpdate(record,{broadcast:true});}
+window.DanceFX={lamp,chartProgress,bestPair,scorePanel,updateSummary,progressHistory,notify,receiptSummary,publish,dispatchRecordUpdate,reduced,motionControl};
 document.addEventListener('DOMContentLoaded',()=>{if(visibility)new MutationObserver(records=>{for(const r of records)for(const removed of r.removedNodes){if(removed.nodeType!==1||removed.isConnected)continue;if(removed.matches('.clear-lamp'))visibility.unobserve(removed);for(const l of removed.querySelectorAll('.clear-lamp'))visibility.unobserve(l);}}).observe(document.body,{childList:true,subtree:true});const actions=document.querySelector('[data-motion-slot]')||document.querySelector('.header-actions');if(actions&&!actions.querySelector('.motion-control'))actions.prepend(motionControl());updateMotion();});
 })();
 
@@ -121,7 +144,7 @@ document.addEventListener('DOMContentLoaded',()=>{if(visibility)new MutationObse
     if (!initialized) continue;
     DanceFX.notify(record);
     // Every page refreshes, even when another tab already celebrated this play.
-    DanceFX.publish(record);
+    DanceFX.dispatchRecordUpdate(record);
    }
    initialized = true;
   } catch (_error) {

@@ -243,7 +243,8 @@ document.addEventListener('game-results-imported',()=>refreshProgress());
 
 async function refreshProgress(update) {
   if (update?.database && databasePath && update.database !== databasePath) return;
-  if (!state.packs || progressRefreshing || state.scanning || state.importing) {
+  if (!state.packs) return;
+  if (progressRefreshing || state.scanning || state.importing) {
     pendingProgressUpdate = update || pendingProgressUpdate || {};
     if (!progressRefreshing) {
       clearTimeout(progressRefreshTimer);

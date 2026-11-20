@@ -28,6 +28,8 @@ class GameEventTests(unittest.TestCase):
         server = create_server(
             self.fixture.database, monitor_directory=self.base / 'monitor', game_sync=False,
         )
+        # Drain browser requests before removing the temporary SQLite database.
+        server.daemon_threads = False
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
 
@@ -120,10 +122,11 @@ class GameEventTests(unittest.TestCase):
 
     def test_browser_live_receipts_keep_filters_page_selection_and_edits(self):
         runtime = Path(os.environ.get('LOCALAPPDATA', Path.home() / 'AppData/Local')).parent.parent / '.cache/codex-runtimes/codex-primary-runtime/dependencies/node'
-        node = shutil.which('node') or str(runtime / 'bin/node.exe')
-        playwright = runtime / 'node_modules/playwright'
+        node = os.environ.get('DANCE_NODE') or shutil.which('node') or str(runtime / 'bin/node.exe')
+        playwright = Path(os.environ.get('DANCE_PLAYWRIGHT') or runtime / 'node_modules/playwright')
         if not Path(node).is_file() or not playwright.exists():
-            self.skipTest('Existing Node/Playwright runtime unavailable')
+            self.skipTest('Node/Playwright unavailable; set DANCE_NODE to the node executable '
+                          'and DANCE_PLAYWRIGHT to the playwright node package directory')
         self.fixture.append(*[
             external_line(self.fixture, at=f'2026-11-17T11:{minute:02}:00Z')
             for minute in range(60)

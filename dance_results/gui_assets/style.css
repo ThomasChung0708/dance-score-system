@@ -1053,9 +1053,6 @@ h3 {
 @media(prefers-reduced-motion:reduce) {
   * {
     transition: none!important;
-    box-sizing: border-box;
-    scrollbar-color: #72766b #202323;
-    scrollbar-width: thin;
   }
 
 }
@@ -1513,13 +1510,6 @@ label[for=game-character] {
   font-size: 12px;
   padding: 6px 10px;
   color: var(--muted);
-}
-
-@media(min-width:1201px) {
-  .workspace {
-    grid-template-columns: 224px minmax(320px, 1fr) 380px;
-  }
-
 }
 
 .topbar .header-actions {

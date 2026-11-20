@@ -106,10 +106,11 @@ class SearchControlsTests(unittest.TestCase):
 
     def test_browser_clear_resets_filters_page_url_and_pending_search(self):
         runtime = Path(os.environ.get('LOCALAPPDATA', Path.home() / 'AppData/Local')).parent.parent / '.cache/codex-runtimes/codex-primary-runtime/dependencies/node'
-        node = shutil.which('node') or str(runtime / 'bin/node.exe')
-        playwright = runtime / 'node_modules/playwright'
+        node = os.environ.get('DANCE_NODE') or shutil.which('node') or str(runtime / 'bin/node.exe')
+        playwright = Path(os.environ.get('DANCE_PLAYWRIGHT') or runtime / 'node_modules/playwright')
         if not Path(node).is_file() or not playwright.exists():
-            self.skipTest('Existing Node/Playwright runtime unavailable')
+            self.skipTest('Node/Playwright unavailable; set DANCE_NODE to the node executable '
+                          'and DANCE_PLAYWRIGHT to the playwright node package directory')
         result = subprocess.run(
             [node, str(Path(__file__).with_name('round37_search_dom.cjs')), str(playwright), self.url],
             capture_output=True, text=True, encoding='utf8', timeout=75,
