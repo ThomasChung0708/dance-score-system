@@ -84,18 +84,25 @@ function notify(record,{idempotent=false}={}){
  return true;
 }
 function showNotification(){
- const record=notificationQueue[0];
- const summary=record.update_summary||{kind:'UNAVAILABLE',label:'更新證據未保存'},f=record.achievement_feedback||{},changed=!!(summary.score||summary.lamp),primary=summary.kind==='DOUBLE_UPDATE'?'DOUBLE UPDATE':changed?summary.label:'SAVED',tone=changed?(f.tone||'SCORE'):'SAVED';
- let area=document.getElementById('achievement-notifications');if(!area){area=el('div','achievement-notifications');area.id='achievement-notifications';area.setAttribute('role','status');area.setAttribute('aria-live','polite');area.setAttribute('aria-atomic','true');document.body.append(area);}
- area.replaceChildren();const card=el('div','achievement-toast tone-'+tone.toLowerCase()+(summary.kind==='DOUBLE_UPDATE'?' double-update':''));card.dataset.recordId=record.record_id;
- card.append(el('span','achievement-kicker','RESULT CONFIRMED'),el('strong','achievement-title',primary),el('p','achievement-song',record.title+' · '+(record.difficulty || '難度未設定')),scorePanel(record,{animate:!!summary.score}),updateSummary(summary,{animate:changed}),lamp(record.lamp_status,{upgrade:!!summary.lamp&&record.lamp_status!=='FAILED',failure:changed&&record.lamp_status==='FAILED'}));
- area.dataset.lastEvent=JSON.stringify({record_id:record.record_id,primary,events:f.events||['SAVED'],updateKind:summary.kind,tone,motion:reduced()?'reduce':'standard'});area.dataset.deliveryCount=String(Number(area.dataset.deliveryCount||0)+1);area.dataset.animationTrace='[]';
- card.addEventListener('animationstart',event=>{const trace=JSON.parse(area.dataset.animationTrace);trace.push({name:event.animationName,pseudo:event.pseudoElement||'',target:event.target===card?'toast':event.target.classList.contains('clear-lamp')?'lamp':'label'});area.dataset.animationTrace=JSON.stringify(trace);if(event.target.classList.contains('clear-lamp')&&!event.pseudoElement)area.dataset.lastLampAnimation=event.animationName;if(event.target===card)area.dataset.lastToastAnimation=event.animationName;});area.append(card);
- setTimeout(()=>{card.classList.add('toast-leave');setTimeout(()=>{
-  card.remove();
-  notificationQueue.shift();
-  if(notificationQueue.length)showNotification();
- },220);},2800);
+ while(notificationQueue.length){
+  try{
+   const record=notificationQueue[0];
+   const summary=record.update_summary||{kind:'UNAVAILABLE',label:'更新證據未保存'},f=record.achievement_feedback||{},changed=!!(summary.score||summary.lamp),primary=summary.kind==='DOUBLE_UPDATE'?'DOUBLE UPDATE':changed?summary.label:'SAVED',tone=changed?(f.tone||'SCORE'):'SAVED';
+   let area=document.getElementById('achievement-notifications');if(!area){area=el('div','achievement-notifications');area.id='achievement-notifications';area.setAttribute('role','status');area.setAttribute('aria-live','polite');area.setAttribute('aria-atomic','true');document.body.append(area);}
+   area.replaceChildren();const card=el('div','achievement-toast tone-'+tone.toLowerCase()+(summary.kind==='DOUBLE_UPDATE'?' double-update':''));card.dataset.recordId=record.record_id;
+   card.append(el('span','achievement-kicker','RESULT CONFIRMED'),el('strong','achievement-title',primary),el('p','achievement-song',record.title+' · '+(record.difficulty || '難度未設定')),scorePanel(record,{animate:!!summary.score}),updateSummary(summary,{animate:changed}),lamp(record.lamp_status,{upgrade:!!summary.lamp&&record.lamp_status!=='FAILED',failure:changed&&record.lamp_status==='FAILED'}));
+   area.dataset.lastEvent=JSON.stringify({record_id:record.record_id,primary,events:f.events||['SAVED'],updateKind:summary.kind,tone,motion:reduced()?'reduce':'standard'});area.dataset.deliveryCount=String(Number(area.dataset.deliveryCount||0)+1);area.dataset.animationTrace='[]';
+   card.addEventListener('animationstart',event=>{const trace=JSON.parse(area.dataset.animationTrace);trace.push({name:event.animationName,pseudo:event.pseudoElement||'',target:event.target===card?'toast':event.target.classList.contains('clear-lamp')?'lamp':'label'});area.dataset.animationTrace=JSON.stringify(trace);if(event.target.classList.contains('clear-lamp')&&!event.pseudoElement)area.dataset.lastLampAnimation=event.animationName;if(event.target===card)area.dataset.lastToastAnimation=event.animationName;});area.append(card);
+   setTimeout(()=>{card.classList.add('toast-leave');setTimeout(()=>{
+    card.remove();
+    notificationQueue.shift();
+    if(notificationQueue.length)showNotification();
+   },220);},2800);
+   return;
+  }catch(_error){
+   notificationQueue.shift();
+  }
+ }
 }
 function receiptSummary(container,record,{animate=false}={}){
  const summary=record.update_summary||{kind:'UNAVAILABLE',label:'更新證據未保存'};container.replaceChildren();container.dataset.sessionId=record.session_id;container.hidden=false;

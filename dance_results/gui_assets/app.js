@@ -230,6 +230,7 @@ async function start(){
   await Promise.all([loadPacks(),loadSongs()]);
   const requested=Number(new URLSearchParams(location.search).get('song_id'));if(Number.isSafeInteger(requested)&&requested>0)await selectSong(requested);
   const scan=await api('/api/scan');if(scan.status==='running')await pollScan();
+  if (pendingProgressUpdate) await refreshProgress();
 }
 start().catch(error=>{reportError(error);$('scan-button').disabled=true;});
 // 遊戲資料夾模式：歌單在背景同步，進來了就直接載入；新成績進來就刷新燈號。
@@ -243,7 +244,10 @@ document.addEventListener('game-results-imported',()=>refreshProgress());
 
 async function refreshProgress(update) {
   if (update?.database && databasePath && update.database !== databasePath) return;
-  if (!state.packs) return;
+  if (!state.packs) {
+    if (update) pendingProgressUpdate = update;
+    return;
+  }
   if (progressRefreshing || state.scanning || state.importing) {
     pendingProgressUpdate = update || pendingProgressUpdate || {};
     if (!progressRefreshing) {

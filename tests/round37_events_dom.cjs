@@ -74,6 +74,42 @@ async function polledNotificationsAreQueued(browser, reducedMotion) {
   await context.close();
 }
 
+async function failedNotificationsDoNotBlockQueue(browser) {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.route('**/api/reviews/storage', route => route.fulfill({json: {events: []}}));
+  await page.clock.install();
+  await page.goto(base + '/history');
+  await page.evaluate(() => {
+    const record = {
+      catalog_path: 'failed-queue.sqlite3', title: 'Queued result', difficulty: 'HARD',
+      ex_score: 100, lamp_status: 'CLEAR', update_summary: {kind: 'NO_UPDATE', label: 'SAVED'},
+    };
+    const failed = {
+      ...record, update_summary: {kind: 'SCORE_UPDATE', score: {}, label: 'SCORE'},
+      achievement_feedback: {tone: {}},
+    };
+    // Fail at an empty queue, then skip consecutive failures between valid cards.
+    DanceFX.notify({...failed, record_id: 99100});
+    DanceFX.notify({...record, record_id: 99101});
+    DanceFX.notify({...failed, record_id: 99102});
+    DanceFX.notify({...failed, record_id: 99103});
+    DanceFX.notify({...record, record_id: 99104});
+  });
+  const card = page.locator('.achievement-toast');
+  const area = page.locator('#achievement-notifications');
+  assert.equal(await card.getAttribute('data-record-id'), '99101');
+  await page.clock.runFor(3020);
+  assert.equal(await card.getAttribute('data-record-id'), '99104');
+  assert.equal(await area.getAttribute('data-delivery-count'), '2');
+  await page.clock.runFor(3020);
+  assert.equal(await card.count(), 0);
+  assert.deepEqual(errors, []);
+  await context.close();
+}
+
 async function main() {
   const browser = await chromium.launch({headless: true, channel: 'msedge'});
   try {
@@ -220,6 +256,7 @@ async function main() {
     await reopened.close();
     await context.close();
     await emptyLibraryDoesNotRetry(browser);
+    await failedNotificationsDoNotBlockQueue(browser);
     await polledNotificationsAreQueued(browser, 'no-preference');
     await polledNotificationsAreQueued(browser, 'reduce');
   } finally {
