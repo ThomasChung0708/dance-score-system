@@ -6,6 +6,7 @@ import queue
 import threading
 
 from .library_service import LibraryError
+from .record_events import RecordEventFeed
 from .monitor_tracking import atomic_json,utc,ManualReferences
 from .ocr_matching import ReadOnlyCatalog,normalize,same_song_title_key
 from .note_review import result_time
@@ -200,7 +201,7 @@ def automatic_request(reviews,row):
 
 class AutomaticStorage:
     """One worker; no historical backlog opt-in, no database writes outside submit."""
-    def __init__(self,submissions):
+    def __init__(self,submissions,*,event_feed=None):
         self.submissions=submissions;self.reviews=submissions.reviews
         self.path=self.reviews.directory/'storage-mode.json';self.lock=threading.RLock()
         self.queue=queue.Queue();self.stop_event=threading.Event();self.queued=set();self.worker=None
@@ -215,7 +216,8 @@ class AutomaticStorage:
                 self.state['excluded_sessions']=sorted(set(self.state.get('excluded_sessions',[]))|{p.parent.name for p in (self.reviews.directory/'sessions').glob('*/session.json')})
                 self.state['ocr_policy']=STORAGE_POLICY
                 atomic_json(self.path,self.state)
-        self.events=[];self.diagnostics={}
+        self.event_feed = event_feed if event_feed is not None else RecordEventFeed()
+        self.diagnostics = {}
         submissions.auto_allowed=self.allowed
         self.reviews.on_ingest=self.enqueue
         if self.state['mode']=='VERIFIED_AUTO':
@@ -270,7 +272,7 @@ class AutomaticStorage:
                 if not self.allowed(sid):continue
                 response=self.submissions.submit_verified(sid)
                 if not response['idempotent']:
-                    with self.lock:self.events.append(response['record']['record_id']);self.events=self.events[-20:]
+                    self.event_feed.publish(response['record']['record_id'])
                 with self.lock:self.diagnostics[sid]=dict(status='saved',record_id=response['record']['record_id'])
             except Exception as error:
                 with self.lock:self.diagnostics[sid]=dict(status='pending_review',reason=str(error))
@@ -281,7 +283,9 @@ class AutomaticStorage:
     def status(self):
         with self.lock:
             self._refresh_state()
-            events=list(self.events);state=copy.deepcopy(self.state);diagnostics=copy.deepcopy(self.diagnostics)
+            state = copy.deepcopy(self.state)
+            diagnostics = copy.deepcopy(self.diagnostics)
+        events = self.event_feed.snapshot()
         with self.submissions.library.open() as library:
             receipts=[self.submissions._record(library.connection,i,include_evidence=False) for i in events]
         for receipt in receipts:receipt['catalog_path']=str(self.reviews.database)

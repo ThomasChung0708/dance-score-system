@@ -42,7 +42,10 @@ def create_server(database,port=0,monitor_directory=None,*,game_sync=True):
     automatic=AutomaticStorage(submissions)
     from .download_tracking import DownloadTracker
     monitor.downloads=DownloadTracker(service,monitor.reviews,on_update=automatic.enqueue)
-    game=GameSync(path,path.parent,write_lock=service._write_lock)
+    game = GameSync(
+        path, path.parent, write_lock=service._write_lock,
+        event_feed=automatic.event_feed,
+    )
     if game_sync:game.start()
     ocr=ocr_available()
     token=secrets.token_hex(32)

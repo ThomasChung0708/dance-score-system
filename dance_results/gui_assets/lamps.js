@@ -62,7 +62,7 @@ function progressHistory({songId,difficulty='HARD'}={}){
  for(const [v,t] of [['desc','最新 → 最舊'],['asc','最舊 → 最新']]){const o=el('option','',t);o.value=v;sort.append(o);}
  const list=el('ol','growth-timeline'),count=el('p','growth-count'),pager=el('div','growth-pager'),prev=el('button','','上一頁履歷'),next=el('button','','下一頁履歷');prev.type=next.type='button';pager.append(prev,next);controls.append(chart,sort);section.append(controls,count,list,pager);
  let offset=0,request=null,generation=0;
- async function load(){if(request)request.abort();request=new AbortController();const g=++generation;prev.disabled=next.disabled=true;list.setAttribute('aria-busy','true');
+ async function load(){if(!section.isConnected)return;if(request)request.abort();request=new AbortController();const g=++generation;prev.disabled=next.disabled=true;list.setAttribute('aria-busy','true');
   try{const args=new URLSearchParams({song_id:songId,difficulty:chart.value,order:sort.value,offset,limit:20}),r=await fetch('/api/progress-history?'+args,{headers:{'X-Dance-Token':document.querySelector('meta[name="dance-token"]').content},signal:request.signal}),data=await r.json();if(!r.ok)throw new Error(data.error||'履歷讀取失敗');if(g!==generation||!section.isConnected)return;
    list.replaceChildren();count.textContent=data.total?'第 '+(offset+1)+'–'+(offset+data.records.length)+' / '+data.total+' 次遊玩':'尚無正式遊玩紀錄';
    for(const record of data.records){const entry=el('li','growth-entry'+(['NO_UPDATE','UNAVAILABLE'].includes(record.update_summary.kind)?' growth-quiet':''));entry.dataset.recordId=record.record_id;entry.dataset.updateKind=record.update_summary.kind;
@@ -71,6 +71,7 @@ function progressHistory({songId,difficulty='HARD'}={}){
   }catch(e){if(e.name!=='AbortError'&&g===generation){list.replaceChildren(el('li','progress-note',e.message));count.textContent='履歷無法載入，可切換難度或重試。';}}
   finally{if(g===generation)list.setAttribute('aria-busy','false');}
  }
+ section.addEventListener('dance-progress-refresh', load);
  chart.addEventListener('change',()=>{offset=0;load();});sort.addEventListener('change',()=>{offset=0;load();});prev.addEventListener('click',()=>{offset=Math.max(0,offset-20);load();});next.addEventListener('click',()=>{offset+=20;load();});queueMicrotask(load);return section;
 }
 function receiptKey(r){return [r.catalog_path||(r.evidence&&r.evidence.review&&r.evidence.review.catalog_path),r.session_id,r.review_id,r.record_id].join('|');}
@@ -97,5 +98,38 @@ window.DanceFX={lamp,chartProgress,bestPair,scorePanel,updateSummary,progressHis
 document.addEventListener('DOMContentLoaded',()=>{if(visibility)new MutationObserver(records=>{for(const r of records)for(const removed of r.removedNodes){if(removed.nodeType!==1||removed.isConnected)continue;if(removed.matches('.clear-lamp'))visibility.unobserve(removed);for(const l of removed.querySelectorAll('.clear-lamp'))visibility.unobserve(l);}}).observe(document.body,{childList:true,subtree:true});const actions=document.querySelector('[data-motion-slot]')||document.querySelector('.header-actions');if(actions&&!actions.querySelector('.motion-control'))actions.prepend(motionControl());updateMotion();});
 })();
 
-// Automatic receipts are published only after SubmissionService commits.
-(()=>{const token=document.querySelector('meta[name="dance-token"]')?.content;if(!token)return;let polling=false;async function poll(){if(polling)return;polling=true;try{const r=await fetch('/api/reviews/storage',{headers:{'X-Dance-Token':token}});if(!r.ok)return;const d=await r.json();window.dispatchEvent(new CustomEvent('dance-storage-status',{detail:d}));for(const record of document.visibilityState==='visible'?(d.events||[]):[]){if(DanceFX.notify(record))DanceFX.publish(record);}}catch(_e){}finally{polling=false;}}poll();setInterval(poll,2000);})();
+// Both automatic import paths publish receipts only after the transaction commits.
+(() => {
+ const token = document.querySelector('meta[name="dance-token"]')?.content;
+ if (!token) return;
+ const delivered = new Set();
+ let polling = false, initialized = false;
+ async function poll() {
+  if (polling) return;
+  polling = true;
+  try {
+   const response = await fetch('/api/reviews/storage', {headers: {'X-Dance-Token': token}});
+   if (!response.ok) return;
+   const data = await response.json();
+   window.dispatchEvent(new CustomEvent('dance-storage-status', {detail: data}));
+   for (const record of data.events || []) {
+    const key = [record.catalog_path, record.record_id].join('|');
+    if (delivered.has(key)) continue;
+    // Establish the opening snapshot without celebrating an older batch.
+    if (initialized && document.visibilityState !== 'visible') continue;
+    delivered.add(key);
+    if (!initialized) continue;
+    DanceFX.notify(record);
+    // Every page refreshes, even when another tab already celebrated this play.
+    DanceFX.publish(record);
+   }
+   initialized = true;
+  } catch (_error) {
+   // The existing polling loop retries a transient connection failure.
+  } finally {
+   polling = false;
+  }
+ }
+ poll();
+ setInterval(poll, 2000);
+})();

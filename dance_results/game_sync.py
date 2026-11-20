@@ -28,6 +28,7 @@ from pathlib import Path
 
 from . import song_cache
 from .achievements import empty_progress, feedback, progress_for_songs
+from .record_events import RecordEventFeed
 from .bests_policy import EX_POLICY
 from .database import LibraryDatabase, json_text, path_key
 from .game_folder import CharacterResults, GameFolder, GameFolderError, default_character, resolve
@@ -558,12 +559,17 @@ def prune_backups(database: Path, keep: int = KEEP_BACKUPS) -> None:
 class GameSync:
     """Background follower of one game folder. Thread-safe status for the GUI."""
 
-    def __init__(self, database: Path, data_dir: Path, *, write_lock: threading.Lock | None = None, interval: float = 3.0):
+    def __init__(
+        self, database: Path, data_dir: Path, *,
+        write_lock: threading.Lock | None = None, interval: float = 3.0,
+        event_feed: RecordEventFeed | None = None,
+    ):
         self.database = Path(database)
         self.settings_path = Path(data_dir) / 'game-settings.json'
         self.state_path = Path(data_dir) / 'game-sync.json'
         self.write_lock = write_lock or threading.Lock()
         self.interval = interval
+        self.event_feed = event_feed if event_feed is not None else RecordEventFeed()
         self._lock = threading.Lock()
         self._run_lock = threading.Lock()
         self._wake = threading.Event()
@@ -846,6 +852,9 @@ class GameSync:
                         state['pending'].pop(pending_key, None)
                         rejected.append({'file': key, 'offset': position, 'reason': str(error)})
                 state['files'][key] = {'offset': new_offset}
+        # _write commits the entire batch before any client can see a receipt.
+        for record in imported:
+            self.event_feed.publish(record['record_id'])
         if backed_up:
             prune_backups(self.database)
         return imported, rejected

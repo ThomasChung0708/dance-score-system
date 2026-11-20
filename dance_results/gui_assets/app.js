@@ -4,6 +4,7 @@ const sessionToken=document.querySelector('meta[name="dance-token"]').content;
 const state={rootId:null,scanRootId:null,locationId:null,packId:null,category:'all',label:'全部歌曲',query:'',order:'asc',offset:0,total:0,limit:60,selectedId:null,song:null,packs:null,scanning:false,importing:false,canScan:false};
 let listRequest=null,detailRequest=null,searchTimer=null,scanTimer=null;
 let progressRefreshing=false,lastProgressRefresh=0,databasePath='';
+let pendingProgressUpdate = null, progressRefreshTimer = null;
 const EMPTY_LIBRARY='歌曲庫目前是空的：遊戲資料夾設定好之後，官方歌與外部歌會自動匯入。';
 const lampAnimations=new Map();
 function node(tag,className,text){const e=document.createElement(tag);if(className)e.className=className;if(text!==undefined)e.textContent=text;return e;}
@@ -240,7 +241,58 @@ async function reloadLibrary(){
 document.addEventListener('game-catalog-updated',()=>{if(!state.scanning&&!state.importing)reloadLibrary().catch(reportError);});
 document.addEventListener('game-results-imported',()=>refreshProgress());
 
-async function refreshProgress(update){if(!state.packs||progressRefreshing||state.scanning||state.importing)return;if(update&&update.database&&update.database!==databasePath)return;progressRefreshing=true;try{const scroll=$('song-list').scrollTop;await loadSongs();$('song-list').scrollTop=scroll;if(state.selectedId){if(!dirty())await selectSong(state.selectedId,true,update);else{const id=state.selectedId,root=state.rootId;const fresh=await api('/api/songs/'+id+'?root_id='+root);if(id===state.selectedId&&root===state.rootId&&state.song){state.song.progress=fresh.progress;const panel=$('details').querySelector('.song-result-panel');if(panel)panel.replaceWith(buildProgressPanel(fresh,update));}}}lastProgressRefresh=Date.now();}catch(e){reportError(e);}finally{progressRefreshing=false;}}
+async function refreshProgress(update) {
+  if (update?.database && databasePath && update.database !== databasePath) return;
+  if (!state.packs || progressRefreshing || state.scanning || state.importing) {
+    pendingProgressUpdate = update || pendingProgressUpdate || {};
+    if (!progressRefreshing) {
+      clearTimeout(progressRefreshTimer);
+      progressRefreshTimer = setTimeout(() => refreshProgress(), 500);
+    }
+    return;
+  }
+  clearTimeout(progressRefreshTimer);
+  update = update || pendingProgressUpdate;
+  pendingProgressUpdate = null;
+  progressRefreshing = true;
+  try {
+    const scroll = $('song-list').scrollTop;
+    await Promise.all([loadPacks(), loadSongs()]);
+    $('song-list').scrollTop = scroll;
+    const id = state.selectedId, root = state.rootId, request = detailRequest;
+    if (id && state.song) {
+      const fresh = await api('/api/songs/' + id + (root ? '?root_id=' + root : ''));
+      if (id === state.selectedId && root === state.rootId && request === detailRequest && state.song) {
+        const growth = $('details').querySelector('.progress-history');
+        const selectedDifficulty = $('details').querySelector('.best-difficulty-select')?.value;
+        // Check after the request: an edit may have started while it was in flight.
+        if (dirty()) {
+          state.song.progress = fresh.progress;
+          const panel = $('details').querySelector('.song-result-panel');
+          if (panel) panel.replaceWith(buildProgressPanel(fresh, update));
+        } else {
+          state.song = fresh;
+          renderDetail(fresh, update);
+          if (growth) $('details').querySelector('.progress-history').replaceWith(growth);
+        }
+        const choice = $('details').querySelector('.best-difficulty-select');
+        if (choice && [...choice.options].some(option => option.value === selectedDifficulty)) {
+          choice.value = selectedDifficulty;
+          choice.dispatchEvent(new Event('change'));
+        }
+        if (growth) growth.dispatchEvent(new Event('dance-progress-refresh'));
+      }
+    }
+    lastProgressRefresh = Date.now();
+  } catch (error) {
+    reportError(error);
+  } finally {
+    progressRefreshing = false;
+    if (pendingProgressUpdate) {
+      progressRefreshTimer = setTimeout(() => refreshProgress(), 0);
+    }
+  }
+}
 window.addEventListener('storage',e=>{if(e.key==='dance-record-update'&&e.newValue){try{refreshProgress(JSON.parse(e.newValue));}catch(_e){}}});
 window.addEventListener('dance-record-update',e=>refreshProgress(e.detail));
 window.addEventListener('focus',()=>{if(Date.now()-lastProgressRefresh>15000)refreshProgress();});
