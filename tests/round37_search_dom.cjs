@@ -37,10 +37,23 @@ async function main() {
     assert.equal(await page.locator('#sort').inputValue(), 'asc');
     assert.equal(await page.locator('#lamp-filter').inputValue(), '');
     assert.equal(new URL(page.url()).search, '');
+    assert.equal(await page.locator('.song-row .song-play-count').count(), 1);
+    for (const row of await page.locator('.song-row').all()) {
+      assert.equal(await row.locator('.lamp-strip').count(), 1);
+      assert.equal(await row.locator(':scope > .lamp-strip').count(), 1);
+      assert.equal(await row.locator('.compact-progress .lamp-strip').count(), 0);
+      assert.equal(await row.locator('.compact-progress .clear-lamp').count(), 3);
+    }
+    assert.equal(await page.locator('.song-row').first().evaluate(row => {
+      const strip = row.querySelector(':scope > .lamp-strip').getBoundingClientRect();
+      return strip.left < row.querySelector('.song-title').getBoundingClientRect().left;
+    }), true);
 
     await page.goto(base + '/history?lamp=AC&difficulty=NORMAL&player_name=Eithwa');
     await page.waitForFunction(() => document.querySelector('#history-count').textContent === '共 1 筆成績 · 本頁 1 筆');
     assert.equal(await page.locator('#history-lamp').inputValue(), 'AC');
+    assert.equal(await page.locator('.record-row > td:first-child').first()
+      .evaluate(cell => getComputedStyle(cell).paddingLeft), '19px');
     assert.deepEqual(await page.locator('#history-lamp option').evaluateAll(options =>
       options.map(option => option.value)), ['', 'ACP', 'AC', 'CLEAR', 'FAILED', 'UNCLEARED', 'CLEARED']);
     await page.locator('#history-lamp').selectOption('FAILED');
@@ -80,26 +93,32 @@ async function verifyLamps(page) {
     gallery.id = 'lamp-test-gallery';
     gallery.style.cssText = 'display:grid;gap:20px;padding:24px;max-width:600px';
     for (const status of ['ACP', 'AC', 'CLEAR', 'FAILED', 'UNPLAYED', null]) {
+      const sample = document.createElement('div');
+      sample.className = 'lamp-sample';
       const chart = DanceFX.chartProgress({difficulty: status || 'PENDING', best_lamp: status,
         best_ex_score: null}, {compact: true});
-      gallery.append(chart);
+      sample.append(chart);
+      DanceFX.lampStrip(sample, status);
+      gallery.append(sample);
     }
     document.body.append(gallery);
     gallery.scrollIntoView();
   });
   await page.waitForFunction(() => [...document.querySelectorAll('#lamp-test-gallery .clear-lamp')]
     .every(lamp => lamp.classList.contains('lamp-settled') && lamp.classList.contains('fx-visible')));
-  const lamps = await page.locator('#lamp-test-gallery .chart-progress').evaluateAll(charts => charts.map(chart => {
-    const lamp = chart.querySelector('.clear-lamp');
+  assert.equal(await page.locator('#lamp-test-gallery .compact-progress .lamp-strip').count(), 0);
+  const lamps = await page.locator('#lamp-test-gallery .lamp-sample').evaluateAll(samples => samples.map(sample => {
+    const lamp = sample.querySelector('.clear-lamp');
     const label = getComputedStyle(lamp.querySelector('.lamp-label'));
-    const strip = getComputedStyle(chart.querySelector('.lamp-strip'));
-    return {status: lamp.dataset.lamp, label: lamp.textContent, colour: label.color,
+    const strip = getComputedStyle(sample.querySelector('.lamp-strip'));
+    return {status: lamp.dataset.lamp, label: lamp.textContent, ariaLabel: lamp.getAttribute('aria-label'), colour: label.color,
       fill: label.backgroundImage, background: label.backgroundColor, border: label.borderTopStyle,
       labelAnimation: label.animationName, stripAnimation: strip.animationName,
       labelPlaying: label.animationPlayState, stripPlaying: strip.animationPlayState, width: strip.width};
   }));
   for (const lamp of lamps) {
     assert.equal(lamp.label, lamp.status);
+    assert.equal(lamp.ariaLabel, '燈號 ' + lamp.status);
     assert.equal(lamp.width, '7px');
     const animated = ['AC', 'ACP'].includes(lamp.status);
     assert.equal(lamp.labelAnimation, animated ? 'lamp-flow' : 'none');
@@ -127,7 +146,7 @@ async function verifyLamps(page) {
     document.querySelector('#lamp-test-gallery').style.marginTop = '2000px';
     window.scrollTo(0, 0);
   });
-  await page.waitForFunction(() => !document.querySelector('#lamp-test-gallery .chart-progress').classList.contains('fx-visible'));
+  await page.waitForFunction(() => !document.querySelector('#lamp-test-gallery .lamp-sample').classList.contains('fx-visible'));
   assert.deepEqual(await page.locator('#lamp-test-gallery [data-lamp=ACP] .lamp-label, #lamp-test-gallery [data-lamp=ACP] > .lamp-strip')
     .evaluateAll(nodes => nodes.map(node => getComputedStyle(node).animationPlayState)), ['paused', 'paused']);
   await page.evaluate(() => {

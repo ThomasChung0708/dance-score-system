@@ -20,20 +20,45 @@ JOINS = (
 LAMP_RANK = {'UNPLAYED': 0, 'FAILED': 1, 'CLEAR': 2, 'AC': 3, 'ACP': 4}
 
 
-def counts_for_songs(db):
+def _song_batches(song_ids):
+    ids = sorted(set(song_ids))
+    for start in range(0, len(ids), 400):
+        batch = ids[start:start + 400]
+        yield ' WHERE ' + SONG_ID + ' IN (' + ','.join('?' for _ in batch) + ')', batch
+
+
+def counts_for_songs(db, song_ids):
+    """Difficulty breakdowns only for the requested page or detail song."""
     result = {}
-    for row in db.execute(
-        'SELECT ' + SONG_ID + ' AS song_id,' + DIFFICULTY + ' AS difficulty,COUNT(*) AS plays'
-        + JOINS + ' GROUP BY 1,2'
-    ):
-        item = result.setdefault(row['song_id'], dict(play_count=0, play_counts={}))
-        item['play_count'] += row['plays']
-        item['play_counts'][row['difficulty'] or 'UNKNOWN'] = row['plays']
+    for where, args in _song_batches(song_ids):
+        for row in db.execute(
+            'SELECT ' + SONG_ID + ' AS song_id,' + DIFFICULTY + ' AS difficulty,COUNT(*) AS plays'
+            + JOINS + where + ' GROUP BY 1,2', args,
+        ):
+            item = result.setdefault(row['song_id'], dict(play_count=0, play_counts={}))
+            item['play_count'] += row['plays']
+            item['play_counts'][row['difficulty'] or 'UNKNOWN'] = row['plays']
+    return result
+
+
+def totals_for_songs(db):
+    """One aggregate for count sorting; no per-difficulty breakdowns."""
+    return {row['song_id']: row['plays'] for row in db.execute(
+        'SELECT ' + SONG_ID + ' AS song_id,COUNT(*) AS plays' + JOINS + ' GROUP BY 1'
+    )}
+
+
+def played_song_ids(db, song_ids):
+    result = set()
+    for where, args in _song_batches(song_ids):
+        result.update(row['song_id'] for row in db.execute(
+            'SELECT DISTINCT ' + SONG_ID + ' AS song_id' + JOINS + where, args,
+        ))
     return result
 
 
 def song_counts(db, song_id):
-    return counts_for_songs(db).get(song_id, dict(play_count=0, play_counts={}))
+    return counts_for_songs(db, [song_id]).get(song_id, dict(play_count=0, play_counts={}))
 
 
 def unbound_identity(db, row):

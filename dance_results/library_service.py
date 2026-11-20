@@ -15,6 +15,7 @@ from .scanner import scan_library
 from .official_import import read_catalog, preview_catalog, import_catalog
 from .achievements import best_lamps_for_songs, progress_for_songs
 from .songs import catalog_display_title
+from .play_counts import counts_for_songs, played_song_ids, totals_for_songs
 
 
 class LibraryError(ValueError):
@@ -27,7 +28,7 @@ LAMP_FILTERS = {
     'AC': ('AC',),
     'CLEAR': ('CLEAR',),
     'FAILED': ('FAILED',),
-    'UNCLEARED': ('FAILED', 'UNPLAYED'),
+    'UNCLEARED': (),
     'CLEARED': ('CLEAR', 'AC', 'ACP'),
 }
 
@@ -154,25 +155,32 @@ class LibraryService:
         q=folded(query.strip())
         rows=[r for r in self._catalog(root_id) if (pack_id is None or r['pack_id']==pack_id)
               and (category=='all' or r['category']==category) and (not q or q in r['_search'])]
-        if lamp:
-            with self.open() as library:
-                lamps = best_lamps_for_songs(library.connection, [r['song_id'] for r in rows])
-            rows = [r for r in rows if any(
-                status in LAMP_FILTERS[lamp] for status in lamps[r['song_id']].values()
-            )]
-        from .play_counts import counts_for_songs
         with self.open() as library:
-            counts = counts_for_songs(library.connection)
-        if order.startswith('plays_'):
-            rows.sort(key=lambda r: (
-                counts.get(r['song_id'], {}).get('play_count', 0) * (-1 if order == 'plays_desc' else 1),
-                r['_sort'], r['song_id'],
-            ))
-        else:
-            rows.sort(key=lambda r:r['_sort'],reverse=order=='desc')
-        page=[{k:v for k,v in r.items() if not k.startswith('_')} for r in rows[offset:offset+limit]]
-        with self.open() as library:
-            progress=progress_for_songs(library.connection,[r['song_id'] for r in page])
+            db = library.connection
+            if lamp:
+                song_ids = [r['song_id'] for r in rows]
+                lamps = best_lamps_for_songs(db, song_ids)
+                if lamp == 'UNCLEARED':
+                    played = played_song_ids(db, song_ids)
+                    rows = [r for r in rows if r['song_id'] in played and not any(
+                        status in LAMP_FILTERS['CLEARED'] for status in lamps[r['song_id']].values()
+                    )]
+                else:
+                    rows = [r for r in rows if any(
+                        status in LAMP_FILTERS[lamp] for status in lamps[r['song_id']].values()
+                    )]
+            if order.startswith('plays_'):
+                totals = totals_for_songs(db)
+                rows.sort(key=lambda r: (
+                    totals.get(r['song_id'], 0) * (-1 if order == 'plays_desc' else 1),
+                    r['_sort'], r['song_id'],
+                ))
+            else:
+                rows.sort(key=lambda r:r['_sort'],reverse=order=='desc')
+            page=[{k:v for k,v in r.items() if not k.startswith('_')} for r in rows[offset:offset+limit]]
+            page_ids = [r['song_id'] for r in page]
+            counts = counts_for_songs(db, page_ids)
+            progress = progress_for_songs(db, page_ids)
         for song in page:
             song['progress']=progress[song['song_id']]
             song.update(counts.get(song['song_id'], dict(play_count=0, play_counts={})))

@@ -40,7 +40,7 @@ function lamp(status,{compact=false,upgrade=false,failure=false}={}){
   }
  };
  n.addEventListener('animationstart',markStart);
- n.setAttribute('aria-label','?? '+s);
+ n.setAttribute('aria-label','燈號 '+s);
  n.append(el('i','lamp-core'),el('span','lamp-label',s));
  n.firstChild.setAttribute('aria-hidden','true');
  observeLamp(n);
@@ -89,7 +89,7 @@ function bestPair(p,{songId,upgrade=false,scoreHighlight=false}={}){
  pair.append(score,clear);return pair;
 }
 function chartProgress(p,{compact=false,upgrade=false,scoreHighlight=false,songId}={}){
- const n=el('div',compact?'chart-progress compact-progress':'chart-progress');n.dataset.difficulty=p.difficulty;if(compact)lampStrip(n,p.best_lamp);
+ const n=el('div',compact?'chart-progress compact-progress':'chart-progress');n.dataset.difficulty=p.difficulty;
  const head=el('div','progress-head');head.append(el('span','chart-label',p.difficulty));if(compact)head.append(lamp(p.best_lamp,{compact:true}));else head.append(el('span','chart-level','LV '+(p.game_level??'未設定')));n.append(head);
  if(compact){n.append(el('div','progress-score',p.best_ex_score===null?'BEST EX —':'BEST EX '+p.best_ex_score),el('div','progress-max',p.comparison_paused?'比較暫停':p.best_score_record?.display||'MAX 未確認'));}
  else{n.append(bestPair(p,{songId,upgrade,scoreHighlight}));if(p.comparison_paused)n.append(el('p','comparison-warning','完整基準衝突：暫停排名與最佳刷新，保留原成績。'));

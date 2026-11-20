@@ -12,10 +12,15 @@ async function main() {
       await page.goto(base + route);
       const links = page.locator('nav[aria-label="主要導覽"] a');
       assert.deepEqual(await links.evaluateAll(nodes => nodes.map(n => [n.textContent.trim(), n.getAttribute('href')])),
-        [['歌曲庫', '/'], ['歷史成績', '/history'], ['遊玩排行', '/plays']]);
+        [['歌曲庫', '/'], ['歷史成績', '/history'], ['遊玩次數', '/plays']]);
       assert.equal(await page.locator('a[aria-current="page"]').getAttribute('href'), route);
     }
     await page.waitForSelector('.plays-row');
+    assert.equal(await page.title(), '熱舞 Online · 遊玩次數');
+    assert.equal(await page.locator('h1').textContent(), '遊玩次數');
+    assert.equal(await page.locator('#plays-title').textContent(), '遊玩次數 · 前 30 首歌');
+    assert.equal(await page.locator('.plays-row > td:first-child').first()
+      .evaluate(cell => getComputedStyle(cell).paddingLeft), '19px');
     assert.equal(await page.locator('.plays-row').count(), 3);
     assert.deepEqual(await page.locator('.plays-table th').allTextContents(),
       ['名次', '歌曲 / 歌手', '總遊玩次數', '最佳燈號', 'BEST EX', '最後遊玩']);

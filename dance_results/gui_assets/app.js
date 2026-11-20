@@ -84,7 +84,10 @@ async function loadSongs(){
       const heading=node('div','song-title-row'),title=node('span','song-title',song.display_title);
       if(song.latest_status!=='ok')title.append(node('span','status-tag','待確認'));
       const official=song.source_type==='official';
-      heading.append(title,node('span','song-id','#'+song.song_id));row.append(heading,node('div','song-play-count','遊玩 '+song.play_count+' 次'),node('div','song-pack',official?'官方歌曲 · K · fileId '+song.file_id:(song.pack_name||'未歸類 Pack')),node('div','song-folder',official?song.gn:song.relative_folder));
+      heading.append(title,node('span','song-id','#'+song.song_id));
+      row.append(heading);
+      if(song.play_count>=1)row.append(node('div','song-play-count','遊玩 '+song.play_count+' 次'));
+      row.append(node('div','song-pack',official?'官方歌曲 · K · fileId '+song.file_id:(song.pack_name||'未歸類 Pack')),node('div','song-folder',official?song.gn:song.relative_folder));
       if(!song.is_present)row.append(node('span','status-tag','來源暫時未找到，資料保留'));
       const progress=node('div','song-progress');for(const p of song.progress||[])progress.append(DanceFX.chartProgress(p,{compact:true}));row.append(progress);row.addEventListener('click',()=>selectSong(song.song_id).catch(reportError));list.append(row);
       const bestLamp = ['ACP', 'AC', 'CLEAR', 'FAILED'].find(status =>

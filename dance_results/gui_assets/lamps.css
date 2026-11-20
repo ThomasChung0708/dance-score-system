@@ -115,7 +115,7 @@
   border: 1px var(--lamp-border) var(--lamp);
 }
 
-#history-rows .lamp-strip-host > td:first-child {
+.record-table .lamp-strip-host > td:first-child {
   position: relative;
   padding-left: 19px;
 }

@@ -90,10 +90,10 @@ def best_lamps_for_songs(db, song_ids):
 
     Catalog charts use difficulty_bests (including its legacy fallback); charts
     known only from result evidence use VERIFIED_EX, like song_result_progress.
-    Empty E/N/H slots remain UNPLAYED, as in the library's progress cells.
+    Only charts with an earned best lamp are included, never empty placeholders.
     """
     ids = sorted(set(song_ids))
-    result = {sid: {d: 'UNPLAYED' for d in ('EASY', 'NORMAL', 'HARD')} for sid in ids}
+    result = {sid: {} for sid in ids}
     rank_sql = 'CASE r.lamp_status ' + ' '.join(
         f"WHEN '{status}' THEN {rank}" for status, rank in RANK.items()
     ) + ' ELSE 0 END'
@@ -105,7 +105,8 @@ def best_lamps_for_songs(db, song_ids):
             'SELECT song_id,difficulty,best_clear_lamp FROM difficulty_bests '
             'WHERE song_id IN (' + marks + ')', batch,
         ):
-            result[row['song_id']][row['difficulty']] = row['best_clear_lamp']
+            if row['best_clear_lamp'] in ('FAILED', 'CLEAR', 'AC', 'ACP'):
+                result[row['song_id']][row['difficulty']] = row['best_clear_lamp']
         for row in db.execute(
             "SELECT r.song_id,json_extract(r.evidence_json,'$.values.difficulty') AS label,"
             'MAX(' + rank_sql + ') AS lamp_rank FROM play_records r '
@@ -114,7 +115,7 @@ def best_lamps_for_songs(db, song_ids):
             "AND d.difficulty=json_extract(r.evidence_json,'$.values.difficulty')) "
             'GROUP BY r.song_id,label', batch,
         ):
-            if row['label'] in result[row['song_id']]:
+            if row['label'] in ('EASY', 'NORMAL', 'HARD') and row['lamp_rank'] > 0:
                 result[row['song_id']][row['label']] = by_rank[row['lamp_rank']]
     return result
 

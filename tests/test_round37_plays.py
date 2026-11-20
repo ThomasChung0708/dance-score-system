@@ -7,11 +7,14 @@ import subprocess
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from dance_results.gui import create_server
+from dance_results import play_counts
+from dance_results.library_service import LibraryService
 from test_game_sync import GameFixture, external_line, official_line
 
 
@@ -116,6 +119,31 @@ class PlayCountTests(unittest.TestCase):
         top = self.get('/api/plays/top')['songs']
         self.assertEqual(sum(s['play_count'] for s in top), 5)
         self.assertEqual(top[0]['play_count'], 3)
+
+    def test_count_breakdowns_are_bounded_to_page_and_detail(self):
+        service = LibraryService(self.fixture.database)
+        with patch('dance_results.library_service.counts_for_songs',
+                   wraps=play_counts.counts_for_songs) as counts, \
+                patch('dance_results.library_service.totals_for_songs',
+                      wraps=play_counts.totals_for_songs) as totals:
+            for order in ('asc', 'desc', 'plays_asc', 'plays_desc'):
+                with self.subTest(order=order):
+                    counts.reset_mock()
+                    totals.reset_mock()
+                    page = service.songs(None, order=order, offset=1, limit=1)
+                    counts.assert_called_once()
+                    self.assertEqual(counts.call_args.args[1],
+                                     [song['song_id'] for song in page['songs']])
+                    self.assertEqual(totals.call_count, int(order.startswith('plays_')))
+            counts.reset_mock()
+            service.songs(None, offset=999, limit=1)
+            self.assertEqual(counts.call_args.args[1], [])
+        with patch('dance_results.play_counts.counts_for_songs',
+                   wraps=play_counts.counts_for_songs) as counts:
+            detail = service.detail(None, self.song_id)
+            counts.assert_called_once()
+            self.assertEqual(counts.call_args.args[1], [self.song_id])
+            self.assertEqual(detail['play_count'], 3)
 
     def test_competition_ties_recent_first_limit_and_independent_bests(self):
         self.fixture.append(external_line(self.fixture, at='2026-11-19T12:00:00Z'))

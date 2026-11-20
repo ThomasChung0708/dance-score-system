@@ -13,7 +13,7 @@
     <nav aria-label="主要導覽">
     <a class="page-link" href="/" aria-current="page">歌曲庫</a>
     <a class="page-link" href="/history">歷史成績</a>
-    <a class="page-link" href="/plays">遊玩排行</a>
+    <a class="page-link" href="/plays">遊玩次數</a>
     </nav>
     <button id="game-button" title="從遊戲直接讀成績與歌單">遊戲資料夾</button>
     <button id="scan-button" class="primary">↻ 更新歌曲庫</button>
@@ -34,7 +34,7 @@
   <aside class="packs-panel" aria-label="Pack 瀏覽"><div class="panel-heading"><h2>音樂收藏</h2></div><nav id="pack-list" aria-label="Pack 清單"></nav></aside>
   <section class="songs-panel" aria-label="歌曲清單"><div class="list-heading"><div><h2 id="list-title">全部歌曲</h2></div><span id="result-count" class="count-pill">—</span></div>
     <div class="search-tools"><label class="search-box"><input id="search" type="search" autocomplete="off" aria-label="搜尋歌曲名稱" placeholder="搜尋歌名、Pack 或資料夾…"></label><select id="sort" aria-label="歌曲排序"><option value="asc">名稱 A → Z</option><option value="desc">名稱 Z → A</option><option value="plays_desc">遊玩次數 多 → 少</option><option value="plays_asc">遊玩次數 少 → 多</option></select>
-      <select id="lamp-filter" aria-label="Clear 狀態：任一難度的最佳燈號" title="任一 EASY / NORMAL / HARD 的最佳燈號符合；未取得燈號也算未通關">
+      <select id="lamp-filter" aria-label="Clear 狀態：歌曲通關狀態或譜面最佳燈號" title="已通關：任一譜面最佳燈號為 CLEAR／AC／ACP；未通關：已有遊玩紀錄，且所有譜面皆未達 CLEAR；指定燈號：任一有成績的譜面最佳燈號符合。未遊玩歌曲不列入。">
         <option value="">Clear 狀態：全部</option>
         <option value="ACP">ACP</option>
         <option value="AC">AC</option>
