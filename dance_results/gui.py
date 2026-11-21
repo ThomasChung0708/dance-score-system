@@ -128,7 +128,7 @@ def create_server(database,port=0,monitor_directory=None,*,game_sync=True):
                     result=submissions.history(song_id=number('song_id'),difficulty=args.get('difficulty',[None])[0],
                         player_name=args.get('player_name',[None])[0],offset=number('offset',0),limit=number('limit',60),
                         lamp=args.get('lamp',[''])[0],title=args.get('title',[None])[0],
-                        artist=args.get('artist',[None])[0])
+                        artist=args.get('artist',[None])[0],hide_no_update=True)
                 elif parsed.path == '/api/plays/top':
                     result = submissions.top_plays(number('limit', 30))
                 elif parsed.path == '/api/history/song-search':

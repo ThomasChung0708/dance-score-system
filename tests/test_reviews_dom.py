@@ -76,7 +76,7 @@ class ReviewDOMTests(unittest.TestCase):
         atomic_json(folder/'result-review.json', row)
         self.run_browser('safety')
 
-    def test_confirmed_chartless_history_renders_unknown_difficulty(self):
+    def test_confirmed_chartless_no_update_is_hidden_on_history(self):
         from dance_results.library_service import LibraryService
         from dance_results.submissions import SubmissionService
         self.service.scoring_policy = 'custom-judged-v1'
@@ -87,7 +87,18 @@ class ReviewDOMTests(unittest.TestCase):
         body.update(revision=saved['revision'], play_mode='single')
         store = SubmissionService(LibraryService(self.db), self.service)
         preview = store.prepare(body)
-        store.submit(dict(body, submission_token=preview['submission_token'], submit_acknowledge=True))
+        submitted = store.submit(dict(
+            body,
+            submission_token=preview['submission_token'],
+            submit_acknowledge=True,
+        ))
+        self.assertEqual(store.history(hide_no_update=True)['total'], 0)
+        self.assertEqual(store.history()['total'], 1)
+        record_id = submitted['record']['record_id']
+        record = store.detail(record_id)
+        self.assertEqual(record['record_id'], record_id)
+        self.assertIsNone(record['difficulty'])
+        self.assertEqual(record['update_summary']['kind'], 'NO_UPDATE')
         self.run_browser('chartless')
 
 

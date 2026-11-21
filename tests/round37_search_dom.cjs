@@ -55,7 +55,7 @@ async function main() {
 
     for (const lamp of ['UNPLAYED', 'UNCLEARED', 'CLEARED']) {
       await page.goto(base + '/history?lamp=' + lamp);
-      await page.waitForFunction(() => document.querySelector('#history-count').textContent === '共 4 筆成績 · 本頁 4 筆');
+      await page.waitForFunction(() => document.querySelector('#history-count').textContent === '共 2 筆成績 · 本頁 2 筆');
       assert.equal(await page.locator('#history-lamp').inputValue(), '');
     }
 
@@ -88,7 +88,8 @@ async function main() {
     for (const id of ['history-song', 'history-song-id', 'history-difficulty', 'history-lamp', 'history-player']) {
       assert.equal(await page.locator('#' + id).inputValue(), '');
     }
-    await page.waitForFunction(() => document.querySelector('#history-count').textContent === '共 4 筆成績 · 本頁 4 筆');
+    await page.waitForFunction(() => document.querySelector('#history-count').textContent === '共 2 筆成績 · 本頁 2 筆');
+    assert.equal(await page.locator('.record-row[data-update-kind="NO_UPDATE"]').count(), 0);
     assert.equal(new URL(page.url()).search, '');
     assert.equal(await page.locator('#history-song-options').isHidden(), true);
     await verifyLamps(page);

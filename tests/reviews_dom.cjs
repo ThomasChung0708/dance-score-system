@@ -69,12 +69,10 @@ async function main() {
     }
     if (mode === 'chartless') {
       await page.goto(base + '/history');
-      await page.waitForSelector('.record-title');
-      assert.match(await page.locator('.difficulty-chip').textContent(), /難度未設定/);
-      assert.ok(!(await page.locator('.record-title').getAttribute('href')).includes('difficulty=null'));
-      await page.locator('.record-table button').first().click();
-      await page.waitForSelector('#history-detail:not([hidden])');
-      assert.match(await page.locator('#history-detail-title').textContent(), /難度未設定/);
+      await page.waitForSelector('.empty-records');
+      assert.match(await page.locator('#history-count').textContent(), /共 0 筆成績/);
+      assert.equal(await page.locator('.empty-records').textContent(), '尚無符合條件的正式成績。');
+      assert.equal(await page.locator('.record-title').count(), 0);
       assert.deepEqual(errors, []);
       console.log(JSON.stringify({mode, passed: true}));
       return;

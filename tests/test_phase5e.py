@@ -161,7 +161,10 @@ class ProgressIntegrationTests(unittest.TestCase):
             with self.subTest(args=args),self.assertRaises(LibraryError):self.store().progress_history(**args)
 
     def test_http_progress_auth_projection_image_and_ui_contract(self):
-        saved=self.save(850,100,50);server=create_server(self.db,monitor_directory=self.output)
+        saved=self.save(850,100,50)
+        self.next();tied=self.save(850,100,50)
+        self.assertEqual(tied['update_summary']['kind'],'NO_UPDATE')
+        server=create_server(self.db,monitor_directory=self.output)
         worker=threading.Thread(target=server.serve_forever,daemon=True);worker.start();base=f'http://127.0.0.1:{server.server_port}'
         def get(path,auth=True):
             with urlopen(Request(base+path,headers={'X-Dance-Token':server.session_token} if auth else {})) as response:return response.read()
@@ -169,7 +172,16 @@ class ProgressIntegrationTests(unittest.TestCase):
             with self.assertRaises(HTTPError) as error:get('/api/progress-history?song_id=1',False)
             self.assertEqual(error.exception.code,403)
             progress=json.loads(get('/api/progress-history?song_id=1&difficulty=HARD&order=asc'))
-            self.assertEqual(progress['records'][0]['record_id'],saved['record_id'])
+            self.assertEqual(progress['total'],2)
+            self.assertEqual([r['record_id'] for r in progress['records']],[saved['record_id'],tied['record_id']])
+            self.assertEqual(progress['records'][1]['update_summary']['kind'],'NO_UPDATE')
+            history=json.loads(get('/api/history?song_id=1&difficulty=HARD'))
+            self.assertEqual(history['total'],1)
+            self.assertEqual([r['record_id'] for r in history['records']],[saved['record_id']])
+            self.assertEqual(history['play_count'],2)
+            detail=json.loads(get('/api/history/detail?record_id='+str(tied['record_id'])))
+            self.assertEqual(detail['update_summary']['kind'],'NO_UPDATE')
+            self.assertEqual(get('/api/history/image?record_id='+str(tied['record_id'])),self.store().image(tied['record_id']))
             self.assertEqual(get('/api/history/image?record_id='+str(saved['record_id'])),self.store().image(saved['record_id']))
             markup=get('/history').decode('utf8');css=get('/history.css').decode('utf8');js=get('/lamps.js').decode('utf8')
             for value in ['CLEAR STATUS','SCORE STATUS','本次更新']:self.assertIn(value,markup)

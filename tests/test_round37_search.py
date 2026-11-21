@@ -15,6 +15,7 @@ from urllib.request import Request, urlopen
 from dance_results.gui import ASSETS, create_server
 from dance_results.achievements import best_lamps_for_songs, progress_for_songs
 from dance_results.library_service import LibraryService
+from dance_results.submissions import SubmissionService
 from test_game_sync import GameFixture, external_line, official_line
 import test_round28 as receipt_fixture
 
@@ -96,9 +97,9 @@ class SearchControlsTests(unittest.TestCase):
     def test_history_count_uses_same_combined_filters_as_paginated_rows(self):
         song_id = self.get('/api/songs', category='official')['songs'][0]['song_id']
         for filters, expected in [
-            ({}, 4),
-            ({'song_id': song_id, 'difficulty': 'HARD'}, 3),
-            ({'song_id': song_id, 'difficulty': 'HARD', 'player_name': 'Eithwa'}, 2),
+            ({}, 2),
+            ({'song_id': song_id, 'difficulty': 'HARD'}, 1),
+            ({'song_id': song_id, 'difficulty': 'HARD', 'player_name': 'Eithwa'}, 1),
             ({'difficulty': 'NORMAL'}, 1),
             ({'player_name': '找不到'}, 0),
         ]:
@@ -107,6 +108,55 @@ class SearchControlsTests(unittest.TestCase):
                     data = self.get('/api/history', **filters, offset=offset, limit=1)
                     self.assertEqual(data['total'], expected)
                     self.assertEqual(len(data['records']), int(offset < expected))
+                    for record in data['records']:
+                        self.assertNotEqual(record['update_summary']['kind'], 'NO_UPDATE')
+
+    def test_history_hides_ties_before_pagination_but_raw_history_keeps_all_plays(self):
+        service = SubmissionService(LibraryService(self.fixture.database), None)
+        inclusive = service.history()
+        self.assertEqual(inclusive['total'], 4)
+        hidden = [r for r in inclusive['records'] if r['update_summary']['kind'] == 'NO_UPDATE']
+        self.assertEqual(len(hidden), 2)
+        kept_ids = [r['record_id'] for r in inclusive['records'] if r not in hidden]
+        for offset in (0, 1, 2, 99):
+            with self.subTest(offset=offset):
+                data = self.get('/api/history', offset=offset, limit=1)
+                self.assertEqual(data['total'], 2)
+                self.assertEqual(data['offset'], offset)
+                self.assertEqual(data['limit'], 1)
+                self.assertEqual([r['record_id'] for r in data['records']], kept_ids[offset:offset + 1])
+        for record in hidden:
+            detail = self.get('/api/history/detail', record_id=record['record_id'])
+            self.assertEqual(detail, service.detail(record['record_id']))
+            self.assertEqual(detail['update_summary']['kind'], 'NO_UPDATE')
+        self.assertEqual(service.history(hide_no_update=True)['total'], 2)
+        self.assertEqual(service.history()['total'], 4)
+
+    def test_history_filter_uses_verified_ex_eligibility_as_well_as_feedback(self):
+        first_id = self.fixture.records()[0]['record_id']
+        before = self.get('/api/history/detail', record_id=first_id)
+        self.assertEqual(before['update_summary']['kind'], 'DOUBLE_UPDATE')
+        with self.fixture.db() as db:
+            db.execute(
+                'INSERT INTO play_sessions(session_id,player_name,play_mode,room_status,'
+                'player_status,local_difficulty) '
+                "VALUES('unverified-feedback','Eithwa','single','result','completed','HARD')"
+            )
+            unverified_id = db.execute(
+                'INSERT INTO play_records(session_id,difficulty_id,played_at,completion_status,'
+                'ex_score,lamp_status,evidence_json) '
+                "SELECT 'unverified-feedback',difficulty_id,played_at,completion_status,ex_score,lamp_status,"
+                "json_object('achievement_feedback',json_extract(evidence_json,'$.achievement_feedback')) "
+                'FROM play_records WHERE record_id=?',
+                (first_id,),
+            ).lastrowid
+            db.commit()
+        detail = self.get('/api/history/detail', record_id=unverified_id)
+        self.assertEqual(detail['achievement_feedback'], before['achievement_feedback'])
+        self.assertEqual(detail['update_summary']['kind'], 'NO_UPDATE')
+        data = self.get('/api/history')
+        self.assertEqual(data['total'], 2)
+        self.assertNotIn(unverified_id, [r['record_id'] for r in data['records']])
 
     def add_lamp_records(self):
         self.fixture.append(
@@ -140,11 +190,11 @@ class SearchControlsTests(unittest.TestCase):
         self.add_lamp_records()
         song_id = self.get('/api/songs', category='official')['songs'][0]['song_id']
         for lamp, expected, combined, statuses in [
-            ('', 10, 6, {'ACP', 'AC', 'CLEAR', 'FAILED', None}),
+            ('', 5, 3, {'ACP', 'AC', 'FAILED', None}),
             ('ACP', 1, 1, {'ACP'}),
-            ('AC', 4, 2, {'AC'}),
-            ('CLEAR', 2, 1, {'CLEAR'}),
-            ('FAILED', 2, 1, {'FAILED'}),
+            ('AC', 2, 1, {'AC'}),
+            ('CLEAR', 0, 0, {'CLEAR'}),
+            ('FAILED', 1, 0, {'FAILED'}),
         ]:
             for filters, total in [
                 ({}, expected),
@@ -157,9 +207,13 @@ class SearchControlsTests(unittest.TestCase):
                         self.assertEqual(data['total'], total)
                         self.assertEqual(len(data['records']), int(offset < total))
                         for record in data['records']:
+                            self.assertNotEqual(record['update_summary']['kind'], 'NO_UPDATE')
                             self.assertIn(record['lamp_status'], statuses)
                             ids.append(record['record_id'])
                 self.assertEqual(len(set(ids)), total)
+        pending = [r for r in self.get('/api/history')['records'] if r['lamp_status'] is None]
+        self.assertEqual(len(pending), 1)
+        self.assertEqual(pending[0]['update_summary']['kind'], 'UNAVAILABLE')
 
     def test_library_lamp_filter_uses_chart_bests_before_pagination(self):
         self.add_lamp_records()

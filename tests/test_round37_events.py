@@ -127,8 +127,13 @@ class GameEventTests(unittest.TestCase):
         if not Path(node).is_file() or not playwright.exists():
             self.skipTest('Node/Playwright unavailable; set DANCE_NODE to the node executable '
                           'and DANCE_PLAYWRIGHT to the playwright node package directory')
+        # Improvements keep enough visible rows to exercise history's next page;
+        # tied plays remain available only in the separate growth history.
         self.fixture.append(*[
-            external_line(self.fixture, at=f'2026-11-17T11:{minute:02}:00Z')
+            {
+                **external_line(self.fixture, at=f'2026-11-17T11:{minute:02}:00Z'),
+                'perfect': 240 + minute,
+            }
             for minute in range(60)
         ], external_line(self.fixture, at='2026-11-17T12:00:00Z'))
         self.fixture.sync.run_once()

@@ -96,7 +96,7 @@ class PlayCountTests(unittest.TestCase):
         history = self.get('/api/history', song_id=self.song_id, difficulty='NORMAL', lamp='AC')
         self.assertEqual(history['total'], 1)
         self.assertEqual(history['play_count'], 5)
-        self.assertEqual(self.get('/api/history', song_id=self.song_id)['total'], 5)
+        self.assertEqual(self.get('/api/history', song_id=self.song_id)['total'], 4)
         self.assertEqual(self.get('/api/plays/top')['songs'][0]['play_count'], 5)
         self.assertEqual(self.get('/api/songs/' + str(custom))['play_count'], 1)
 
@@ -115,10 +115,36 @@ class PlayCountTests(unittest.TestCase):
                 "VALUES('opponent','Other','multiplayer','result','completed')"
             )
             db.commit()
-        self.assertEqual(self.get('/api/history')['total'], 5)
+        self.assertEqual(self.get('/api/history')['total'], 3)
         top = self.get('/api/plays/top')['songs']
         self.assertEqual(sum(s['play_count'] for s in top), 5)
         self.assertEqual(top[0]['play_count'], 3)
+
+    def test_no_update_play_increments_counts_without_adding_a_history_row(self):
+        before = self.get('/api/history', song_id=self.song_id)
+        self.assertEqual((before['total'], before['play_count']), (2, 3))
+        self.fixture.append(official_line(at='2026-11-19T12:00:00Z'))
+        self.fixture.sync.run_once()
+        record_id = self.fixture.records()[-1]['record_id']
+        detail = self.get('/api/history/detail', record_id=record_id)
+        self.assertEqual(detail['update_summary']['kind'], 'NO_UPDATE')
+
+        history = self.get('/api/history', song_id=self.song_id)
+        self.assertEqual(history['total'], before['total'])
+        self.assertEqual([r['record_id'] for r in history['records']],
+                         [r['record_id'] for r in before['records']])
+        self.assertEqual([r['update_summary'] for r in history['records']],
+                         [r['update_summary'] for r in before['records']])
+        self.assertEqual(history['play_count'], 4)
+        self.assertEqual(history['play_counts'], {'NORMAL': 1, 'HARD': 3})
+        song = self.get('/api/songs/' + str(self.song_id))
+        self.assertEqual(song['play_count'], 4)
+        self.assertEqual(song['play_counts'], history['play_counts'])
+        listed = self.get('/api/songs', category='official')['songs'][0]
+        self.assertEqual(listed['play_count'], 4)
+        ranked = next(s for s in self.get('/api/plays/top')['songs']
+                      if s['song_id'] == self.song_id)
+        self.assertEqual(ranked['play_count'], 4)
 
     def test_count_breakdowns_are_bounded_to_page_and_detail(self):
         service = LibraryService(self.fixture.database)
@@ -183,6 +209,26 @@ class PlayCountTests(unittest.TestCase):
         self.assertEqual(history['play_count'], 2)
         self.assertEqual(history['records'][0]['title'], row['title'])
         self.assertEqual(self.get('/api/songs/' + str(self.song_id))['play_count'], 3)
+
+    def test_unbound_title_history_keeps_play_count_when_no_update_is_hidden(self):
+        self.legacy('title-first', title='未入庫歌曲', artist='原作者')
+        self.legacy('title-tie', title='未入庫歌曲', artist='原作者')
+        with self.fixture.db() as db:
+            db.execute(
+                "UPDATE play_records SET evidence_json=json_set("
+                "evidence_json,'$.achievement_feedback',json('{}')) "
+                "WHERE session_id='title-tie'"
+            )
+            db.commit()
+        history = self.get('/api/history', title='未入庫歌曲', artist='原作者', limit=1)
+        self.assertEqual(history['total'], 1)
+        self.assertEqual(history['play_count'], 2)
+        self.assertEqual(history['records'][0]['session_id'], 'title-first')
+        self.assertEqual(history['records'][0]['update_summary']['kind'], 'UNAVAILABLE')
+        last = self.get('/api/history', title='未入庫歌曲', artist='原作者', offset=1, limit=1)
+        self.assertEqual(last['total'], 1)
+        self.assertEqual(last['records'], [])
+        self.assertEqual(last['play_count'], 2)
 
     def test_library_count_sort_before_pagination_with_stable_tiebreak(self):
         descending = self.get('/api/songs', order='plays_desc', limit=1)

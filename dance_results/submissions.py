@@ -376,6 +376,25 @@ class SubmissionService:
         finally:self.library._write_lock.release()
 
     @staticmethod
+    def _update_summary(db, record_id):
+        """Use the saved evidence and EX eligibility without loading full details."""
+        from .bests_policy import VERIFIED_EX
+        from .performance import update_summary
+
+        row = db.execute(
+            'SELECT r.ex_score,r.lamp_status,r.evidence_json,('
+            + VERIFIED_EX + ') AS eligible FROM play_records r WHERE r.record_id=?',
+            (record_id,),
+        ).fetchone()
+        if row is None:
+            raise LibraryError('找不到成績。', 404)
+        record = dict(row)
+        evidence = json.loads(record.pop('evidence_json'))
+        return update_summary(
+            record, evidence.get('achievement_feedback'), eligible=bool(record['eligible']),
+        )
+
+    @staticmethod
     def _record(db,record_id,*,include_evidence=True):
         identity = SONG_ID
         row=db.execute('SELECT r.*,'+identity+' AS bound_song_id,COALESCE(d.difficulty,ps.local_difficulty) AS difficulty,s.saved_title,s.latest_title,s.relative_folder,s.source_type,p.name AS pack_name,ps.player_name,ps.play_mode,ps.display_song_title '
@@ -418,17 +437,15 @@ class SubmissionService:
         result['lamp_pending']=result['lamp_status'] is None
         result['played_at_source']=evidence.get('played_at_source')
         result['played_at_verified']=bool(result['played_at_source'])
-        from .performance import update_summary,score_status
-        from .bests_policy import VERIFIED_EX
-        eligible=bool(db.execute('SELECT 1 FROM play_records r WHERE r.record_id=? AND '+VERIFIED_EX,(record_id,)).fetchone())
-        result['update_summary']=update_summary(result,result['achievement_feedback'],eligible=eligible)
+        from .performance import score_status
+        result['update_summary']=SubmissionService._update_summary(db,record_id)
         result['score_status']=score_status(result)
         if include_evidence:result['evidence']=evidence
         return result
 
     def history(
         self, *, song_id=None, difficulty=None, player_name=None, offset=0,
-        limit=60, order='desc', lamp='', title=None, artist=None,
+        limit=60, order='desc', lamp='', title=None, artist=None, hide_no_update=False,
     ):
         validate_lamp_filter(lamp, HISTORY_LAMP_FILTERS)
         integer(offset,'起點');integer(limit,'筆數',1)
@@ -458,8 +475,16 @@ class SubmissionService:
                 where.append('r.record_id IN (' + ','.join('?' for _ in ids) + ')')
                 args.extend(ids)
             suffix=(' WHERE '+' AND '.join(where)) if where else ''
-            count=db.execute('SELECT count(*)'+joins+suffix,args).fetchone()[0]
-            ids=[r[0]for r in db.execute('SELECT r.record_id'+joins+suffix+' ORDER BY julianday(r.played_at) '+order+',r.record_id '+order+' LIMIT ? OFFSET ?',(*args,limit,offset))]
+            ids = [r[0] for r in db.execute(
+                'SELECT r.record_id' + joins + suffix
+                + ' ORDER BY julianday(r.played_at) ' + order + ',r.record_id ' + order,
+                args,
+            )]
+            if hide_no_update:
+                ids = [record_id for record_id in ids
+                       if self._update_summary(db, record_id)['kind'] != 'NO_UPDATE']
+            count = len(ids)
+            ids = ids[offset:offset + limit]
             records=[self._record(db,i,include_evidence=False)for i in ids]
             bests=[]
             if song_id is not None:
