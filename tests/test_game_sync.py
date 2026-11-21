@@ -363,12 +363,48 @@ class GameSyncTests(unittest.TestCase):
         self.assertEqual(750, notes)
 
     def test_backups_are_taken_once_per_batch_and_pruned(self):
+        created = []
+        directory = self.fixture.database.parent / 'backups'
         for minute in range(12):
+            before = set(directory.glob('*.pre-game-sync.*.sqlite3'))
             self.fixture.append(official_line(at=f'2026-11-17T13:{minute:02d}:00Z'))
             self.fixture.sync.run_once()
-        backups = list((self.fixture.database.parent / 'backups').glob('*.pre-game-sync.*.sqlite3'))
+            after = set(directory.glob('*.pre-game-sync.*.sqlite3'))
+            [newest] = after - before
+            created.append(newest)
+        backups = list(directory.glob('*.pre-game-sync.*.sqlite3'))
         self.assertEqual(10, len(backups))
+        self.assertEqual(set(created[-10:]), set(backups))
         self.assertEqual(12, len(self.fixture.records()))
+
+    def test_locked_backup_is_logged_without_failing_committed_sync(self):
+        directory = self.fixture.database.parent / 'backups'
+        directory.mkdir(parents=True, exist_ok=True)
+        old = []
+        for index in range(12):
+            path = directory / f'{self.fixture.database.stem}.pre-game-sync.{index:02d}.sqlite3'
+            path.touch()
+            old.append(path)
+        unlink = Path.unlink
+
+        def refuse_locked(path, *args, **kwargs):
+            # Pruning must happen only after the result transaction commits.
+            self.assertEqual(1, len(self.fixture.records()))
+            if path == old[0]:
+                raise PermissionError('backup is locked')
+            return unlink(path, *args, **kwargs)
+
+        self.fixture.append(official_line())
+        with patch.object(Path, 'unlink', refuse_locked):
+            with self.assertLogs('dance_results.sqlite_safety', level='WARNING') as logs:
+                status = self.fixture.sync.run_once()
+        self.assertEqual('watching', status['state'], status)
+        self.assertEqual(1, status['imported_total'])
+        self.assertIn(str(old[0]), '\n'.join(logs.output))
+        self.assertTrue(old[0].exists())
+        self.assertFalse(old[1].exists())
+        self.assertFalse(old[2].exists())
+        self.assertEqual(11, len(list(directory.glob('*.pre-game-sync.*.sqlite3'))))
 
 
 class CharacterChoiceTests(unittest.TestCase):

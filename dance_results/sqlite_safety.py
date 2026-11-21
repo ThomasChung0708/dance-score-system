@@ -3,11 +3,69 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import sqlite3
+import stat
 from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
+
+
+KEEP_BACKUPS = 10
+PRUNABLE_BACKUP_LABELS = frozenset({'pre-game-sync', 'pre-submit'})
+logger = logging.getLogger(__name__)
+
+
+def prune_backups(
+    database: Path,
+    label: str,
+    *,
+    newest: str | Path,
+    keep: int = KEEP_BACKUPS,
+) -> None:
+    """Best-effort retention for one label, after the caller's transaction commits.
+
+    Filename order follows verified_backup's UTC stamps. Explicitly reserve a
+    slot for the new backup even if the system clock has moved backwards.
+    Never traverse a redirected backups directory or delete linked files.
+    """
+    if label not in PRUNABLE_BACKUP_LABELS:
+        return
+    try:
+        directory = database.parent.resolve() / 'backups'
+        if directory.resolve() != directory:
+            logger.warning('Refusing to prune redirected backup directory: %s', directory)
+            return
+        newest = Path(newest).absolute()
+        if newest.parent.resolve() != directory:
+            return
+        prefix = f'{database.stem}.{label}.'
+        backups = []
+        for candidate in directory.iterdir():
+            if (
+                not candidate.name.startswith(prefix)
+                or not candidate.name[len(prefix):].endswith('.sqlite3')
+            ):
+                continue
+            try:
+                if stat.S_ISREG(candidate.lstat().st_mode) and candidate.resolve() == candidate:
+                    backups.append(candidate)
+            except (OSError, RuntimeError):
+                logger.warning('Could not inspect backup: %s', candidate, exc_info=True)
+        newest = directory / newest.name
+        if newest not in backups:
+            return
+        older = sorted(candidate for candidate in backups if candidate != newest)
+        retained = max(1, keep) - 1
+        obsolete = older[:-retained] if retained else older
+        for old in obsolete:
+            try:
+                old.unlink()
+            except OSError:
+                logger.warning('Could not delete old backup: %s', old, exc_info=True)
+    except (OSError, RuntimeError):
+        logger.warning('Could not prune %s backups for %s', label, database, exc_info=True)
 
 
 def quoted(value):

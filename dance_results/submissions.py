@@ -12,7 +12,7 @@ from .library_service import LibraryError, HISTORY_LAMP_FILTERS, folded, integer
 from .monitor_tracking import fingerprint, utc
 from .ocr_matching import normalize
 from .scoring import calculate, percentage_display
-from .sqlite_safety import verified_backup, check_integrity
+from .sqlite_safety import verified_backup, check_integrity, prune_backups
 from .achievements import progress_for_songs, feedback
 from .note_review import result_time
 from .result_consistency import screen_catalog, observation, screen_totals, validate, selection_is_reference
@@ -371,8 +371,9 @@ class SubmissionService:
                     db.commit()
                     receipt=self._record(db,record_id)
                     self.reviews.record_automatic_submission(receipt)
-                    return dict(record=receipt,idempotent=False,backup_path=backup)
                 except BaseException:db.rollback();raise
+                prune_backups(self.library.path, 'pre-submit', newest=backup)
+                return dict(record=receipt,idempotent=False,backup_path=backup)
         finally:self.library._write_lock.release()
 
     @staticmethod

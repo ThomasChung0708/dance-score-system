@@ -35,7 +35,7 @@ from .game_folder import CharacterResults, GameFolder, GameFolderError, default_
 from .official_import import CATALOG_KEY, CATALOG_ROOT, MAX_CSV_BYTES, _insert_song, read_catalog
 from .score_comparison import comparison
 from .scoring import calculate
-from .sqlite_safety import check_integrity, verified_backup
+from .sqlite_safety import KEEP_BACKUPS, check_integrity, prune_backups, verified_backup
 
 RESULT_VERSIONS = (1,)
 DIFFICULTY_LABELS = {'easy': 'EASY', 'normal': 'NORMAL', 'hard': 'HARD'}
@@ -47,7 +47,6 @@ SOURCE = 'game_results_log'
 REVIEW_PREFIX = 'game-log:'
 SESSION_PREFIX = 'game-'
 BACKUP_LABEL = 'pre-game-sync'
-KEEP_BACKUPS = 10
 SOURCE_FORMATS = {1: 'osu', 2: 'sm'}
 
 
@@ -546,16 +545,6 @@ def _stamp(path: Path):
         return None
 
 
-def prune_backups(database: Path, keep: int = KEEP_BACKUPS) -> None:
-    directory = database.parent / 'backups'
-    backups = sorted(directory.glob(f'{database.stem}.{BACKUP_LABEL}.*.sqlite3'))
-    for old in backups[:-keep] if keep > 0 else backups:
-        try:
-            old.unlink()
-        except OSError:
-            pass
-
-
 class GameSync:
     """Background follower of one game folder. Thread-safe status for the GUI."""
 
@@ -815,7 +804,7 @@ class GameSync:
         if not work:
             return imported, rejected
 
-        backed_up = False
+        backup = None
         with self._write() as db:
             batches = []
             for key, new_offset, lines, pending in work:
@@ -824,8 +813,7 @@ class GameSync:
                 batches.append((key, new_offset, todo))
             if any(not already_imported(db, raw) for _, _, todo in batches for _, raw in todo):
                 # The backup must see exactly what this transaction sees: take it before any write.
-                verified_backup(db, self.database, BACKUP_LABEL)
-                backed_up = True
+                backup = verified_backup(db, self.database, BACKUP_LABEL)
             resolver = _Resolver(db, folder)
             for key, new_offset, todo in batches:
                 for position, raw in todo:
@@ -855,6 +843,6 @@ class GameSync:
         # _write commits the entire batch before any client can see a receipt.
         for record in imported:
             self.event_feed.publish(record['record_id'])
-        if backed_up:
-            prune_backups(self.database)
+        if backup is not None:
+            prune_backups(self.database, BACKUP_LABEL, newest=backup, keep=KEEP_BACKUPS)
         return imported, rejected
