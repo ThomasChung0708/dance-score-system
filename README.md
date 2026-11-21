@@ -4,7 +4,7 @@
 
 ## 最簡單的用法：DanceScore.exe（不用 OCR、不用安裝 Python）
 
-1. 到 [Releases 下載頁](https://github.com/ThomasChung0708/dance-score-system/releases/latest) 下載 `DanceScore.exe`，放進**它自己的空資料夾**（例如 `D:\DanceScore`），雙擊開啟。第一次若出現「Windows 已保護您的電腦」，按「其他資訊」→「仍要執行」（exe 沒有數位簽章）。會開啟本機網頁；保持黑色視窗開著。
+1. 到 [Releases 下載頁](https://github.com/ThomasChung0708/dance-score-system/releases/tag/v1.1.0) 下載 `DanceScore.exe`，放進**它自己的空資料夾**（例如 `D:\DanceScore`），雙擊開啟。第一次若出現「Windows 已保護您的電腦」，按「其他資訊」→「仍要執行」（exe 沒有數位簽章）。會開啟本機網頁；保持黑色視窗開著。
 2. 按右上「遊戲資料夾」，貼上有 `dance.exe` 的資料夾路徑，按「儲存並同步」。
 3. 在「角色」下拉選單選自己的角色。
 4. 照常打歌。每首打完，成績自動存進來；官方歌、外部歌（含 StepMania／osu 資料夾）的歌單也跟遊戲同步。
