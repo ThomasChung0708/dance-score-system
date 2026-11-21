@@ -36,7 +36,7 @@
 
 ## 3. 安裝（只要做一次）
 
-1. 打開 <https://github.com/ThomasChung0708/dance-score-system/releases/tag/v1.1.0>（工具的下載頁）。
+1. 打開 <https://github.com/ThomasChung0708/dance-score-system/releases/latest>（工具的下載頁）。
 2. 往下找到「**Assets**」，點 **`DanceScore.exe`** 下載。
 3. 在你好找的地方建一個**新的空資料夾**，例如 `D:\DanceScore`，把 `DanceScore.exe` 放進去。
    - 一定要放在**它自己的資料夾**。工具會在 exe 旁邊自動建一個 `data` 資料夾，你的成績都存在裡面。
@@ -168,7 +168,7 @@
 
 **Q3. 雙擊 `DanceScore.exe` 沒反應、黑色視窗一閃就關掉，或被防毒軟體擋下？**
 - 跳出藍色「Windows 已保護您的電腦」：按「其他資訊」→「仍要執行」。
-- 被防毒軟體隔離：確認檔案是從[下載頁](https://github.com/ThomasChung0708/dance-score-system/releases/tag/v1.1.0)拿的，再到防毒軟體把它設為允許。
+- 被防毒軟體隔離：確認檔案是從[下載頁](https://github.com/ThomasChung0708/dance-score-system/releases/latest)拿的，再到防毒軟體把它設為允許。
 - 一閃就關掉：確認 exe 放在**你自己建的資料夾**（例如 `D:\DanceScore`），不要放在 `C:\Program Files` 或唯讀的地方，工具需要在旁邊建立 `data` 資料夾。
 - 還是不行的話，把畫面截圖給維護者。
 
