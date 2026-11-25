@@ -122,12 +122,14 @@ class SubmissionTests(unittest.TestCase):
         self.assertEqual(set(created[-10:]), remaining)
         self.assertEqual(12, self.store().history()['total'])
 
-    def test_locked_backup_is_logged_without_failing_committed_submit(self):
+    def test_unlink_error_is_logged_without_failing_committed_submit(self):
         directory = self.base / 'backups'
         directory.mkdir(exist_ok=True)
         old = []
         for index in range(12):
-            path = directory / f'{self.db.stem}.pre-submit.{index:02d}.sqlite3'
+            path = directory / (
+                f'{self.db.stem}.pre-submit.20000101T000000{index:06d}Z.1234abcd.sqlite3'
+            )
             path.touch()
             old.append(path)
         unlink = Path.unlink
@@ -136,7 +138,7 @@ class SubmissionTests(unittest.TestCase):
             with closing(sqlite3.connect(self.db)) as db:
                 self.assertEqual(1, db.execute('SELECT count(*) FROM play_records').fetchone()[0])
             if path == old[0]:
-                raise PermissionError('backup is locked')
+                raise ValueError('backup unlink failed')
             return unlink(path, *args, **kwargs)
 
         body = self.approved()
@@ -151,6 +153,29 @@ class SubmissionTests(unittest.TestCase):
         self.assertFalse(old[1].exists())
         self.assertFalse(old[2].exists())
         self.assertEqual(11, len(list(directory.glob('*.pre-submit.*.sqlite3'))))
+
+    def test_directory_error_is_logged_without_failing_committed_submit(self):
+        directory = self.base / 'backups'
+        directory.mkdir(exist_ok=True)
+        before = {path: path.read_bytes() for path in directory.iterdir()}
+        body = self.approved()
+
+        def refuse_backups(path):
+            self.assertEqual(directory, path)
+            with closing(sqlite3.connect(self.db)) as db:
+                self.assertEqual(1, db.execute('SELECT count(*) FROM play_records').fetchone()[0])
+            raise TypeError('backup directory scan failed')
+
+        with patch.object(Path, 'iterdir', refuse_backups):
+            with self.assertLogs('dance_results.sqlite_safety', level='WARNING') as logs:
+                result = self.commit(body)
+        self.assertFalse(result['idempotent'])
+        self.assertEqual(1, self.store().history()['total'])
+        self.assertIn('backup directory scan failed', '\n'.join(logs.output))
+        self.assertTrue(Path(result['backup_path']).exists())
+        self.assertEqual(set(before) | {Path(result['backup_path'])}, set(directory.iterdir()))
+        for path, contents in before.items():
+            self.assertEqual(contents, path.read_bytes())
 
     def test_concurrent_services_use_sqlite_unique_session_and_review(self):
         body=self.approved();preview=self.store().prepare(body)

@@ -377,12 +377,15 @@ class GameSyncTests(unittest.TestCase):
         self.assertEqual(set(created[-10:]), set(backups))
         self.assertEqual(12, len(self.fixture.records()))
 
-    def test_locked_backup_is_logged_without_failing_committed_sync(self):
+    def test_unlink_error_is_logged_without_failing_committed_sync(self):
         directory = self.fixture.database.parent / 'backups'
         directory.mkdir(parents=True, exist_ok=True)
         old = []
         for index in range(12):
-            path = directory / f'{self.fixture.database.stem}.pre-game-sync.{index:02d}.sqlite3'
+            path = directory / (
+                f'{self.fixture.database.stem}.pre-game-sync.'
+                f'20000101T000000{index:06d}Z.1234abcd.sqlite3'
+            )
             path.touch()
             old.append(path)
         unlink = Path.unlink
@@ -391,7 +394,7 @@ class GameSyncTests(unittest.TestCase):
             # Pruning must happen only after the result transaction commits.
             self.assertEqual(1, len(self.fixture.records()))
             if path == old[0]:
-                raise PermissionError('backup is locked')
+                raise TypeError('backup unlink failed')
             return unlink(path, *args, **kwargs)
 
         self.fixture.append(official_line())
@@ -405,6 +408,28 @@ class GameSyncTests(unittest.TestCase):
         self.assertFalse(old[1].exists())
         self.assertFalse(old[2].exists())
         self.assertEqual(11, len(list(directory.glob('*.pre-game-sync.*.sqlite3'))))
+
+    def test_directory_error_is_logged_without_failing_committed_sync(self):
+        self.fixture.append(official_line())
+        iterdir = Path.iterdir
+        directory = self.fixture.database.parent / 'backups'
+        before = set(directory.glob('*.pre-game-sync.*.sqlite3'))
+
+        def refuse_backups(path):
+            if path == directory:
+                self.assertEqual(1, len(self.fixture.records()))
+                raise ValueError('backup directory scan failed')
+            return iterdir(path)
+
+        with patch.object(Path, 'iterdir', refuse_backups):
+            with self.assertLogs('dance_results.sqlite_safety', level='WARNING') as logs:
+                status = self.fixture.sync.run_once()
+        self.assertEqual('watching', status['state'], status)
+        self.assertEqual(1, status['imported_total'])
+        self.assertIn('backup directory scan failed', '\n'.join(logs.output))
+        after = set(directory.glob('*.pre-game-sync.*.sqlite3'))
+        self.assertEqual(1, len(after - before))
+        self.assertTrue(before <= after)
 
 
 class CharacterChoiceTests(unittest.TestCase):

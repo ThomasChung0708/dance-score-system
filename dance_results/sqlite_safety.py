@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 import sqlite3
 import stat
 from contextlib import closing
@@ -30,9 +31,9 @@ def prune_backups(
     slot for the new backup even if the system clock has moved backwards.
     Never traverse a redirected backups directory or delete linked files.
     """
-    if label not in PRUNABLE_BACKUP_LABELS:
-        return
     try:
+        if label not in PRUNABLE_BACKUP_LABELS:
+            return
         directory = database.parent.resolve() / 'backups'
         if directory.resolve() != directory:
             logger.warning('Refusing to prune redirected backup directory: %s', directory)
@@ -40,13 +41,15 @@ def prune_backups(
         newest = Path(newest).absolute()
         if newest.parent.resolve() != directory:
             return
-        prefix = f'{database.stem}.{label}.'
+        pattern = re.compile(
+            rf'{re.escape(database.stem)}\.{re.escape(label)}\.'
+            r'[0-9]{8}T[0-9]{12}Z\.[0-9a-f]{8}\.sqlite3'
+        )
+        if not pattern.fullmatch(newest.name):
+            return
         backups = []
         for candidate in directory.iterdir():
-            if (
-                not candidate.name.startswith(prefix)
-                or not candidate.name[len(prefix):].endswith('.sqlite3')
-            ):
+            if not pattern.fullmatch(candidate.name):
                 continue
             try:
                 if stat.S_ISREG(candidate.lstat().st_mode) and candidate.resolve() == candidate:
@@ -62,9 +65,9 @@ def prune_backups(
         for old in obsolete:
             try:
                 old.unlink()
-            except OSError:
+            except Exception:
                 logger.warning('Could not delete old backup: %s', old, exc_info=True)
-    except (OSError, RuntimeError):
+    except Exception:
         logger.warning('Could not prune %s backups for %s', label, database, exc_info=True)
 
 
@@ -110,9 +113,22 @@ def verified_backup(db,path,label):
     directory=path.parent/'backups';directory.mkdir(parents=True,exist_ok=True)
     stamp=datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
     target=directory/f'{path.stem}.{label}.{stamp}.{uuid4().hex[:8]}.sqlite3'
-    with closing(sqlite3.connect(path.as_uri()+'?mode=ro',uri=True)) as source:
-        with closing(sqlite3.connect(target)) as backup:
-            source.backup(backup);check_integrity(backup)
-            if audit(backup)!=before or backup.execute('PRAGMA user_version').fetchone()[0]!=db.execute('PRAGMA user_version').fetchone()[0]:
-                raise ValueError('SQLite 備份稽核失敗，未繼續寫入。')
+    created = False
+    try:
+        with closing(sqlite3.connect(path.as_uri()+'?mode=ro',uri=True)) as source:
+            target.touch(exist_ok=False)
+            created = True
+            with closing(sqlite3.connect(target)) as backup:
+                source.backup(backup);check_integrity(backup)
+                if audit(backup)!=before or backup.execute('PRAGMA user_version').fetchone()[0]!=db.execute('PRAGMA user_version').fetchone()[0]:
+                    raise ValueError('SQLite 備份稽核失敗，未繼續寫入。')
+    except BaseException:
+        if created:
+            for suffix in ('', '-journal', '-wal', '-shm'):
+                failed = Path(str(target) + suffix)
+                try:
+                    failed.unlink(missing_ok=True)
+                except Exception:
+                    logger.warning('Could not delete failed backup: %s', failed, exc_info=True)
+        raise
     return str(target)
