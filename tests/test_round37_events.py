@@ -9,9 +9,11 @@ import tempfile
 import threading
 import unittest
 from unittest.mock import patch
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from dance_results.gui import create_server
+from dance_results.library_service import LibraryError, LibraryService
 from dance_results.record_events import RecordEventFeed
 from test_game_sync import GameFixture, external_line, official_line
 
@@ -49,6 +51,88 @@ class GameEventTests(unittest.TestCase):
         with urlopen(request) as response:
             return json.load(response)
 
+    def test_missing_library_open_returns_actionable_conflict(self):
+        service = LibraryService(self.base / 'missing.sqlite3')
+        with self.assertRaises(LibraryError) as caught:
+            service.open()
+        self.assertEqual(caught.exception.status, 409)
+        for text in (str(service.path), '遊戲資料夾', '儲存並同步', 'data', 'DanceScore.exe'):
+            self.assertIn(text, str(caught.exception))
+
+    def test_missing_library_status_ignores_events_without_opening(self):
+        server = self.start_server()
+        server.service.path = self.base / 'missing.sqlite3'
+        server.automatic.event_feed.publish(123)
+        with patch.object(server.service, 'open') as opened:
+            status = server.automatic.status()
+        opened.assert_not_called()
+        self.assertIs(status['library_ready'], False)
+        self.assertEqual(status['events'], [])
+        self.assertTrue({'mode', 'enabled_at', 'diagnostics'} <= status.keys())
+
+    def test_ready_library_without_events_does_not_open(self):
+        server = self.start_server()
+        with patch.object(server.service, 'open') as opened:
+            status = server.automatic.status()
+        opened.assert_not_called()
+        self.assertIs(status['library_ready'], True)
+        self.assertEqual(status['events'], [])
+
+    def test_storage_open_conflict_race_returns_not_ready(self):
+        server = self.start_server()
+        server.automatic.event_feed.publish(123)
+        with patch.object(server.service, 'open', side_effect=LibraryError('missing', 409)):
+            status = server.automatic.status()
+        self.assertIs(status['library_ready'], False)
+        self.assertEqual(status['events'], [])
+
+    def test_storage_unrelated_errors_propagate(self):
+        server = self.start_server()
+        server.automatic.event_feed.publish(123)
+        for error in (LibraryError('forbidden', 403), RuntimeError('unexpected')):
+            with self.subTest(error=error), patch.object(server.service, 'open', side_effect=error):
+                with self.assertRaises(type(error)) as caught:
+                    server.automatic.status()
+                self.assertIs(caught.exception, error)
+
+    def test_storage_receipt_conflict_is_not_a_missing_library(self):
+        server = self.start_server()
+        server.automatic.event_feed.publish(123)
+        with patch.object(server.submissions, '_record', side_effect=LibraryError('receipt conflict', 409)):
+            with self.assertRaisesRegex(LibraryError, 'receipt conflict'):
+                server.automatic.status()
+
+    def test_missing_library_http_status_and_bootstrap_do_not_log_errors(self):
+        server = self.start_server()
+        server.service.path = self.base / 'missing.sqlite3'
+        with self.assertNoLogs(level='ERROR'):
+            request = Request(
+                f'http://127.0.0.1:{server.server_port}/api/reviews/storage',
+                headers={'X-Dance-Token': server.session_token},
+            )
+            with urlopen(request) as response:
+                self.assertEqual(response.status, 200)
+                status = json.load(response)
+            self.assertIs(status['library_ready'], False)
+            self.assertEqual(status['events'], [])
+            server.automatic.event_feed.publish(123)
+            self.assertEqual(self.storage(server), status)
+            with patch.object(server.service, 'path', self.fixture.database):
+                with patch.object(server.service, 'open', side_effect=LibraryError('missing', 409)):
+                    self.assertEqual(self.storage(server), status)
+            request = Request(
+                f'http://127.0.0.1:{server.server_port}/api/bootstrap',
+                headers={'X-Dance-Token': server.session_token},
+            )
+            with self.assertRaises(HTTPError) as caught:
+                urlopen(request)
+            with caught.exception as response:
+                self.assertEqual(response.code, 409)
+                self.assertIn('application/json', response.headers['Content-Type'])
+                error = json.load(response)['error']
+            for text in (str(server.service.path), '遊戲資料夾', '儲存並同步'):
+                self.assertIn(text, error)
+
     def test_single_and_multiplayer_commit_one_receipt_each_and_duplicate_none(self):
         server = self.start_server()
         self.assertIs(server.game.event_feed, server.automatic.event_feed)
@@ -59,6 +143,7 @@ class GameEventTests(unittest.TestCase):
                 self.fixture.append(line)
                 server.game.run_once()
                 status = self.storage(server)
+                self.assertIs(status['library_ready'], True)
                 self.assertTrue({'mode', 'enabled_at', 'diagnostics', 'events'} <= status.keys())
                 self.assertEqual(len(status['events']), index)
                 receipt = status['events'][-1]

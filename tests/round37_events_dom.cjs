@@ -110,9 +110,66 @@ async function failedNotificationsDoNotBlockQueue(browser) {
   await context.close();
 }
 
+async function unavailableLibrarySlowsPolling(browser, status) {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  let polls = 0, unavailable = false;
+  const record = {
+    record_id: 99200, catalog_path: 'unavailable.sqlite3', title: 'Recovered result',
+    difficulty: 'HARD', ex_score: 100, lamp_status: 'CLEAR',
+    update_summary: {kind: 'NO_UPDATE', label: 'SAVED'},
+  };
+  await page.route('**/api/reviews/storage', route => {
+    ++polls;
+    return route.fulfill({
+      status: unavailable ? status : 200,
+      json: {library_ready: !unavailable, events: polls === 1 ? [] : [record]},
+    });
+  });
+  await page.clock.install({time: new Date('2026-11-20T00:00:00Z')});
+  await page.clock.pauseAt(new Date('2026-11-20T00:00:01Z'));
+  await page.addInitScript(() => {
+    window.storageDelays = [];
+    window.storageStatuses = 0;
+    window.recordUpdates = [];
+    window.addEventListener('dance-storage-status', () => ++window.storageStatuses);
+    window.addEventListener('dance-record-update', event => window.recordUpdates.push(event.detail));
+    const timeout = window.setTimeout;
+    window.setTimeout = (callback, delay, ...args) => {
+      if (callback.name === 'poll') window.storageDelays.push(delay);
+      return timeout(callback, delay, ...args);
+    };
+  });
+  await page.goto(base + '/history');
+  await page.waitForFunction(() => window.storageDelays.length === 1);
+  assert.deepEqual(await page.evaluate(() => window.storageDelays), [2000]);
+  unavailable = true;
+  await page.clock.runFor(2000);
+  await page.waitForFunction(() => window.storageDelays.length === 2);
+  assert.deepEqual(await page.evaluate(() => window.storageDelays), [2000, 10000]);
+  assert.equal(await page.evaluate(() => window.storageStatuses), status === 409 ? 1 : 2);
+  assert.deepEqual(await page.evaluate(() => window.recordUpdates), []);
+  assert.equal(await page.locator('.achievement-toast').count(), 0);
+  await page.clock.runFor(9999);
+  assert.equal(polls, 2);
+  unavailable = false;
+  await page.clock.runFor(1);
+  await page.waitForFunction(() => window.storageDelays.length === 3);
+  assert.deepEqual(await page.evaluate(() => window.storageDelays), [2000, 10000, 2000]);
+  assert.equal(await page.evaluate(() => window.recordUpdates.length), 1);
+  assert.equal(await page.locator('.achievement-toast').getAttribute('data-record-id'), '99200');
+  await page.clock.runFor(2000);
+  await page.waitForFunction(() => window.storageDelays.length === 4);
+  assert.equal(polls, 4);
+  assert.equal(await page.evaluate(() => window.recordUpdates.length), 1);
+  await context.close();
+}
+
 async function main() {
   const browser = await chromium.launch({headless: true, channel: 'msedge'});
   try {
+    await unavailableLibrarySlowsPolling(browser, 200);
+    await unavailableLibrarySlowsPolling(browser, 409);
     const context = await browser.newContext();
     // Isolate receipt refreshes from the separate game-status refresh path.
     await context.route('**/api/game', async route => {

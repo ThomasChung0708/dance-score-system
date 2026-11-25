@@ -62,6 +62,12 @@ class LibraryService:
         self._scan={'status':'idle'}
 
     def open(self,read_only=True):
+        if read_only and not self.path.is_file():
+            raise LibraryError(
+                f'找不到歌曲資料庫：{self.path}。請按「遊戲資料夾」，再按「儲存並同步」；'
+                '若曾搬移程式，請將原本的 data 資料夾與 DanceScore.exe 放在一起。',
+                409,
+            )
         return LibraryDatabase(self.path,read_only=read_only)
 
     def bootstrap(self):

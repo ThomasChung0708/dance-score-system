@@ -176,14 +176,21 @@ document.addEventListener('DOMContentLoaded',()=>{if(visibility)new MutationObse
  if (!token) return;
  const delivered = new Set();
  let polling = false, initialized = false;
+ let pollDelay = 2000;
  async function poll() {
   if (polling) return;
   polling = true;
   try {
    const response = await fetch('/api/reviews/storage', {headers: {'X-Dance-Token': token}});
+   if (response.status === 409) {
+    pollDelay = 10000;
+    return;
+   }
    if (!response.ok) return;
    const data = await response.json();
    window.dispatchEvent(new CustomEvent('dance-storage-status', {detail: data}));
+   pollDelay = data.library_ready === false ? 10000 : 2000;
+   if (data.library_ready === false) return;
    for (const record of data.events || []) {
     const key = [record.catalog_path, record.record_id].join('|');
     if (delivered.has(key)) continue;
@@ -200,8 +207,8 @@ document.addEventListener('DOMContentLoaded',()=>{if(visibility)new MutationObse
    // The existing polling loop retries a transient connection failure.
   } finally {
    polling = false;
+   setTimeout(poll, pollDelay);
   }
  }
  poll();
- setInterval(poll, 2000);
 })();

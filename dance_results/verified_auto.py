@@ -286,10 +286,23 @@ class AutomaticStorage:
             state = copy.deepcopy(self.state)
             diagnostics = copy.deepcopy(self.diagnostics)
         events = self.event_feed.snapshot()
-        with self.submissions.library.open() as library:
-            receipts=[self.submissions._record(library.connection,i,include_evidence=False) for i in events]
+        library_ready = self.submissions.library.path.is_file()
+        receipts = []
+        if library_ready and events:
+            try:
+                library = self.submissions.library.open()
+            except LibraryError as error:
+                if error.status != 409:
+                    raise
+                library_ready = False
+            else:
+                with library:
+                    receipts=[self.submissions._record(library.connection,i,include_evidence=False) for i in events]
         for receipt in receipts:receipt['catalog_path']=str(self.reviews.database)
-        return dict(mode=state['mode'],enabled_at=state['enabled_at'],events=receipts,diagnostics=diagnostics)
+        return dict(
+            mode=state['mode'],enabled_at=state['enabled_at'],events=receipts,
+            diagnostics=diagnostics,library_ready=library_ready,
+        )
 
     def close(self):
         self.stop_event.set()
